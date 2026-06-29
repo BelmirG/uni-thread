@@ -61,6 +61,13 @@ interface FollowUser {
   avatar_url: string | null;
 }
 
+interface Invitation {
+  club_name: string;
+  club_slug: string;
+  invited_by_display_name: string;
+  invited_by_username: string;
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function timeAgo(iso: string): string {
@@ -167,6 +174,10 @@ export default function ProfilePage() {
   const [cropSaving, setCropSaving] = useState(false);
   const [cropError, setCropError] = useState<string | null>(null);
 
+  // Notifications
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+
   useEffect(() => {
     setLoading(true);
     Promise.all([
@@ -182,6 +193,11 @@ export default function ProfilePage() {
         setEditBio(p.bio ?? "");
         setEditFaculty((p.faculty as Faculty) ?? "");
         setEditProgram(p.program ?? "");
+        if (p.is_own_profile) {
+          apiFetch<Invitation[]>("/api/clubs/invitations/me")
+            .then(setInvitations)
+            .catch(() => {});
+        }
       })
       .catch((err: unknown) => {
         if (err instanceof ApiError && err.status === 401) router.replace("/login");
@@ -189,6 +205,24 @@ export default function ProfilePage() {
       })
       .finally(() => setLoading(false));
   }, [username, router]);
+
+  async function handleAcceptInvite(slug: string) {
+    try {
+      await apiFetch(`/api/clubs/${slug}/invitations/accept`, { method: "POST" });
+      setInvitations((prev) => prev.filter((i) => i.club_slug !== slug));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Could not accept invitation.");
+    }
+  }
+
+  async function handleDeclineInvite(slug: string) {
+    try {
+      await apiFetch(`/api/clubs/${slug}/invitations/decline`, { method: "DELETE" });
+      setInvitations((prev) => prev.filter((i) => i.club_slug !== slug));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Could not decline invitation.");
+    }
+  }
 
   async function openFollowsModal(type: "followers" | "following") {
     setFollowsModal(type);
@@ -337,7 +371,7 @@ export default function ProfilePage() {
       <main style={{ maxWidth: 640, margin: "0 auto", padding: "1.5rem 1rem 2rem" }}>
 
         {/* Profile header */}
-        <div style={{ display: "flex", gap: "1.25rem", alignItems: "flex-start", marginBottom: "1.25rem" }}>
+        <div style={{ display: "flex", gap: "1.25rem", alignItems: "flex-start", marginBottom: "1.25rem", position: "relative" }}>
           {/* Avatar — own profile shows edit button */}
           <div style={{ position: "relative", flexShrink: 0 }}>
             <Avatar name={profile.display_name} avatarUrl={profile.avatar_url} size={72} />
@@ -385,6 +419,63 @@ export default function ProfilePage() {
               Joined {memberSince(profile.member_since)}
             </p>
           </div>
+
+          {/* Notification bell — own profile only */}
+          {profile.is_own_profile && (
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <button
+                onClick={() => setNotifOpen((o) => !o)}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: "0.25rem", fontSize: "1.3rem", position: "relative", lineHeight: 1 }}
+                title="Notifications"
+              >
+                🔔
+                {invitations.length > 0 && (
+                  <span style={{ position: "absolute", top: 0, right: 0, width: 16, height: 16, borderRadius: "50%", background: "crimson", color: "#fff", fontSize: "0.65rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
+                    {invitations.length}
+                  </span>
+                )}
+              </button>
+
+              {notifOpen && (
+                <>
+                  <div onClick={() => setNotifOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 199 }} />
+                  <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", width: "min(320px, 90vw)", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, boxShadow: "0 6px 24px rgba(0,0,0,0.13)", zIndex: 200, overflow: "hidden" }}>
+                    <div style={{ padding: "0.65rem 1rem", fontWeight: 700, fontSize: "0.9rem", borderBottom: "1px solid #f0f0f0" }}>Notifications</div>
+                    {invitations.length === 0 ? (
+                      <p style={{ margin: 0, padding: "1rem", color: "#aaa", fontSize: "0.88rem", textAlign: "center" }}>No new notifications</p>
+                    ) : (
+                      <div>
+                        {invitations.map((inv) => (
+                          <div key={inv.club_slug} style={{ padding: "0.75rem 1rem", borderBottom: "1px solid #f5f5f5" }}>
+                            <p style={{ margin: "0 0 0.1rem", fontSize: "0.88rem" }}>
+                              <strong>{inv.invited_by_display_name}</strong> invited you to join <strong>{inv.club_name}</strong>
+                            </p>
+                            <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.4rem" }}>
+                              <button
+                                onClick={() => handleAcceptInvite(inv.club_slug)}
+                                style={{ padding: "0.2rem 0.7rem", fontSize: "0.8rem", cursor: "pointer", color: "#1a6b3a", border: "1px solid #1a6b3a", background: "none", borderRadius: 4 }}
+                              >
+                                Accept
+                              </button>
+                              <button
+                                onClick={() => handleDeclineInvite(inv.club_slug)}
+                                style={{ padding: "0.2rem 0.7rem", fontSize: "0.8rem", cursor: "pointer", color: "#888", border: "1px solid #ccc", background: "none", borderRadius: 4 }}
+                              >
+                                Decline
+                              </button>
+                              <Link href={`/clubs/${inv.club_slug}`} onClick={() => setNotifOpen(false)} style={{ padding: "0.2rem 0.5rem", fontSize: "0.8rem", color: "#555", textDecoration: "none", alignSelf: "center" }}>
+                                View club →
+                              </Link>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Stats row */}

@@ -22,9 +22,17 @@ interface ClubListResponse {
   total: number;
 }
 
+interface Invitation {
+  club_name: string;
+  club_slug: string;
+  invited_by_display_name: string;
+  invited_by_username: string;
+}
+
 export default function ClubsPage() {
   const router = useRouter();
   const [clubs, setClubs] = useState<Club[]>([]);
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Create form state
@@ -36,11 +44,37 @@ export default function ClubsPage() {
   const [showForm, setShowForm] = useState(false);
 
   useEffect(() => {
-    apiFetch<ClubListResponse>("/api/clubs")
-      .then((data) => setClubs(data.clubs))
+    Promise.all([
+      apiFetch<ClubListResponse>("/api/clubs"),
+      apiFetch<Invitation[]>("/api/clubs/invitations/me"),
+    ])
+      .then(([clubData, inviteData]) => {
+        setClubs(clubData.clubs);
+        setInvitations(inviteData);
+      })
       .catch(() => router.replace("/login"))
       .finally(() => setLoading(false));
   }, [router]);
+
+  async function handleAcceptInvite(slug: string) {
+    try {
+      await apiFetch(`/api/clubs/${slug}/invitations/accept`, { method: "POST" });
+      setInvitations((prev) => prev.filter((i) => i.club_slug !== slug));
+      const updated = await apiFetch<ClubListResponse>("/api/clubs");
+      setClubs(updated.clubs);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Could not accept invitation.");
+    }
+  }
+
+  async function handleDeclineInvite(slug: string) {
+    try {
+      await apiFetch(`/api/clubs/${slug}/invitations/decline`, { method: "DELETE" });
+      setInvitations((prev) => prev.filter((i) => i.club_slug !== slug));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Could not decline invitation.");
+    }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -149,6 +183,39 @@ export default function ClubsPage() {
             </button>
           </div>
         </form>
+      )}
+
+      {/* Pending invitations */}
+      {invitations.length > 0 && (
+        <div style={{ marginBottom: "1.5rem" }}>
+          <h3 style={{ margin: "0 0 0.6rem", fontSize: "0.95rem", color: "#555" }}>Pending invitations</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            {invitations.map((inv) => (
+              <div key={inv.club_slug} style={{ border: "1px solid #d0d0e8", borderRadius: 8, padding: "0.75rem 1rem", background: "#f8f8ff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
+                <div>
+                  <span style={{ fontWeight: 600 }}>{inv.club_name}</span>
+                  <span style={{ fontSize: "0.82rem", color: "#888", marginLeft: "0.5rem" }}>
+                    invited by {inv.invited_by_display_name}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+                  <button
+                    onClick={() => handleAcceptInvite(inv.club_slug)}
+                    style={{ padding: "0.25rem 0.75rem", fontSize: "0.85rem", cursor: "pointer", color: "#1a6b3a", border: "1px solid #1a6b3a", background: "none", borderRadius: 4 }}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    onClick={() => handleDeclineInvite(inv.club_slug)}
+                    style={{ padding: "0.25rem 0.75rem", fontSize: "0.85rem", cursor: "pointer", color: "#888", border: "1px solid #ccc", background: "none", borderRadius: 4 }}
+                  >
+                    Decline
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Club list */}

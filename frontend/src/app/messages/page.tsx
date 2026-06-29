@@ -22,6 +22,7 @@ interface ConversationItem {
   conversation_id: string;
   other_user: OtherUser;
   last_message: LastMessage | null;
+  unread_count: number;
 }
 
 function timeAgo(iso: string): string {
@@ -119,15 +120,20 @@ export default function MessagesPage() {
           <Link
             key={c.conversation_id}
             href={`/messages/${c.conversation_id}`}
-            style={{ display: "block", padding: "0.85rem 1rem", border: "1px solid #e0e0e0", borderRadius: 8, background: "#fff", textDecoration: "none", color: "inherit" }}
+            style={{ display: "block", padding: "0.85rem 1rem", border: `1px solid ${c.unread_count > 0 ? "#d0d0ff" : "#e0e0e0"}`, borderRadius: 8, background: c.unread_count > 0 ? "#f8f8ff" : "#fff", textDecoration: "none", color: "inherit" }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ fontWeight: "bold", fontSize: "0.95rem" }}>{c.other_user.display_name}</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                {c.unread_count > 0 && (
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "crimson", flexShrink: 0, display: "inline-block" }} />
+                )}
+                <span style={{ fontWeight: c.unread_count > 0 ? "700" : "bold", fontSize: "0.95rem" }}>{c.other_user.display_name}</span>
+              </div>
               {c.last_message && (
                 <span style={{ fontSize: "0.75rem", color: "#aaa" }}>{timeAgo(c.last_message.created_at)}</span>
               )}
             </div>
-            <div style={{ fontSize: "0.85rem", color: "#888", marginTop: "0.2rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: "0.85rem", color: c.unread_count > 0 ? "#333" : "#888", marginTop: "0.2rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: c.unread_count > 0 ? "500" : "normal" }}>
               {c.last_message
                 ? `${c.last_message.sender_username === c.other_user.username ? "" : "You: "}${lastMsgPreview(c.last_message)}`
                 : "No messages yet"}

@@ -6,6 +6,7 @@ import { useRouter, useParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
+import UserSearchInput from "@/components/UserSearchInput";
 
 interface Club {
   id: string;
@@ -103,6 +104,10 @@ export default function ClubDetailPage() {
   const [postError, setPostError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteUsername, setInviteUsername] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -299,6 +304,22 @@ export default function ClubDetailPage() {
     }
   }
 
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!inviteUsername.trim()) return;
+    setInviting(true);
+    setInviteMsg(null);
+    try {
+      await apiFetch(`/api/clubs/${slug}/invite/${inviteUsername.trim()}`, { method: "POST" });
+      setInviteMsg(`Invitation sent to @${inviteUsername.trim()}`);
+      setInviteUsername("");
+    } catch (err: unknown) {
+      setInviteMsg(err instanceof Error ? err.message : "Could not send invitation.");
+    } finally {
+      setInviting(false);
+    }
+  }
+
   if (loading) return <p style={{ padding: "2rem", color: "#888" }}>Loading…</p>;
 
   if (pageError) {
@@ -394,12 +415,20 @@ export default function ClubDetailPage() {
                     </button>
 
                     {club.role && ["owner", "moderator"].includes(club.role) && (
-                      <button
-                        onClick={() => { setMenuOpen(false); showRequests ? setShowRequests(false) : loadJoinRequests(); }}
-                        style={{ display: "block", width: "100%", textAlign: "left", padding: "0.65rem 1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem", color: "#333", borderTop: "1px solid #f0f0f0" }}
-                      >
-                        {showRequests ? "Hide requests" : "Join requests"}
-                      </button>
+                      <>
+                        <button
+                          onClick={() => { setMenuOpen(false); showRequests ? setShowRequests(false) : loadJoinRequests(); }}
+                          style={{ display: "block", width: "100%", textAlign: "left", padding: "0.65rem 1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem", color: "#333", borderTop: "1px solid #f0f0f0" }}
+                        >
+                          {showRequests ? "Hide requests" : "Join requests"}
+                        </button>
+                        <button
+                          onClick={() => { setMenuOpen(false); setInviteOpen((o) => !o); setInviteMsg(null); }}
+                          style={{ display: "block", width: "100%", textAlign: "left", padding: "0.65rem 1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem", color: "#333", borderTop: "1px solid #f0f0f0" }}
+                        >
+                          Invite member
+                        </button>
+                      </>
                     )}
 
                     {club.is_member && (
@@ -648,6 +677,37 @@ export default function ClubDetailPage() {
             </div>
           </>
         )}
+      </>
+    )}
+
+    {/* Invite overlay */}
+    {inviteOpen && (
+      <>
+        <div onClick={() => { setInviteOpen(false); setInviteMsg(null); setInviteUsername(""); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200 }} />
+        <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "min(400px, 90vw)", background: "#fff", borderRadius: 12, padding: "1.25rem", zIndex: 201, boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+            <span style={{ fontWeight: 700, fontSize: "1rem" }}>Invite a member</span>
+            <button onClick={() => { setInviteOpen(false); setInviteMsg(null); setInviteUsername(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#999", fontSize: "1.4rem", lineHeight: 1 }}>×</button>
+          </div>
+          <form onSubmit={handleInvite}>
+            <UserSearchInput
+              value={inviteUsername}
+              onChange={setInviteUsername}
+              onSelect={(u) => setInviteUsername(u)}
+              placeholder="Search by name or username…"
+            />
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.75rem" }}>
+              <button type="submit" disabled={inviting || !inviteUsername.trim()} style={{ padding: "0.4rem 1rem", cursor: "pointer", fontSize: "0.9rem" }}>
+                {inviting ? "Sending…" : "Send invite"}
+              </button>
+              {inviteMsg && (
+                <span style={{ fontSize: "0.85rem", color: inviteMsg.startsWith("Invitation sent") ? "#1a6b3a" : "crimson" }}>
+                  {inviteMsg}
+                </span>
+              )}
+            </div>
+          </form>
+        </div>
       </>
     )}
     </>

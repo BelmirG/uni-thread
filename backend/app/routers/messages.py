@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -95,6 +95,17 @@ async def list_conversations(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Unread count per conversation (messages sent by the other user that are unread)
+    unread_subq = (
+        select(
+            DirectMessage.conversation_id,
+            func.count(DirectMessage.id).label("unread_count"),
+        )
+        .where(DirectMessage.sender_id != current_user.id, DirectMessage.is_read == False)
+        .group_by(DirectMessage.conversation_id)
+        .subquery("unread_subq")
+    )
+
     # Window-function subquery: rank messages newest-first within each conversation
     dm_ranked = (
         select(
@@ -131,10 +142,12 @@ async def list_conversations(
             last_msg.c.shared_post_id,
             last_msg.c.created_at,
             SenderUser.username.label("last_sender"),
+            func.coalesce(unread_subq.c.unread_count, 0).label("unread_count"),
         )
         .join(OtherUser, OtherUser.id == other_user_id_expr)
         .outerjoin(last_msg, last_msg.c.conversation_id == Conversation.id)
         .outerjoin(SenderUser, SenderUser.id == last_msg.c.sender_id)
+        .outerjoin(unread_subq, unread_subq.c.conversation_id == Conversation.id)
         .where(
             or_(
                 Conversation.user1_id == current_user.id,
@@ -158,6 +171,7 @@ async def list_conversations(
             "conversation_id": str(r.id),
             "other_user": {"username": r.username, "display_name": r.display_name},
             "last_message": last,
+            "unread_count": r.unread_count,
         })
     return result
 
@@ -240,6 +254,23 @@ async def share_post(
     return {"conversation_id": str(conv.id)}
 
 
+@router.get("/unread-count")
+async def unread_count(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    count = (await db.execute(
+        select(func.count(DirectMessage.id))
+        .join(Conversation, Conversation.id == DirectMessage.conversation_id)
+        .where(
+            or_(Conversation.user1_id == current_user.id, Conversation.user2_id == current_user.id),
+            DirectMessage.sender_id != current_user.id,
+            DirectMessage.is_read == False,
+        )
+    )).scalar() or 0
+    return {"count": count}
+
+
 @router.get("/{conversation_id}")
 async def get_messages(
     conversation_id: str,
@@ -275,6 +306,18 @@ async def get_messages(
         .order_by(DirectMessage.created_at.asc())
         .limit(50)
     )).all()
+
+    # Mark all unread messages from the other person as read
+    await db.execute(
+        update(DirectMessage)
+        .where(
+            DirectMessage.conversation_id == conv_id,
+            DirectMessage.sender_id != current_user.id,
+            DirectMessage.is_read == False,
+        )
+        .values(is_read=True)
+    )
+    await db.commit()
 
     return {
         "other_user": {"username": other_user.username, "display_name": other_user.display_name},

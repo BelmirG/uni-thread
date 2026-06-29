@@ -58,13 +58,15 @@ const NAV = [
 export default function NavBar() {
   const pathname = usePathname();
   const [profileHref, setProfileHref] = useState("/profile");
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
-  // Re-resolve /profile → /profile/{username} on every navigation so switching
-  // accounts always shows the correct profile link immediately.
   useEffect(() => {
     apiFetch<{ username: string }>("/api/auth/me")
       .then((me) => setProfileHref(`/profile/${me.username}`))
       .catch(() => setProfileHref("/profile"));
+    apiFetch<{ count: number }>("/api/messages/unread-count")
+      .then((d) => setUnreadMessages(d.count))
+      .catch(() => {});
   }, [pathname]);
 
   if (HIDDEN_ON.includes(pathname)) return null;
@@ -99,6 +101,7 @@ export default function NavBar() {
             item.href === "/profile"
               ? pathname.startsWith("/profile")
               : pathname.startsWith(item.href);
+          const showDot = item.href === "/messages" && unreadMessages > 0;
           return (
             <Link
               key={item.href}
@@ -117,7 +120,12 @@ export default function NavBar() {
                 transition: "color 0.15s",
               }}
             >
-              {item.icon}
+              <div style={{ position: "relative" }}>
+                {item.icon}
+                {showDot && (
+                  <span style={{ position: "absolute", top: -2, right: -2, width: 8, height: 8, borderRadius: "50%", background: "crimson", border: "1.5px solid #fff" }} />
+                )}
+              </div>
               {item.label}
             </Link>
           );

@@ -11,6 +11,7 @@ from sqlalchemy.orm import aliased
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.club import Club
+from app.models.club_invitation import ClubInvitation
 from app.models.club_join_request import ClubJoinRequest
 from app.models.club_member import ClubMember
 from app.models.post import Post
@@ -265,6 +266,33 @@ async def list_clubs(
     ).all()
     total = (await db.execute(select(func.count(Club.id)))).scalar() or 0
     return ClubListResponse(clubs=[_row_to_club(r) for r in rows], total=total)
+
+
+@router.get("/invitations/me")
+async def my_invitations(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    InvitedBy = aliased(User)
+    rows = (
+        await db.execute(
+            select(ClubInvitation, Club, InvitedBy)
+            .join(Club, Club.id == ClubInvitation.club_id)
+            .join(InvitedBy, InvitedBy.id == ClubInvitation.invited_by)
+            .where(ClubInvitation.invited_user_id == current_user.id)
+            .order_by(ClubInvitation.created_at.desc())
+        )
+    ).all()
+    return [
+        {
+            "club_name": club.name,
+            "club_slug": club.slug,
+            "invited_by_display_name": inviter.display_name,
+            "invited_by_username": inviter.username,
+            "created_at": inv.created_at,
+        }
+        for inv, club, inviter in rows
+    ]
 
 
 @router.get("/{slug}", response_model=ClubResponse)
@@ -562,6 +590,83 @@ async def remove_member(
         raise HTTPException(status_code=400, detail="Use the leave endpoint to leave the club yourself.")
 
     await db.delete(target_membership)
+    await db.commit()
+
+
+@router.post("/{slug}/invite/{username}", status_code=status.HTTP_204_NO_CONTENT)
+async def invite_member(
+    slug: str,
+    username: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    club = await _get_club_or_404(slug, db)
+    requester = await _get_membership(club.id, current_user.id, db)
+    if not requester or requester.role not in ("owner", "moderator"):
+        raise HTTPException(status_code=403, detail="Only the owner or a moderator can invite members.")
+
+    target = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if target.id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot invite yourself.")
+
+    if await _get_membership(club.id, target.id, db):
+        raise HTTPException(status_code=409, detail="That user is already a member.")
+
+    existing_invite = (await db.execute(
+        select(ClubInvitation).where(
+            ClubInvitation.club_id == club.id,
+            ClubInvitation.invited_user_id == target.id,
+        )
+    )).scalar_one_or_none()
+    if existing_invite:
+        raise HTTPException(status_code=409, detail="That user already has a pending invitation.")
+
+    db.add(ClubInvitation(club_id=club.id, invited_by=current_user.id, invited_user_id=target.id))
+    await db.commit()
+
+
+@router.post("/{slug}/invitations/accept", status_code=status.HTTP_204_NO_CONTENT)
+async def accept_invitation(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    club = await _get_club_or_404(slug, db)
+
+    invite = (await db.execute(
+        select(ClubInvitation).where(
+            ClubInvitation.club_id == club.id,
+            ClubInvitation.invited_user_id == current_user.id,
+        )
+    )).scalar_one_or_none()
+    if not invite:
+        raise HTTPException(status_code=404, detail="No invitation found.")
+
+    await db.delete(invite)
+    db.add(ClubMember(club_id=club.id, user_id=current_user.id, role="member"))
+    await db.commit()
+
+
+@router.delete("/{slug}/invitations/decline", status_code=status.HTTP_204_NO_CONTENT)
+async def decline_invitation(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    club = await _get_club_or_404(slug, db)
+
+    invite = (await db.execute(
+        select(ClubInvitation).where(
+            ClubInvitation.club_id == club.id,
+            ClubInvitation.invited_user_id == current_user.id,
+        )
+    )).scalar_one_or_none()
+    if not invite:
+        raise HTTPException(status_code=404, detail="No invitation found.")
+
+    await db.delete(invite)
     await db.commit()
 
 
