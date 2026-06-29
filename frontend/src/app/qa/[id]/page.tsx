@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
 import UserSearchInput from "@/components/UserSearchInput";
+import { timeAgo } from "@/lib/timeAgo";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,7 @@ interface QAPost {
   reply_count: number;
   created_at: string;
   is_deleted: boolean;
+  is_own: boolean;
 }
 
 interface VoteResponse {
@@ -44,6 +46,7 @@ interface ThreadCtx {
   inlineSubmitting: boolean;
   inlineError: string | null;
   onVote: (id: string, type: "up" | "down") => void;
+  onDelete: (id: string) => void;
   onStartReply: (id: string) => void;
   onSetContent: (v: string) => void;
   onSetUrls: (urls: string[], uploading: boolean) => void;
@@ -57,14 +60,6 @@ function buildTree(posts: QAPost[], parentId: string): TreeNode[] {
   return posts
     .filter((p) => p.parent_post_id === parentId)
     .map((p) => ({ post: p, children: buildTree(posts, p.id) }));
-}
-
-function timeAgo(iso: string): string {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
 }
 
 // ── thread context ─────────────────────────────────────────────────────────────
@@ -98,7 +93,7 @@ function AnswerNode({ node, depth }: { node: TreeNode; depth: number }) {
             {p.content && (
               <p style={{ margin: "0 0 0.35rem", whiteSpace: "pre-wrap", lineHeight: 1.45, fontSize: "0.93rem" }}>{p.content}</p>
             )}
-            <div style={{ display: "flex", gap: "0.85rem", alignItems: "center", fontSize: "0.82rem" }}>
+            <div style={{ display: "flex", gap: "0.85rem", alignItems: "center", fontSize: "0.82rem", flexWrap: "wrap" }}>
               <button
                 onClick={() => ctx.onVote(p.id, "up")}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: p.current_user_vote === "up" ? "#e05c00" : "#888", fontWeight: p.current_user_vote === "up" ? "bold" : "normal" }}
@@ -112,6 +107,12 @@ function AnswerNode({ node, depth }: { node: TreeNode; depth: number }) {
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: isReplying ? "#111" : "#888", fontWeight: isReplying ? "600" : "normal", fontSize: "0.82rem" }}
               >💬 Reply</button>
               <SharePanel postId={p.id} />
+              {p.is_own && (
+                <button
+                  onClick={() => ctx.onDelete(p.id)}
+                  style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", padding: 0, color: "#ccc", fontSize: "0.82rem" }}
+                >Delete</button>
+              )}
             </div>
           </>
         )}
@@ -269,6 +270,16 @@ export default function QADetailPage() {
     } catch { /* non-critical */ }
   }
 
+  async function handleDelete(targetId: string) {
+    if (!window.confirm("Delete this post? This cannot be undone.")) return;
+    try {
+      await apiFetch(`/api/qa/${targetId}`, { method: "DELETE" });
+      setAllAnswers((prev) => prev.map((p) => (p.id === targetId ? { ...p, is_deleted: true, content: "[deleted]" } : p)));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Could not delete.");
+    }
+  }
+
   async function handleTopAnswer(e: React.FormEvent) {
     e.preventDefault();
     if (!topContent.trim() && !topImageUrls.length) return;
@@ -338,6 +349,7 @@ export default function QADetailPage() {
     inlineSubmitting,
     inlineError,
     onVote: handleVote,
+    onDelete: handleDelete,
     onStartReply: startInlineReply,
     onSetContent: setInlineContent,
     onSetUrls: (urls, uploading) => { setInlineImageUrls(urls); setInlineImagesUploading(uploading); },

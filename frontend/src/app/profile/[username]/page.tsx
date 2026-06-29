@@ -8,6 +8,7 @@ import type { Area, Point } from "react-easy-crop";
 import { apiFetch, ApiError } from "@/lib/api";
 import { ImageGrid } from "@/components/ImageGrid";
 import { FACULTIES, FACULTY_NAMES, FACULTY_PROGRAMS, Faculty } from "@/lib/faculties";
+import { timeAgo } from "@/lib/timeAgo";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -70,14 +71,6 @@ interface Invitation {
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-
-function timeAgo(iso: string): string {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
-}
 
 function memberSince(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "long", year: "numeric" });

@@ -45,7 +45,7 @@ def _build_qa_select(extra_where=None):
     return stmt
 
 
-def _row_to_response(row, current_vote: str | None) -> QAPostResponse:
+def _row_to_response(row, current_vote: str | None, is_own: bool = False) -> QAPostResponse:
     post, upvotes, downvotes, reply_count = row
     return QAPostResponse(
         id=post.id,
@@ -59,7 +59,22 @@ def _row_to_response(row, current_vote: str | None) -> QAPostResponse:
         created_at=post.created_at,
         is_deleted=post.is_deleted,
         parent_post_id=post.parent_post_id,
+        is_own=is_own,
     )
+
+
+async def _user_owns(
+    post_ids: list[uuid.UUID], user_id: uuid.UUID, db: AsyncSession
+) -> set[uuid.UUID]:
+    if not post_ids:
+        return set()
+    result = await db.execute(
+        select(AnonymousPostAuthor.post_id).where(
+            AnonymousPostAuthor.post_id.in_(post_ids),
+            AnonymousPostAuthor.user_id == user_id,
+        )
+    )
+    return {row.post_id for row in result}
 
 
 async def _user_votes_for(
@@ -143,6 +158,7 @@ async def create_question(
         created_at=post.created_at,
         is_deleted=False,
         parent_post_id=None,
+        is_own=True,
     )
 
 
@@ -171,10 +187,12 @@ async def list_questions(
     ).all()
 
     total = (await db.execute(select(func.count(Post.id)).where(where))).scalar() or 0
-    votes = await _user_votes_for([r[0].id for r in rows], current_user.id, db)
+    post_ids = [r[0].id for r in rows]
+    votes = await _user_votes_for(post_ids, current_user.id, db)
+    owned = await _user_owns(post_ids, current_user.id, db)
 
     return QAListResponse(
-        posts=[_row_to_response(r, votes.get(r[0].id)) for r in rows],
+        posts=[_row_to_response(r, votes.get(r[0].id), is_own=r[0].id in owned) for r in rows],
         total=total,
     )
 
@@ -190,7 +208,8 @@ async def get_question(
         raise HTTPException(status_code=404, detail="Post not found.")
 
     vote_map = await _user_votes_for([post_id], current_user.id, db)
-    question = _row_to_response(row, vote_map.get(post_id))
+    owned_q = await _user_owns([post_id], current_user.id, db)
+    question = _row_to_response(row, vote_map.get(post_id), is_own=post_id in owned_q)
 
     # All descendants at any depth via recursive CTE
     seed = select(Post.id.label("id")).where(Post.parent_post_id == post_id)
@@ -203,8 +222,10 @@ async def get_question(
             _build_qa_select(Post.id.in_(select(cte.c.id))).order_by(Post.created_at.asc())
         )
     ).all()
-    answer_votes = await _user_votes_for([r[0].id for r in answer_rows], current_user.id, db)
-    answers = [_row_to_response(r, answer_votes.get(r[0].id)) for r in answer_rows]
+    answer_ids = [r[0].id for r in answer_rows]
+    answer_votes = await _user_votes_for(answer_ids, current_user.id, db)
+    owned_a = await _user_owns(answer_ids, current_user.id, db)
+    answers = [_row_to_response(r, answer_votes.get(r[0].id), is_own=r[0].id in owned_a) for r in answer_rows]
 
     return {"question": question, "answers": answers}
 
@@ -252,6 +273,7 @@ async def create_answer(
         created_at=answer.created_at,
         is_deleted=False,
         parent_post_id=post_id,
+        is_own=True,
     )
 
 

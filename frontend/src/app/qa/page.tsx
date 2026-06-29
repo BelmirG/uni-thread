@@ -8,6 +8,7 @@ import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
 import { FACULTIES, FACULTY_NAMES, Faculty } from "@/lib/faculties";
 import UserSearchInput from "@/components/UserSearchInput";
+import { timeAgo } from "@/lib/timeAgo";
 
 interface QAPost {
   id: string;
@@ -19,6 +20,7 @@ interface QAPost {
   current_user_vote: "up" | "down" | null;
   reply_count: number;
   created_at: string;
+  is_own: boolean;
 }
 
 interface QAListResponse {
@@ -30,14 +32,6 @@ interface VoteResponse {
   upvotes: number;
   downvotes: number;
   current_user_vote: "up" | "down" | null;
-}
-
-function timeAgo(iso: string): string {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
 }
 
 function FacultyBadge({ tag }: { tag: string }) {
@@ -167,6 +161,17 @@ export default function QAPage() {
     }
   }
 
+  async function handleDelete(postId: string) {
+    if (!window.confirm("Delete this post? This cannot be undone.")) return;
+    try {
+      await apiFetch(`/api/qa/${postId}`, { method: "DELETE" });
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      setTotal((t) => t - 1);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Could not delete post.");
+    }
+  }
+
   async function handleVote(postId: string, voteType: "up" | "down") {
     try {
       const data = await apiFetch<VoteResponse>(`/api/qa/${postId}/vote`, {
@@ -258,7 +263,7 @@ export default function QAPage() {
                 {post.content}
               </p>
             )}
-            <div style={{ display: "flex", gap: "1rem", alignItems: "center", fontSize: "0.9rem" }}>
+            <div style={{ display: "flex", gap: "1rem", alignItems: "center", fontSize: "0.9rem", flexWrap: "wrap" }}>
               <button
                 onClick={() => handleVote(post.id, "up")}
                 style={{
@@ -283,6 +288,14 @@ export default function QAPage() {
                 💬 {post.reply_count} {post.reply_count === 1 ? "answer" : "answers"}
               </Link>
               <SharePanel postId={post.id} />
+              {post.is_own && (
+                <button
+                  onClick={() => handleDelete(post.id)}
+                  style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", padding: 0, color: "#ccc", fontSize: "0.85rem" }}
+                >
+                  Delete
+                </button>
+              )}
             </div>
           </div>
         ))}

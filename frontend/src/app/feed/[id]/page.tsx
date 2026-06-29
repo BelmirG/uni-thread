@@ -7,6 +7,8 @@ import { apiFetch } from "@/lib/api";
 import UserSearchInput from "@/components/UserSearchInput";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
+import MiniAvatar from "@/components/MiniAvatar";
+import { timeAgo } from "@/lib/timeAgo";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -16,14 +18,6 @@ interface Author {
   avatar_url: string | null;
 }
 
-function MiniAvatar({ name, url, size = 30 }: { name: string; url: string | null; size?: number }) {
-  if (url) return <img src={url} alt="" style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />;
-  return (
-    <div style={{ width: size, height: size, borderRadius: "50%", background: "#111", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.35, fontWeight: "bold", flexShrink: 0 }}>
-      {(name || "?")[0].toUpperCase()}
-    </div>
-  );
-}
 
 interface Post {
   id: string;
@@ -76,14 +70,6 @@ function buildTree(posts: Post[], parentId: string): TreeNode[] {
   return posts
     .filter((p) => p.parent_post_id === parentId)
     .map((p) => ({ post: p, children: buildTree(posts, p.id) }));
-}
-
-function timeAgo(iso: string): string {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
 }
 
 // ── thread context ─────────────────────────────────────────────────────────────
@@ -316,6 +302,7 @@ export default function PostDetailPage() {
   }
 
   async function handleDelete(targetId: string) {
+    if (!window.confirm("Delete this post? This cannot be undone.")) return;
     try {
       await apiFetch(`/api/posts/${targetId}`, { method: "DELETE" });
       setPost((prev) => (prev?.id === targetId ? { ...prev, is_deleted: true, content: "[deleted]" } : prev));

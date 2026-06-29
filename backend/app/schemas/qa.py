@@ -33,6 +33,7 @@ class QAPostResponse(BaseModel):
     created_at: datetime
     is_deleted: bool
     parent_post_id: Optional[uuid.UUID]
+    is_own: bool = False
 
 
 class QAListResponse(BaseModel):

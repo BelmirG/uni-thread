@@ -64,7 +64,7 @@ export default function NavBar() {
     apiFetch<{ username: string }>("/api/auth/me")
       .then((me) => setProfileHref(`/profile/${me.username}`))
       .catch(() => setProfileHref("/profile"));
-  }, [pathname]);
+  }, []);
 
   useEffect(() => {
     function fetchUnread() {

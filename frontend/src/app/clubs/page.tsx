@@ -42,6 +42,8 @@ export default function ClubsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [joiningSlug, setJoiningSlug] = useState<string | null>(null);
+  const [leavingSlug, setLeavingSlug] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -99,15 +101,19 @@ export default function ClubsPage() {
   }
 
   async function handleJoin(slug: string) {
+    setJoiningSlug(slug);
     try {
       const updated = await apiFetch<Club>(`/api/clubs/${slug}/join`, { method: "POST" });
       setClubs((prev) => prev.map((c) => (c.slug === slug ? updated : c)));
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Could not join club.");
+    } finally {
+      setJoiningSlug(null);
     }
   }
 
   async function handleLeave(slug: string) {
+    setLeavingSlug(slug);
     try {
       await apiFetch(`/api/clubs/${slug}/leave`, { method: "DELETE" });
       setClubs((prev) =>
@@ -119,6 +125,8 @@ export default function ClubsPage() {
       );
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Could not leave club.");
+    } finally {
+      setLeavingSlug(null);
     }
   }
 
@@ -262,9 +270,10 @@ export default function ClubsPage() {
               {!club.is_member && !club.has_pending_request && (
                 <button
                   onClick={() => handleJoin(club.slug)}
-                  style={{ padding: "0.3rem 0.9rem", fontSize: "0.88rem", cursor: "pointer" }}
+                  disabled={joiningSlug === club.slug}
+                  style={{ padding: "0.3rem 0.9rem", fontSize: "0.88rem", cursor: joiningSlug === club.slug ? "default" : "pointer", opacity: joiningSlug === club.slug ? 0.6 : 1 }}
                 >
-                  {club.is_private ? "Request to join" : "Join"}
+                  {joiningSlug === club.slug ? "Joining…" : club.is_private ? "Request to join" : "Join"}
                 </button>
               )}
               {club.has_pending_request && (
@@ -275,9 +284,10 @@ export default function ClubsPage() {
               {club.is_member && club.role !== "owner" && (
                 <button
                   onClick={() => handleLeave(club.slug)}
-                  style={{ padding: "0.3rem 0.9rem", fontSize: "0.88rem", cursor: "pointer", color: "#888" }}
+                  disabled={leavingSlug === club.slug}
+                  style={{ padding: "0.3rem 0.9rem", fontSize: "0.88rem", cursor: leavingSlug === club.slug ? "default" : "pointer", color: "#888", opacity: leavingSlug === club.slug ? 0.6 : 1 }}
                 >
-                  Leave
+                  {leavingSlug === club.slug ? "Leaving…" : "Leave"}
                 </button>
               )}
               {club.is_member && club.role === "owner" && (

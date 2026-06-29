@@ -7,9 +7,11 @@ import { apiFetch } from "@/lib/api";
 import UserSearchInput from "@/components/UserSearchInput";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
+import MiniAvatar from "@/components/MiniAvatar";
 import PollComposer, { PollDraft } from "@/components/PollComposer";
 import PollDisplay from "@/components/PollDisplay";
 import { FACULTIES, FACULTY_NAMES, Faculty } from "@/lib/faculties";
+import { timeAgo } from "@/lib/timeAgo";
 
 type FeedTab = "discover" | "friends";
 
@@ -17,15 +19,6 @@ interface Author {
   username: string;
   display_name: string;
   avatar_url: string | null;
-}
-
-function MiniAvatar({ name, url }: { name: string; url: string | null }) {
-  if (url) return <img src={url} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />;
-  return (
-    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#111", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8rem", fontWeight: "bold", flexShrink: 0 }}>
-      {(name || "?")[0].toUpperCase()}
-    </div>
-  );
 }
 
 interface Poll {
@@ -69,14 +62,6 @@ interface SearchUser {
   faculty: string | null;
   program: string | null;
   is_following: boolean;
-}
-
-function timeAgo(iso: string): string {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
 }
 
 function FacultyBadge({ tag }: { tag: string }) {
@@ -232,6 +217,13 @@ export default function FeedPage() {
     e.preventDefault();
     if (!content.trim() && !imageUrls.length && !pollDraft) return;
     if (imagesUploading) return;
+    if (pollDraft) {
+      const validOptions = pollDraft.options.map((o) => o.trim()).filter(Boolean);
+      if (validOptions.length < 2) {
+        setPostError("A poll needs at least 2 options.");
+        return;
+      }
+    }
     setSubmitting(true);
     setPostError(null);
     try {
@@ -276,6 +268,7 @@ export default function FeedPage() {
   }
 
   async function handleDelete(postId: string) {
+    if (!window.confirm("Delete this post? This cannot be undone.")) return;
     try {
       await apiFetch(`/api/posts/${postId}`, { method: "DELETE" });
       setPosts((prev) => prev.filter((p) => p.id !== postId));
@@ -380,12 +373,12 @@ export default function FeedPage() {
       {/* Compose sheet */}
       {composerOpen && (
         <>
-          <div onClick={() => setComposerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 100 }} />
+          <div onClick={() => { setComposerOpen(false); setPollDraft(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 100 }} />
           <div style={{ position: "fixed", bottom: 60, left: "50%", transform: "translateX(-50%)", width: "min(600px, 94vw)", background: "#fff", borderRadius: 16, padding: "1rem 1rem 1.5rem", zIndex: 101, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 4px 32px rgba(0,0,0,0.18)" }}>
             <div style={{ maxWidth: 640, margin: "0 auto" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
                 <span style={{ fontWeight: "600", fontSize: "1rem" }}>Create post</span>
-                <button onClick={() => setComposerOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.5rem", color: "#999", lineHeight: 1, padding: "0 0.2rem" }}>×</button>
+                <button onClick={() => { setComposerOpen(false); setPollDraft(null); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.5rem", color: "#999", lineHeight: 1, padding: "0 0.2rem" }}>×</button>
               </div>
               <form onSubmit={handlePost}>
                 <textarea
