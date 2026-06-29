@@ -62,10 +62,11 @@ export default function NavBar() {
   const [unreadMessages, setUnreadMessages] = useState(0);
 
   useEffect(() => {
+    if (HIDDEN_ON.includes(pathname)) return;
     apiFetch<{ username: string }>("/api/auth/me")
       .then((me) => setProfileHref(`/profile/${me.username}`))
       .catch(() => setProfileHref("/profile"));
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     function fetchUnread() {

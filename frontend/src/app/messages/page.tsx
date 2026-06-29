@@ -5,11 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import UserSearchInput from "@/components/UserSearchInput";
+import MiniAvatar from "@/components/MiniAvatar";
 import { timeAgo } from "@/lib/timeAgo";
+import { Plus, X } from "lucide-react";
 
 interface OtherUser {
   username: string;
   display_name: string;
+  avatar_url?: string | null;
 }
 
 interface LastMessage {
@@ -49,91 +52,119 @@ export default function MessagesPage() {
       .finally(() => setLoading(false));
   }, [router]);
 
-  async function handleOpen(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newUsername.trim()) return;
-    setNewLoading(true);
+  function openNew() {
+    setNewOpen(true);
     setNewError(null);
-    try {
-      const data = await apiFetch<{ conversation_id: string }>("/api/messages/open", {
-        method: "POST",
-        body: JSON.stringify({ username: newUsername.trim() }),
-      });
-      router.push(`/messages/${data.conversation_id}`);
-    } catch (err: unknown) {
-      setNewError(err instanceof Error ? err.message : "User not found.");
-    } finally {
-      setNewLoading(false);
-    }
+    setNewUsername("");
   }
 
+
   return (
-    <main style={{ maxWidth: 600, margin: "0 auto", padding: "1.5rem 1rem" }}>
-      <h1 style={{ margin: "0 0 1.5rem" }}>Messages</h1>
+    <>
+    <main className="max-w-xl mx-auto px-4 pt-4 pb-36">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold text-foreground">Messages</h1>
+        <button
+          onClick={openNew}
+          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          New
+        </button>
+      </div>
 
-      <button
-        onClick={() => { setNewOpen((v) => !v); setNewError(null); setNewUsername(""); }}
-        style={{ marginBottom: "1.25rem", padding: "0.45rem 1rem", cursor: "pointer", borderRadius: 4, border: "1px solid #ccc", background: newOpen ? "#111" : "#fff", color: newOpen ? "#fff" : "#111", fontSize: "0.9rem" }}
-      >
-        {newOpen ? "Cancel" : "+ New message"}
-      </button>
+      {/* List */}
+      {loading && <p className="text-muted-foreground text-sm text-center py-8">Loading…</p>}
+      {!loading && conversations.length === 0 && (
+        <p className="text-muted-foreground text-sm text-center py-12">
+          No conversations yet. Start one!
+        </p>
+      )}
 
-      {newOpen && (
-        <form onSubmit={handleOpen} style={{ marginBottom: "1.5rem", padding: "1rem", border: "1px solid #e0e0e0", borderRadius: 8, background: "#fafafa" }}>
-          <label style={{ display: "block", marginBottom: "0.4rem", fontSize: "0.9rem", fontWeight: "bold" }}>
-            Search user
-          </label>
-          <div style={{ marginBottom: "0.6rem" }}>
+      <div className="space-y-2">
+        {conversations.map((c) => {
+          const unread = c.unread_count > 0;
+          return (
+            <Link
+              key={c.conversation_id}
+              href={`/messages/${c.conversation_id}`}
+              className="flex items-center gap-3 px-4 py-3 rounded-xl border no-underline transition-colors"
+              style={{
+                background: unread ? "hsl(var(--primary) / 0.04)" : "#fff",
+                borderColor: unread ? "hsl(var(--primary) / 0.2)" : "hsl(var(--border))",
+              }}
+            >
+              <div className="relative flex-shrink-0">
+                <MiniAvatar name={c.other_user.display_name} url={c.other_user.avatar_url ?? null} size={40} />
+                {unread && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-primary border-2 border-white" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-0.5">
+                  <span className={`text-sm truncate ${unread ? "font-bold text-foreground" : "font-semibold text-foreground"}`}>
+                    {c.other_user.display_name}
+                  </span>
+                  {c.last_message && (
+                    <span className="text-[11px] text-muted-foreground flex-shrink-0">
+                      {timeAgo(c.last_message.created_at)}
+                    </span>
+                  )}
+                </div>
+                <p className={`text-xs truncate ${unread ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                  {c.last_message
+                    ? `${c.last_message.sender_username === c.other_user.username ? "" : "You: "}${lastMsgPreview(c.last_message)}`
+                    : "No messages yet"}
+                </p>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </main>
+
+    {/* New conversation sheet */}
+    {newOpen && (
+      <>
+        <div onClick={() => { setNewOpen(false); setNewUsername(""); }} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100]" />
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 w-[min(600px,94vw)] bg-white rounded-2xl z-[101] shadow-2xl">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <span className="font-semibold text-sm">New conversation</span>
+            <button
+              onClick={() => { setNewOpen(false); setNewUsername(""); }}
+              className="rounded-full p-1 hover:bg-muted text-muted-foreground transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="px-4 py-3 space-y-3">
             <UserSearchInput
               value={newUsername}
               onChange={setNewUsername}
-              onSelect={(u) => setNewUsername(u)}
-              placeholder="Search by name or username"
-              inputStyle={{ padding: "0.5rem", fontSize: "0.95rem" }}
+              onSelect={async (u) => {
+                setNewUsername(u);
+                setNewLoading(true);
+                setNewError(null);
+                try {
+                  const data = await apiFetch<{ conversation_id: string }>("/api/messages/open", {
+                    method: "POST",
+                    body: JSON.stringify({ username: u }),
+                  });
+                  router.push(`/messages/${data.conversation_id}`);
+                } catch (err: unknown) {
+                  setNewError(err instanceof Error ? err.message : "User not found.");
+                  setNewLoading(false);
+                }
+              }}
+              placeholder="Search by name or username…"
             />
+            {newError && <p className="text-xs text-destructive">{newError}</p>}
+            {newLoading && <p className="text-xs text-muted-foreground">Opening…</p>}
           </div>
-          {newError && <p style={{ color: "crimson", margin: "0 0 0.5rem", fontSize: "0.9rem" }}>{newError}</p>}
-          <button
-            type="submit"
-            disabled={newLoading || !newUsername.trim()}
-            style={{ padding: "0.45rem 1rem", cursor: "pointer", borderRadius: 4, background: "#111", color: "#fff", border: "none", fontSize: "0.9rem" }}
-          >
-            {newLoading ? "Opening…" : "Open conversation"}
-          </button>
-        </form>
-      )}
-
-      {loading && <p style={{ color: "#888" }}>Loading…</p>}
-      {!loading && conversations.length === 0 && (
-        <p style={{ color: "#aaa", textAlign: "center", marginTop: "3rem" }}>No conversations yet. Start one above.</p>
-      )}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-        {conversations.map((c) => (
-          <Link
-            key={c.conversation_id}
-            href={`/messages/${c.conversation_id}`}
-            style={{ display: "block", padding: "0.85rem 1rem", border: `1px solid ${c.unread_count > 0 ? "#d0d0ff" : "#e0e0e0"}`, borderRadius: 8, background: c.unread_count > 0 ? "#f8f8ff" : "#fff", textDecoration: "none", color: "inherit" }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                {c.unread_count > 0 && (
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "crimson", flexShrink: 0, display: "inline-block" }} />
-                )}
-                <span style={{ fontWeight: c.unread_count > 0 ? "700" : "bold", fontSize: "0.95rem" }}>{c.other_user.display_name}</span>
-              </div>
-              {c.last_message && (
-                <span style={{ fontSize: "0.75rem", color: "#aaa" }}>{timeAgo(c.last_message.created_at)}</span>
-              )}
-            </div>
-            <div style={{ fontSize: "0.85rem", color: c.unread_count > 0 ? "#333" : "#888", marginTop: "0.2rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: c.unread_count > 0 ? "500" : "normal" }}>
-              {c.last_message
-                ? `${c.last_message.sender_username === c.other_user.username ? "" : "You: "}${lastMsgPreview(c.last_message)}`
-                : "No messages yet"}
-            </div>
-          </Link>
-        ))}
-      </div>
-    </main>
+        </div>
+      </>
+    )}
+    </>
   );
 }

@@ -4,7 +4,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
-from sqlalchemy import case, func, or_, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -70,7 +70,7 @@ def _build_msg_payload(
         "id": str(msg.id),
         "content": msg.content,
         "shared_post": shared,
-        "sender": {"username": sender.username, "display_name": sender.display_name},
+        "sender": {"username": sender.username, "display_name": sender.display_name, "avatar_url": sender.avatar_url},
         "created_at": msg.created_at.isoformat(),
     }
 
@@ -145,6 +145,7 @@ async def list_conversations(
             Conversation.id,
             OtherUser.username,
             OtherUser.display_name,
+            OtherUser.avatar_url,
             last_msg.c.content,
             last_msg.c.shared_post_id,
             last_msg.c.created_at,
@@ -176,7 +177,7 @@ async def list_conversations(
             }
         result.append({
             "conversation_id": str(r.id),
-            "other_user": {"username": r.username, "display_name": r.display_name},
+            "other_user": {"username": r.username, "display_name": r.display_name, "avatar_url": r.avatar_url},
             "last_message": last,
             "unread_count": r.unread_count,
         })
@@ -204,7 +205,7 @@ async def open_conversation(
     conv = await _get_or_create_conversation(current_user, other, db)
     return {
         "conversation_id": str(conv.id),
-        "other_user": {"username": other.username, "display_name": other.display_name},
+        "other_user": {"username": other.username, "display_name": other.display_name, "avatar_url": other.avatar_url},
     }
 
 
@@ -355,9 +356,32 @@ async def get_messages(
     await db.commit()
 
     return {
-        "other_user": {"username": other_user.username, "display_name": other_user.display_name},
+        "other_user": {"username": other_user.username, "display_name": other_user.display_name, "avatar_url": other_user.avatar_url},
         "messages": [_build_msg_payload(row[0], row[1], row[2], row[3]) for row in rows],
     }
+
+
+@router.delete("/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        conv_id = uuid.UUID(conversation_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+
+    conv = (await db.execute(
+        select(Conversation).where(Conversation.id == conv_id)
+    )).scalar_one_or_none()
+    if not conv or (conv.user1_id != current_user.id and conv.user2_id != current_user.id):
+        raise HTTPException(status_code=403, detail="Access denied.")
+
+    await db.execute(delete(DirectMessage).where(DirectMessage.conversation_id == conv_id))
+    await db.execute(delete(Conversation).where(Conversation.id == conv_id))
+    await db.commit()
+    return {"ok": True}
 
 
 # ── WebSocket ──────────────────────────────────────────────────────────────────

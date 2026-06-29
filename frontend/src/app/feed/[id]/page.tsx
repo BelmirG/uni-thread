@@ -11,7 +11,6 @@ import {
   Trash2,
   X,
   ArrowLeft,
-  PenLine,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import UserSearchInput from "@/components/UserSearchInput";
@@ -310,7 +309,6 @@ export default function PostDetailPage() {
   const [topUploaderKey, setTopUploaderKey] = useState(0);
   const [topSubmitting, setTopSubmitting] = useState(false);
   const [topError, setTopError] = useState<string | null>(null);
-  const [composerOpen, setComposerOpen] = useState(false);
 
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [inlineContent, setInlineContent] = useState("");
@@ -374,7 +372,6 @@ export default function PostDetailPage() {
       setTopContent("");
       setTopImageUrls([]);
       setTopUploaderKey((k) => k + 1);
-      setComposerOpen(false);
     } catch (err: unknown) {
       setTopError(err instanceof Error ? err.message : "Failed to post comment.");
     } finally {
@@ -440,7 +437,7 @@ export default function PostDetailPage() {
 
   return (
     <Ctx.Provider value={ctxValue}>
-      <main className="max-w-xl mx-auto px-4 pt-4 pb-36">
+      <main className="max-w-xl mx-auto px-4 pt-4 pb-24">
         {/* Back link */}
         <Link
           href="/feed"
@@ -533,7 +530,38 @@ export default function PostDetailPage() {
           )}
         </div>
 
-        {/* Comments section */}
+        {/* Inline comment composer */}
+        <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden mb-4">
+          <form onSubmit={handleTopReply} className="px-4 py-3 space-y-3">
+            <textarea
+              value={topContent}
+              onChange={(e) => setTopContent(e.target.value)}
+              placeholder="Add a comment…"
+              rows={3}
+              className="w-full resize-none text-sm placeholder:text-muted-foreground border border-input rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <div className="flex items-center gap-2 flex-wrap">
+              <ImageUploader
+                key={topUploaderKey}
+                onUrlsChange={(urls, uploading) => {
+                  setTopImageUrls(urls);
+                  setTopImagesUploading(uploading);
+                }}
+              />
+              {topError && <p className="text-xs text-destructive">{topError}</p>}
+              <Button
+                type="submit"
+                size="sm"
+                className="ml-auto"
+                disabled={topSubmitting || topImagesUploading || (!topContent.trim() && !topImageUrls.length)}
+              >
+                {topImagesUploading ? "Uploading…" : topSubmitting ? "Posting…" : "Comment"}
+              </Button>
+            </div>
+          </form>
+        </div>
+
+        {/* Comments list */}
         <div>
           <h3 className="text-sm font-semibold text-muted-foreground mb-3">
             {allReplies.length} {allReplies.length === 1 ? "comment" : "comments"}
@@ -543,76 +571,11 @@ export default function PostDetailPage() {
           ))}
           {tree.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-6">
-              No comments yet. Be the first to comment!
+              No comments yet. Be the first!
             </p>
           )}
         </div>
       </main>
-
-      {/* Fixed compose bar */}
-      <div className="fixed bottom-16 left-0 right-0 px-4 py-2 bg-white/95 backdrop-blur-sm border-t border-border z-40">
-        <div className="max-w-xl mx-auto">
-          <button
-            onClick={() => setComposerOpen(true)}
-            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-full bg-muted hover:bg-muted/80 transition-colors text-sm text-muted-foreground"
-          >
-            <PenLine className="w-4 h-4 flex-shrink-0" />
-            Add a comment…
-          </button>
-        </div>
-      </div>
-
-      {/* Compose sheet */}
-      {composerOpen && (
-        <>
-          <div
-            onClick={() => setComposerOpen(false)}
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100]"
-          />
-          <div className="fixed bottom-[4.5rem] left-1/2 -translate-x-1/2 w-[min(600px,94vw)] bg-white rounded-2xl z-[101] shadow-2xl max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
-              <span className="font-semibold text-sm">Add a comment</span>
-              <button
-                onClick={() => setComposerOpen(false)}
-                className="rounded-full p-1 hover:bg-muted text-muted-foreground transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1">
-              <form onSubmit={handleTopReply} className="px-4 py-3 space-y-3">
-                <textarea
-                  autoFocus
-                  value={topContent}
-                  onChange={(e) => setTopContent(e.target.value)}
-                  placeholder="Add a comment…"
-                  rows={4}
-                  className="w-full resize-none text-sm placeholder:text-muted-foreground border-0 outline-none focus:ring-0 bg-transparent min-h-[90px]"
-                />
-                <div className="border-t border-border pt-3 space-y-3">
-                  <ImageUploader
-                    key={topUploaderKey}
-                    onUrlsChange={(urls, uploading) => {
-                      setTopImageUrls(urls);
-                      setTopImagesUploading(uploading);
-                    }}
-                  />
-                  {topError && <p className="text-xs text-destructive">{topError}</p>}
-                  <div className="flex justify-end">
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={topSubmitting || topImagesUploading || (!topContent.trim() && !topImageUrls.length)}
-                    >
-                      {topImagesUploading ? "Uploading…" : topSubmitting ? "Posting…" : "Comment"}
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            </div>
-          </div>
-        </>
-      )}
     </Ctx.Provider>
   );
 }

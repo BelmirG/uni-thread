@@ -7,8 +7,15 @@ import Cropper from "react-easy-crop";
 import type { Area, Point } from "react-easy-crop";
 import { apiFetch, ApiError } from "@/lib/api";
 import { ImageGrid } from "@/components/ImageGrid";
+import MiniAvatar from "@/components/MiniAvatar";
 import { FACULTIES, FACULTY_NAMES, FACULTY_PROGRAMS, Faculty } from "@/lib/faculties";
 import { timeAgo } from "@/lib/timeAgo";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  Bell, ChevronUp, ChevronDown, MessageCircle, Pencil,
+  LogOut, X, Check, Camera, Lock,
+} from "lucide-react";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -70,36 +77,20 @@ interface Invitation {
   invited_by_username: string;
 }
 
+type FollowNotif = {
+  id: string;
+  actor_username: string;
+  actor_display_name: string;
+  actor_avatar_url: string | null;
+  is_read: boolean;
+  created_at: string;
+};
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function memberSince(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
-
-function Avatar({ name, avatarUrl, size = 72 }: { name: string; avatarUrl?: string | null; size?: number }) {
-  if (avatarUrl) {
-    return (
-      <img
-        src={avatarUrl}
-        alt={name}
-        style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, display: "block" }}
-      />
-    );
-  }
-  const letter = (name || "?")[0].toUpperCase();
-  return (
-    <div style={{
-      width: size, height: size, borderRadius: "50%",
-      background: "#111", color: "#fff",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: size * 0.4, fontWeight: "bold", flexShrink: 0,
-    }}>
-      {letter}
-    </div>
-  );
-}
-
-// ── canvas crop ───────────────────────────────────────────────────────────────
 
 async function getCroppedBlob(imageSrc: string, pixelCrop: Area): Promise<Blob> {
   const image = new Image();
@@ -108,26 +99,16 @@ async function getCroppedBlob(imageSrc: string, pixelCrop: Area): Promise<Blob> 
     image.onload = () => resolve();
     image.onerror = reject;
   });
-
   const OUTPUT = Math.min(pixelCrop.width, pixelCrop.height, 600);
   const canvas = document.createElement("canvas");
   canvas.width = OUTPUT;
   canvas.height = OUTPUT;
   const ctx = canvas.getContext("2d")!;
-
-  ctx.drawImage(
-    image,
-    pixelCrop.x, pixelCrop.y,
-    pixelCrop.width, pixelCrop.height,
-    0, 0,
-    OUTPUT, OUTPUT,
-  );
-
+  ctx.drawImage(image, pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height, 0, 0, OUTPUT, OUTPUT);
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error("Canvas is empty"))),
-      "image/jpeg",
-      0.92,
+      "image/jpeg", 0.92,
     );
   });
 }
@@ -145,7 +126,6 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [followLoading, setFollowLoading] = useState(false);
 
-  // Edit state
   const [editing, setEditing] = useState(false);
   const [editUsername, setEditUsername] = useState("");
   const [editName, setEditName] = useState("");
@@ -155,13 +135,11 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  // Followers / following modal
   const [followsModal, setFollowsModal] = useState<"followers" | "following" | null>(null);
   const [followsList, setFollowsList] = useState<FollowUser[]>([]);
   const [followsLoading, setFollowsLoading] = useState(false);
   const [actioningUser, setActioningUser] = useState<string | null>(null);
 
-  // Avatar crop
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -169,19 +147,14 @@ export default function ProfilePage() {
   const [cropSaving, setCropSaving] = useState(false);
   const [cropError, setCropError] = useState<string | null>(null);
 
-  // Report
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState("");
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportDone, setReportDone] = useState(false);
 
-  // Notifications
   const [notifOpen, setNotifOpen] = useState(false);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
-  const [followNotifs, setFollowNotifs] = useState<{
-    id: string; actor_username: string; actor_display_name: string;
-    actor_avatar_url: string | null; is_read: boolean; created_at: string;
-  }[]>([]);
+  const [followNotifs, setFollowNotifs] = useState<FollowNotif[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -202,7 +175,7 @@ export default function ProfilePage() {
         if (p.is_own_profile) {
           Promise.all([
             apiFetch<Invitation[]>("/api/clubs/invitations/me"),
-            apiFetch<typeof followNotifs>("/api/notifications"),
+            apiFetch<FollowNotif[]>("/api/notifications"),
           ]).then(([invs, notifs]) => {
             setInvitations(invs);
             setFollowNotifs(notifs);
@@ -265,7 +238,6 @@ export default function ProfilePage() {
     finally { setActioningUser(null); }
   }
 
-  // Step 1: pick file → read as data URL → open crop modal
   function handleAvatarFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -281,7 +253,6 @@ export default function ProfilePage() {
     reader.readAsDataURL(file);
   }
 
-  // Step 2: crop confirmed → canvas → upload → save
   async function handleCropSave() {
     if (!cropSrc || !croppedAreaPixels || !profile) return;
     setCropSaving(true);
@@ -319,13 +290,9 @@ export default function ProfilePage() {
     setSaveError(null);
     try {
       const updated = await apiFetch<{
-        username: string;
-        display_name: string;
-        bio: string | null;
-        faculty: string | null;
-        program: string | null;
-        username_changed: boolean;
-        username_changed_at: string | null;
+        username: string; display_name: string; bio: string | null;
+        faculty: string | null; program: string | null;
+        username_changed: boolean; username_changed_at: string | null;
       }>("/api/users/me", {
         method: "PUT",
         body: JSON.stringify({
@@ -346,9 +313,7 @@ export default function ProfilePage() {
         username_changed_at: updated.username_changed_at,
       } : prev);
       setEditing(false);
-      if (updated.username_changed) {
-        router.replace(`/profile/${updated.username}`);
-      }
+      if (updated.username_changed) router.replace(`/profile/${updated.username}`);
     } catch (err: unknown) {
       setSaveError(err instanceof Error ? err.message : "Failed to save.");
     } finally {
@@ -405,7 +370,13 @@ export default function ProfilePage() {
     }
   }
 
-  if (loading) return <p style={{ padding: "2rem", color: "#888" }}>Loading…</p>;
+  if (loading) {
+    return (
+      <main className="max-w-xl mx-auto px-4 pt-12 pb-36 flex justify-center">
+        <p className="text-muted-foreground text-sm">Loading…</p>
+      </main>
+    );
+  }
   if (!profile) return null;
 
   const usernameNextAllowed = profile.username_changed_at
@@ -413,376 +384,399 @@ export default function ProfilePage() {
     : null;
   const usernameLocked = usernameNextAllowed !== null && usernameNextAllowed > new Date();
 
+  const unreadFollows = followNotifs.filter((n) => !n.is_read).length;
+  const totalUnread = invitations.length + unreadFollows;
+
+  function openBell() {
+    setNotifOpen(true);
+    if (unreadFollows > 0) {
+      apiFetch("/api/notifications/mark-read", { method: "POST" })
+        .then(() => setFollowNotifs((prev) => prev.map((n) => ({ ...n, is_read: true }))))
+        .catch(() => {});
+    }
+  }
+
   return (
     <>
-      <main style={{ maxWidth: 640, margin: "0 auto", padding: "1.5rem 1rem 2rem" }}>
+      <main className="max-w-xl mx-auto px-4 pt-4 pb-36">
 
-        {/* Profile header */}
-        <div style={{ display: "flex", gap: "1.25rem", alignItems: "flex-start", marginBottom: "1.25rem", position: "relative" }}>
-          {/* Avatar — own profile shows edit button */}
-          <div style={{ position: "relative", flexShrink: 0 }}>
-            <Avatar name={profile.display_name} avatarUrl={profile.avatar_url} size={72} />
-            {profile.is_own_profile && (
-              <>
-                <button
-                  onClick={() => avatarInputRef.current?.click()}
-                  style={{
-                    position: "absolute", bottom: -2, right: -2,
-                    width: 22, height: 22, borderRadius: "50%",
-                    background: "#111", color: "#fff", border: "2px solid #fff",
-                    cursor: "pointer", fontSize: "0.7rem",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    padding: 0,
-                  }}
-                  title="Change photo"
-                >
-                  ✎
-                </button>
-                <input
-                  ref={avatarInputRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={handleAvatarFileChange}
-                />
-              </>
-            )}
-          </div>
-
-          <div style={{ flex: 1 }}>
-            <h1 style={{ margin: "0 0 0.1rem", fontSize: "1.25rem" }}>{profile.display_name}</h1>
-            <p style={{ margin: "0 0 0.25rem", color: "#888", fontSize: "0.9rem" }}>@{profile.username}</p>
-            {profile.faculty && !editing && (
-              <p style={{ margin: "0 0 0.25rem", fontSize: "0.85rem", color: "#555", fontWeight: 500 }}>
-                {profile.faculty} · {profile.program ?? FACULTY_NAMES[profile.faculty as Faculty]}
-              </p>
-            )}
-            {profile.bio && !editing && (
-              <p style={{ margin: "0 0 0.4rem", fontSize: "0.9rem", lineHeight: 1.4, whiteSpace: "pre-wrap" }}>
-                {profile.bio}
-              </p>
-            )}
-            <p style={{ margin: 0, fontSize: "0.78rem", color: "#bbb" }}>
-              Joined {memberSince(profile.member_since)}
-            </p>
-          </div>
-
-          {/* Notification bell — own profile only */}
-          {profile.is_own_profile && (() => {
-            const unreadFollows = followNotifs.filter((n) => !n.is_read).length;
-            const totalUnread = invitations.length + unreadFollows;
-            function openBell() {
-              setNotifOpen(true);
-              if (unreadFollows > 0) {
-                apiFetch("/api/notifications/mark-read", { method: "POST" })
-                  .then(() => setFollowNotifs((prev) => prev.map((n) => ({ ...n, is_read: true }))))
-                  .catch(() => {});
-              }
-            }
-            return (
-            <div style={{ position: "relative", flexShrink: 0 }}>
-              <button
-                onClick={() => notifOpen ? setNotifOpen(false) : openBell()}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: "0.25rem", fontSize: "1.3rem", position: "relative", lineHeight: 1 }}
-                title="Notifications"
-              >
-                🔔
-                {totalUnread > 0 && (
-                  <span style={{ position: "absolute", top: 0, right: 0, width: 16, height: 16, borderRadius: "50%", background: "crimson", color: "#fff", fontSize: "0.65rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
-                    {totalUnread}
-                  </span>
-                )}
-              </button>
-
-              {notifOpen && (
+        {/* Profile header card */}
+        <div className="bg-white border border-border rounded-xl shadow-sm p-4 mb-4">
+          <div className="flex items-start gap-4">
+            {/* Avatar */}
+            <div className="relative flex-shrink-0">
+              <MiniAvatar name={profile.display_name} url={profile.avatar_url} size={72} />
+              {profile.is_own_profile && (
                 <>
-                  <div onClick={() => setNotifOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 199 }} />
-                  <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", width: "min(340px, 90vw)", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, boxShadow: "0 6px 24px rgba(0,0,0,0.13)", zIndex: 200, overflow: "hidden", maxHeight: "70vh", overflowY: "auto" }}>
-                    <div style={{ padding: "0.65rem 1rem", fontWeight: 700, fontSize: "0.9rem", borderBottom: "1px solid #f0f0f0", position: "sticky", top: 0, background: "#fff" }}>Notifications</div>
-                    {invitations.length === 0 && followNotifs.length === 0 ? (
-                      <p style={{ margin: 0, padding: "1.25rem", color: "#aaa", fontSize: "0.88rem", textAlign: "center" }}>No notifications</p>
-                    ) : (
-                      <>
-                        {followNotifs.map((n) => (
-                          <div key={n.id} style={{ padding: "0.75rem 1rem", borderBottom: "1px solid #f5f5f5", background: n.is_read ? "#fff" : "#f8f8ff", display: "flex", alignItems: "center", gap: "0.65rem" }}>
-                            {n.actor_avatar_url ? (
-                              <img src={n.actor_avatar_url} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                            ) : (
-                              <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#e0e0e0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", flexShrink: 0 }}>
-                                {n.actor_display_name[0]?.toUpperCase()}
-                              </div>
-                            )}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <p style={{ margin: 0, fontSize: "0.88rem" }}>
-                                <Link href={`/profile/${n.actor_username}`} onClick={() => setNotifOpen(false)} style={{ fontWeight: 600, color: "#111", textDecoration: "none" }}>{n.actor_display_name}</Link>
-                                {" started following you"}
-                              </p>
-                              <p style={{ margin: "0.1rem 0 0", fontSize: "0.75rem", color: "#aaa" }}>{timeAgo(n.created_at)}</p>
-                            </div>
-                            {!n.is_read && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "crimson", flexShrink: 0 }} />}
-                          </div>
-                        ))}
-                        {invitations.map((inv) => (
-                          <div key={inv.club_slug} style={{ padding: "0.75rem 1rem", borderBottom: "1px solid #f5f5f5" }}>
-                            <p style={{ margin: "0 0 0.35rem", fontSize: "0.88rem" }}>
-                              <strong>{inv.invited_by_display_name}</strong> invited you to join <strong>{inv.club_name}</strong>
-                            </p>
-                            <div style={{ display: "flex", gap: "0.5rem" }}>
-                              <button onClick={() => handleAcceptInvite(inv.club_slug)} style={{ padding: "0.2rem 0.7rem", fontSize: "0.8rem", cursor: "pointer", color: "#1a6b3a", border: "1px solid #1a6b3a", background: "none", borderRadius: 4 }}>Accept</button>
-                              <button onClick={() => handleDeclineInvite(inv.club_slug)} style={{ padding: "0.2rem 0.7rem", fontSize: "0.8rem", cursor: "pointer", color: "#888", border: "1px solid #ccc", background: "none", borderRadius: 4 }}>Decline</button>
-                              <Link href={`/clubs/${inv.club_slug}`} onClick={() => setNotifOpen(false)} style={{ padding: "0.2rem 0.5rem", fontSize: "0.8rem", color: "#555", textDecoration: "none", alignSelf: "center" }}>View →</Link>
-                            </div>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                  </div>
+                  <button
+                    onClick={() => avatarInputRef.current?.click()}
+                    className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-foreground text-background border-2 border-white flex items-center justify-center hover:bg-foreground/80 transition-colors"
+                    title="Change photo"
+                  >
+                    <Camera className="w-3 h-3" />
+                  </button>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarFileChange}
+                  />
                 </>
               )}
             </div>
-            );
-          })()}
-        </div>
 
-        {/* Stats row */}
-        <div style={{ display: "flex", gap: "1.5rem", marginBottom: "1.25rem", fontSize: "0.9rem" }}>
-          <span><strong>{profile.post_count}</strong> <span style={{ color: "#888" }}>posts</span></span>
-          <span><strong>{profile.club_count}</strong> <span style={{ color: "#888" }}>clubs</span></span>
-          <button
-            onClick={() => openFollowsModal("followers")}
-            style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: "0.9rem" }}
-          >
-            <strong>{profile.follower_count}</strong> <span style={{ color: "#888" }}>followers</span>
-          </button>
-          <button
-            onClick={() => openFollowsModal("following")}
-            style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontSize: "0.9rem" }}
-          >
-            <strong>{profile.following_count}</strong> <span style={{ color: "#888" }}>following</span>
-          </button>
-        </div>
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <h1 className="text-lg font-bold text-foreground leading-tight">{profile.display_name}</h1>
+              <p className="text-sm text-muted-foreground mb-1">@{profile.username}</p>
+              {profile.faculty && !editing && (
+                <p className="text-xs font-medium text-foreground/70 mb-1">
+                  {profile.faculty} · {profile.program ?? FACULTY_NAMES[profile.faculty as Faculty]}
+                </p>
+              )}
+              {profile.bio && !editing && (
+                <p className="text-sm text-foreground/80 leading-snug whitespace-pre-wrap mb-1">{profile.bio}</p>
+              )}
+              <p className="text-[11px] text-muted-foreground">Joined {memberSince(profile.member_since)}</p>
+            </div>
 
-        {/* Action buttons */}
-        {profile.is_own_profile ? (
-          <div style={{ display: "flex", gap: "0.6rem", marginBottom: "1.5rem", alignItems: "center" }}>
-            <button
-              onClick={() => {
-                if (!editing && profile) {
-                  setEditUsername(profile.username);
-                  setEditName(profile.display_name);
-                  setEditBio(profile.bio ?? "");
-                  setEditFaculty((profile.faculty as Faculty) ?? "");
-                  setEditProgram(profile.program ?? "");
-                }
-                setEditing((v) => !v);
-                setSaveError(null);
-              }}
-              style={{ padding: "0.45rem 1.1rem", borderRadius: 6, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontSize: "0.9rem" }}
-            >
-              {editing ? "Cancel" : "Edit profile"}
-            </button>
-            <button
-              onClick={handleLogout}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", fontSize: "0.85rem", padding: 0 }}
-            >
-              Log out
-            </button>
-          </div>
-        ) : (
-          <div style={{ display: "flex", gap: "0.6rem", marginBottom: "1.5rem" }}>
-            <button
-              onClick={handleFollow}
-              disabled={followLoading}
-              style={{
-                padding: "0.45rem 1.1rem", borderRadius: 6, fontSize: "0.9rem", cursor: "pointer",
-                border: profile.is_following ? "1px solid #ccc" : "none",
-                background: profile.is_following ? "#fff" : "#111",
-                color: profile.is_following ? "#111" : "#fff",
-              }}
-            >
-              {profile.is_following ? "Following" : "Follow"}
-            </button>
-            <button
-              onClick={handleMessage}
-              style={{ padding: "0.45rem 1.1rem", borderRadius: 6, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontSize: "0.9rem" }}
-            >
-              Message
-            </button>
-            <button
-              onClick={() => { setReportOpen(true); setReportDone(false); setReportReason(""); }}
-              style={{ padding: "0.45rem 0.85rem", borderRadius: 6, border: "1px solid #f5c6c6", background: "#fff", cursor: "pointer", fontSize: "0.9rem", color: "#c0392b" }}
-            >
-              Report
-            </button>
-          </div>
-        )}
-
-        {/* Inline edit form */}
-        {editing && (
-          <form onSubmit={handleSave} style={{ marginBottom: "1.5rem", padding: "1rem", border: "1px solid #e0e0e0", borderRadius: 8, background: "#fafafa", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-            <div>
-              <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", color: "#555" }}>
-                Username
-                {usernameLocked && usernameNextAllowed && (
-                  <span style={{ marginLeft: "0.5rem", fontSize: "0.78rem", color: "#f0ad4e" }}>
-                    (can change again on {usernameNextAllowed.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })})
-                  </span>
-                )}
-              </label>
-              <input
-                value={editUsername}
-                onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
-                disabled={usernameLocked}
-                maxLength={30}
-                placeholder="letters, numbers, underscores"
-                style={{ width: "100%", boxSizing: "border-box", padding: "0.45rem 0.6rem", fontSize: "0.95rem", border: "1px solid #ccc", borderRadius: 4, fontFamily: "inherit", opacity: usernameLocked ? 0.5 : 1 }}
-              />
-              {!usernameLocked && <span style={{ fontSize: "0.75rem", color: "#bbb" }}>3–30 characters · letters, numbers, underscores only · changes locked for 30 days after saving</span>}
-            </div>
-            <div>
-              <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", color: "#555" }}>Display name</label>
-              <input
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                maxLength={100}
-                style={{ width: "100%", boxSizing: "border-box", padding: "0.45rem 0.6rem", fontSize: "0.95rem", border: "1px solid #ccc", borderRadius: 4, fontFamily: "inherit" }}
-              />
-            </div>
-            <div>
-              <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", color: "#555" }}>Bio</label>
-              <textarea
-                value={editBio}
-                onChange={(e) => setEditBio(e.target.value)}
-                rows={3}
-                maxLength={300}
-                placeholder="Tell people a bit about yourself…"
-                style={{ width: "100%", boxSizing: "border-box", padding: "0.45rem 0.6rem", fontSize: "0.95rem", border: "1px solid #ccc", borderRadius: 4, fontFamily: "inherit", resize: "vertical" }}
-              />
-              <span style={{ fontSize: "0.75rem", color: "#bbb" }}>{editBio.length}/300</span>
-            </div>
-            <div>
-              <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", color: "#555" }}>Faculty</label>
-              <select
-                value={editFaculty}
-                onChange={(e) => { setEditFaculty(e.target.value as Faculty | ""); setEditProgram(""); }}
-                style={{ width: "100%", boxSizing: "border-box", padding: "0.45rem 0.6rem", fontSize: "0.95rem", border: "1px solid #ccc", borderRadius: 4, fontFamily: "inherit" }}
-              >
-                <option value="">Not specified</option>
-                {FACULTIES.map((f) => (
-                  <option key={f} value={f}>{f} — {FACULTY_NAMES[f]}</option>
-                ))}
-              </select>
-            </div>
-            {editFaculty && (
-              <div>
-                <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", color: "#555" }}>Program</label>
-                <select
-                  value={editProgram}
-                  onChange={(e) => setEditProgram(e.target.value)}
-                  style={{ width: "100%", boxSizing: "border-box", padding: "0.45rem 0.6rem", fontSize: "0.95rem", border: "1px solid #ccc", borderRadius: 4, fontFamily: "inherit" }}
+            {/* Notification bell — own profile only */}
+            {profile.is_own_profile && (
+              <div className="relative flex-shrink-0">
+                <button
+                  onClick={() => notifOpen ? setNotifOpen(false) : openBell()}
+                  className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors relative"
                 >
-                  <option value="">Select program</option>
-                  {FACULTY_PROGRAMS[editFaculty].map((p) => (
-                    <option key={p} value={p}>{p}</option>
+                  <Bell className="w-5 h-5" />
+                  {totalUnread > 0 && (
+                    <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-destructive text-white text-[10px] font-bold flex items-center justify-center border border-white">
+                      {totalUnread > 9 ? "9+" : totalUnread}
+                    </span>
+                  )}
+                </button>
+
+                {notifOpen && (
+                  <>
+                    <div onClick={() => setNotifOpen(false)} className="fixed inset-0 z-[199]" />
+                    <div className="absolute right-0 top-[calc(100%+6px)] w-[min(340px,90vw)] bg-white border border-border rounded-xl shadow-xl z-[200] overflow-hidden max-h-[70vh] flex flex-col">
+                      <div className="px-4 py-2.5 font-semibold text-sm border-b border-border sticky top-0 bg-white flex-shrink-0">
+                        Notifications
+                      </div>
+                      <div className="overflow-y-auto flex-1">
+                        {invitations.length === 0 && followNotifs.length === 0 ? (
+                          <p className="text-muted-foreground text-sm text-center py-6">No notifications</p>
+                        ) : (
+                          <>
+                            {followNotifs.map((n) => (
+                              <div
+                                key={n.id}
+                                className={cn(
+                                  "flex items-center gap-2.5 px-4 py-3 border-b border-border/50 text-sm",
+                                  !n.is_read && "bg-primary/5"
+                                )}
+                              >
+                                <MiniAvatar name={n.actor_display_name} url={n.actor_avatar_url} size={34} />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm leading-snug">
+                                    <Link href={`/profile/${n.actor_username}`} onClick={() => setNotifOpen(false)} className="font-semibold text-foreground no-underline hover:underline">
+                                      {n.actor_display_name}
+                                    </Link>
+                                    {" started following you"}
+                                  </p>
+                                  <p className="text-[11px] text-muted-foreground mt-0.5">{timeAgo(n.created_at)}</p>
+                                </div>
+                                {!n.is_read && <span className="w-2 h-2 rounded-full bg-destructive flex-shrink-0" />}
+                              </div>
+                            ))}
+                            {invitations.map((inv) => (
+                              <div key={inv.club_slug} className="px-4 py-3 border-b border-border/50">
+                                <p className="text-sm mb-2">
+                                  <strong>{inv.invited_by_display_name}</strong> invited you to join{" "}
+                                  <strong>{inv.club_name}</strong>
+                                </p>
+                                <div className="flex items-center gap-2">
+                                  <Button size="sm" onClick={() => handleAcceptInvite(inv.club_slug)}>Accept</Button>
+                                  <Button size="sm" variant="outline" onClick={() => handleDeclineInvite(inv.club_slug)}>Decline</Button>
+                                  <Link href={`/clubs/${inv.club_slug}`} onClick={() => setNotifOpen(false)} className="text-xs text-muted-foreground hover:text-foreground no-underline ml-1">
+                                    View →
+                                  </Link>
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Stats row */}
+          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border/60 text-sm">
+            <span><strong className="text-foreground">{profile.post_count}</strong> <span className="text-muted-foreground">posts</span></span>
+            <span><strong className="text-foreground">{profile.club_count}</strong> <span className="text-muted-foreground">clubs</span></span>
+            <button onClick={() => openFollowsModal("followers")} className="bg-transparent border-0 p-0 cursor-pointer text-sm">
+              <strong className="text-foreground">{profile.follower_count}</strong> <span className="text-muted-foreground">followers</span>
+            </button>
+            <button onClick={() => openFollowsModal("following")} className="bg-transparent border-0 p-0 cursor-pointer text-sm">
+              <strong className="text-foreground">{profile.following_count}</strong> <span className="text-muted-foreground">following</span>
+            </button>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 mt-3">
+            {profile.is_own_profile ? (
+              <>
+                <Button
+                  size="sm"
+                  variant={editing ? "outline" : "default"}
+                  onClick={() => {
+                    if (!editing && profile) {
+                      setEditUsername(profile.username);
+                      setEditName(profile.display_name);
+                      setEditBio(profile.bio ?? "");
+                      setEditFaculty((profile.faculty as Faculty) ?? "");
+                      setEditProgram(profile.program ?? "");
+                    }
+                    setEditing((v) => !v);
+                    setSaveError(null);
+                  }}
+                  className="flex items-center gap-1.5"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  {editing ? "Cancel" : "Edit profile"}
+                </Button>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors ml-1"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Log out
+                </button>
+              </>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant={profile.is_following ? "outline" : "default"}
+                  onClick={handleFollow}
+                  disabled={followLoading}
+                >
+                  {profile.is_following ? "Following" : "Follow"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleMessage}>
+                  Message
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => { setReportOpen(true); setReportDone(false); setReportReason(""); }}
+                  className="text-destructive border-destructive/30 hover:bg-destructive/5 ml-auto"
+                >
+                  Report
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Edit form */}
+        {editing && (
+          <div className="bg-white border border-border rounded-xl shadow-sm p-4 mb-4">
+            <form onSubmit={handleSave} className="flex flex-col gap-3">
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">
+                  Username
+                  {usernameLocked && usernameNextAllowed && (
+                    <span className="ml-2 text-[11px] text-amber-500 font-normal">
+                      (can change again on {usernameNextAllowed.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })})
+                    </span>
+                  )}
+                </label>
+                <input
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                  disabled={usernameLocked}
+                  maxLength={30}
+                  placeholder="letters, numbers, underscores"
+                  className="w-full h-9 px-3 text-sm border border-input rounded-lg bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                />
+                {!usernameLocked && (
+                  <p className="text-[11px] text-muted-foreground mt-1">3–30 characters · letters, numbers, underscores only · changes locked for 30 days</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Display name</label>
+                <input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  maxLength={100}
+                  className="w-full h-9 px-3 text-sm border border-input rounded-lg bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Bio</label>
+                <textarea
+                  value={editBio}
+                  onChange={(e) => setEditBio(e.target.value)}
+                  rows={3}
+                  maxLength={300}
+                  placeholder="Tell people a bit about yourself…"
+                  className="w-full px-3 py-2 text-sm border border-input rounded-lg bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                />
+                <p className="text-[11px] text-muted-foreground text-right">{editBio.length}/300</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1">Faculty</label>
+                <select
+                  value={editFaculty}
+                  onChange={(e) => { setEditFaculty(e.target.value as Faculty | ""); setEditProgram(""); }}
+                  className="w-full h-9 px-3 text-sm border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Not specified</option>
+                  {FACULTIES.map((f) => (
+                    <option key={f} value={f}>{f} — {FACULTY_NAMES[f]}</option>
                   ))}
                 </select>
               </div>
-            )}
-            {saveError && <p style={{ margin: 0, color: "crimson", fontSize: "0.88rem" }}>{saveError}</p>}
-            <button
-              type="submit"
-              disabled={saving || !editName.trim() || editUsername.trim().length < 3}
-              style={{ alignSelf: "flex-start", padding: "0.45rem 1.1rem", borderRadius: 6, border: "none", background: "#111", color: "#fff", cursor: "pointer", fontSize: "0.9rem" }}
-            >
-              {saving ? "Saving…" : "Save"}
-            </button>
-          </form>
+
+              {editFaculty && (
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1">Program</label>
+                  <select
+                    value={editProgram}
+                    onChange={(e) => setEditProgram(e.target.value)}
+                    className="w-full h-9 px-3 text-sm border border-input rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">Select program</option>
+                    {FACULTY_PROGRAMS[editFaculty].map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+
+              <Button
+                type="submit"
+                size="sm"
+                disabled={saving || !editName.trim() || editUsername.trim().length < 3}
+                className="self-start flex items-center gap-1.5"
+              >
+                <Check className="w-3.5 h-3.5" />
+                {saving ? "Saving…" : "Save changes"}
+              </Button>
+            </form>
+          </div>
         )}
 
         {/* Clubs */}
         {clubs.length > 0 && (
-          <>
-            <h3 style={{ margin: "0 0 0.6rem", color: "#444", fontSize: "1rem" }}>Clubs</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginBottom: "1.5rem" }}>
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Clubs</p>
+            <div className="flex flex-col gap-1.5">
               {clubs.map((club) => (
                 <Link
                   key={club.id}
                   href={`/clubs/${club.slug}`}
-                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.6rem 0.85rem", border: "1px solid #e0e0e0", borderRadius: 8, background: "#fff", textDecoration: "none", color: "inherit" }}
+                  className="flex items-center justify-between px-3.5 py-2.5 bg-white border border-border rounded-xl hover:bg-muted/40 transition-colors no-underline"
                 >
-                  <div>
-                    <span style={{ fontWeight: 500, fontSize: "0.95rem" }}>{club.name}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-medium text-sm text-foreground truncate">{club.name}</span>
                     {club.is_private && (
-                      <span style={{ marginLeft: "0.4rem", fontSize: "0.72rem", color: "#888", background: "#f0f0f0", padding: "0.1rem 0.35rem", borderRadius: 4 }}>Private</span>
+                      <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground flex-shrink-0">
+                        <Lock className="w-2.5 h-2.5" />
+                        Private
+                      </span>
                     )}
                   </div>
-                  <span style={{ fontSize: "0.78rem", color: "#aaa", textTransform: "capitalize" }}>{club.role}</span>
+                  <span className={cn(
+                    "text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 capitalize",
+                    club.role === "owner" ? "bg-purple-100 text-purple-700"
+                      : club.role === "moderator" ? "bg-green-100 text-green-700"
+                      : "bg-muted text-muted-foreground"
+                  )}>
+                    {club.role}
+                  </span>
                 </Link>
               ))}
             </div>
-          </>
+          </div>
         )}
 
         {/* Posts */}
-        <h3 style={{ margin: "0 0 0.75rem", color: "#444", fontSize: "1rem" }}>Posts</h3>
-        {posts.length === 0 && <p style={{ color: "#aaa" }}>No posts yet.</p>}
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Posts</p>
+        {posts.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-8">No posts yet.</p>
+        )}
+        <div className="flex flex-col gap-3">
           {posts.map((post) => (
             <Link
               key={post.id}
               href={`/feed/${post.id}`}
-              style={{ display: "block", border: "1px solid #e0e0e0", borderRadius: 8, padding: "0.85rem", background: "#fff", textDecoration: "none", color: "inherit" }}
+              className="block bg-white border border-border rounded-xl px-4 py-3 hover:bg-muted/20 transition-colors no-underline"
             >
               {post.faculty_tag && (
-                <span style={{ fontSize: "0.72rem", fontWeight: "bold", padding: "0.15rem 0.5rem", borderRadius: 12, background: "#f0f0f0", color: "#444", marginBottom: "0.5rem", display: "inline-block" }}>
+                <span className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground mb-2">
                   {post.faculty_tag}
                 </span>
               )}
               <ImageGrid urls={post.image_urls ?? []} />
               {post.content && (
-                <p style={{ margin: "0 0 0.6rem", whiteSpace: "pre-wrap", lineHeight: 1.5, fontSize: "0.95rem" }}>{post.content}</p>
+                <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap mb-2">{post.content}</p>
               )}
-              <div style={{ display: "flex", gap: "1rem", alignItems: "center", fontSize: "0.85rem", color: "#888" }}>
-                <span>▲ {post.upvotes}</span>
-                <span>▼ {post.downvotes}</span>
-                <span>💬 {post.reply_count}</span>
-                <span style={{ marginLeft: "auto" }}>{timeAgo(post.created_at)}</span>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-0.5"><ChevronUp className="w-3.5 h-3.5" />{post.upvotes}</span>
+                <span className="flex items-center gap-0.5"><ChevronDown className="w-3.5 h-3.5" />{post.downvotes}</span>
+                <span className="flex items-center gap-0.5"><MessageCircle className="w-3.5 h-3.5" />{post.reply_count}</span>
+                <span className="ml-auto">{timeAgo(post.created_at)}</span>
               </div>
             </Link>
           ))}
         </div>
       </main>
 
-      {/* ── Report modal ───────────────────────────────────────────────────── */}
+      {/* ── Report modal ──────────────────────────────────────────────────────── */}
       {reportOpen && (
         <>
-          <div onClick={() => setReportOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 300 }} />
-          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 301, background: "#fff", borderRadius: 12, padding: "1.5rem", width: "min(420px, 92vw)", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
-            <h3 style={{ margin: "0 0 0.35rem", fontSize: "1.05rem" }}>Report @{profile?.username}</h3>
-            <p style={{ margin: "0 0 1rem", fontSize: "0.85rem", color: "#666" }}>Describe the issue so it can be reviewed. Minimum 10 characters.</p>
+          <div onClick={() => setReportOpen(false)} className="fixed inset-0 bg-black/45 backdrop-blur-sm z-[300]" />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(420px,92vw)] bg-white rounded-2xl shadow-2xl z-[301] p-6">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-bold text-base text-foreground">Report @{profile?.username}</h3>
+              <button onClick={() => setReportOpen(false)} className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">Describe the issue. Minimum 10 characters.</p>
             {reportDone ? (
-              <p style={{ color: "#1a6b3a", fontWeight: 600, textAlign: "center", padding: "1rem 0" }}>Report submitted. Thank you.</p>
+              <p className="text-green-600 font-semibold text-center py-4">Report submitted. Thank you.</p>
             ) : (
-              <form onSubmit={handleReport} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <form onSubmit={handleReport} className="flex flex-col gap-3">
                 <textarea
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
                   placeholder="e.g. Harassment, spam, impersonation…"
                   rows={4}
                   maxLength={500}
-                  style={{ width: "100%", boxSizing: "border-box", padding: "0.6rem", fontSize: "0.9rem", border: "1px solid #ccc", borderRadius: 6, fontFamily: "inherit", resize: "vertical" }}
+                  className="w-full px-3 py-2 text-sm border border-input rounded-lg bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
                 />
-                <div style={{ display: "flex", gap: "0.6rem", justifyContent: "flex-end" }}>
-                  <button type="button" onClick={() => setReportOpen(false)} style={{ padding: "0.45rem 1rem", borderRadius: 6, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontSize: "0.88rem" }}>
-                    Cancel
-                  </button>
-                  <button
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setReportOpen(false)}>Cancel</Button>
+                  <Button
                     type="submit"
+                    size="sm"
+                    variant="destructive"
                     disabled={reportReason.trim().length < 10 || reportSubmitting}
-                    style={{ padding: "0.45rem 1.1rem", borderRadius: 6, border: "none", background: reportReason.trim().length < 10 ? "#ccc" : "#c0392b", color: "#fff", cursor: reportReason.trim().length < 10 ? "default" : "pointer", fontSize: "0.88rem" }}
                   >
                     {reportSubmitting ? "Submitting…" : "Submit report"}
-                  </button>
+                  </Button>
                 </div>
               </form>
             )}
@@ -790,29 +784,27 @@ export default function ProfilePage() {
         </>
       )}
 
-      {/* ── Crop modal ─────────────────────────────────────────────────────── */}
+      {/* ── Crop modal (full-screen) ───────────────────────────────────────── */}
       {cropSrc && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 300, display: "flex", flexDirection: "column", background: "#000" }}>
-          {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1rem", background: "#111", flexShrink: 0 }}>
+        <div className="fixed inset-0 z-[300] flex flex-col bg-black">
+          <div className="flex items-center justify-between px-4 py-3 bg-black/90 flex-shrink-0">
             <button
               onClick={() => setCropSrc(null)}
-              style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: "0.95rem", padding: "0.25rem 0.5rem" }}
+              className="text-white/80 hover:text-white text-sm px-2 py-1 rounded transition-colors"
             >
               Cancel
             </button>
-            <span style={{ color: "#fff", fontWeight: 600, fontSize: "0.95rem" }}>Crop photo</span>
+            <span className="text-white font-semibold text-sm">Crop photo</span>
             <button
               onClick={handleCropSave}
               disabled={cropSaving || !croppedAreaPixels}
-              style={{ background: "#fff", border: "none", color: "#111", fontWeight: 600, cursor: "pointer", fontSize: "0.92rem", padding: "0.3rem 0.85rem", borderRadius: 6, opacity: cropSaving ? 0.6 : 1 }}
+              className="bg-white text-black font-semibold text-sm px-3 py-1 rounded-lg disabled:opacity-50 hover:bg-white/90 transition-colors"
             >
               {cropSaving ? "Saving…" : "Save"}
             </button>
           </div>
 
-          {/* Crop area — takes all remaining vertical space */}
-          <div style={{ position: "relative", flex: 1 }}>
+          <div className="relative flex-1">
             <Cropper
               image={cropSrc}
               crop={crop}
@@ -822,14 +814,13 @@ export default function ProfilePage() {
               showGrid={false}
               onCropChange={setCrop}
               onZoomChange={setZoom}
-              onCropComplete={(_croppedArea: Area, pixels: Area) => setCroppedAreaPixels(pixels)}
+              onCropComplete={(_: Area, pixels: Area) => setCroppedAreaPixels(pixels)}
             />
           </div>
 
-          {/* Zoom slider + hint */}
-          <div style={{ background: "#111", padding: "0.75rem 1.5rem 1.25rem", flexShrink: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", maxWidth: 400, margin: "0 auto" }}>
-              <span style={{ color: "#888", fontSize: "0.8rem", userSelect: "none" }}>−</span>
+          <div className="bg-black/90 px-6 pt-3 pb-6 flex-shrink-0">
+            <div className="flex items-center gap-3 max-w-sm mx-auto">
+              <span className="text-white/50 text-sm select-none">−</span>
               <input
                 type="range"
                 min={1}
@@ -837,79 +828,68 @@ export default function ProfilePage() {
                 step={0.01}
                 value={zoom}
                 onChange={(e) => setZoom(Number(e.target.value))}
-                style={{ flex: 1, accentColor: "#fff" }}
+                className="flex-1 accent-white"
               />
-              <span style={{ color: "#888", fontSize: "0.8rem", userSelect: "none" }}>+</span>
+              <span className="text-white/50 text-sm select-none">+</span>
             </div>
-            {cropError && (
-              <p style={{ color: "#ff6b6b", textAlign: "center", margin: "0.5rem 0 0", fontSize: "0.85rem" }}>{cropError}</p>
-            )}
-            <p style={{ color: "#555", textAlign: "center", margin: "0.4rem 0 0", fontSize: "0.78rem" }}>
-              Drag to reposition · pinch or use slider to zoom
-            </p>
+            {cropError && <p className="text-red-400 text-center text-sm mt-2">{cropError}</p>}
+            <p className="text-white/30 text-center text-xs mt-2">Drag to reposition · pinch or slide to zoom</p>
           </div>
         </div>
       )}
 
-      {/* ── Followers / Following overlay sheet ───────────────────────────── */}
+      {/* ── Followers / Following modal ────────────────────────────────────── */}
       {followsModal && (
         <>
-          <div
-            onClick={() => setFollowsModal(null)}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 200 }}
-          />
-          <div style={{
-            position: "fixed", top: "50%", left: "50%",
-            transform: "translate(-50%, -50%)",
-            background: "#fff", borderRadius: 12,
-            zIndex: 201, maxHeight: "60vh", width: "min(340px, 90vw)",
-            display: "flex", flexDirection: "column",
-            boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-          }}>
-            {/* Header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0.85rem 1rem 0.6rem", borderBottom: "1px solid #f0f0f0", flexShrink: 0 }}>
-              <span style={{ fontWeight: 600, fontSize: "1rem", textTransform: "capitalize" }}>
+          <div onClick={() => setFollowsModal(null)} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200]" />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(360px,92vw)] bg-white rounded-2xl shadow-2xl z-[201] flex flex-col max-h-[65vh]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
+              <span className="font-semibold text-sm capitalize">
                 {followsModal} · {followsModal === "followers" ? profile.follower_count : profile.following_count}
               </span>
-              <button onClick={() => setFollowsModal(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.4rem", color: "#999", lineHeight: 1, padding: "0 0.2rem" }}>×</button>
+              <button onClick={() => setFollowsModal(null)} className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors">
+                <X className="w-4 h-4" />
+              </button>
             </div>
-
-            {/* Scrollable list */}
-            <div style={{ overflowY: "auto", flex: 1 }}>
-              {followsLoading && <p style={{ color: "#888", textAlign: "center", padding: "1.5rem" }}>Loading…</p>}
+            <div className="overflow-y-auto flex-1">
+              {followsLoading && <p className="text-muted-foreground text-sm text-center py-6">Loading…</p>}
               {!followsLoading && followsList.length === 0 && (
-                <p style={{ color: "#aaa", textAlign: "center", padding: "1.5rem" }}>No {followsModal} yet.</p>
+                <p className="text-muted-foreground text-sm text-center py-6">No {followsModal} yet.</p>
               )}
               {followsList.map((u) => (
-                <div key={u.username} style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.65rem 1rem", borderBottom: "1px solid #f5f5f5" }}>
+                <div key={u.username} className="flex items-center gap-3 px-4 py-2.5 border-b border-border/50">
                   <Link
                     href={`/profile/${u.username}`}
                     onClick={() => setFollowsModal(null)}
-                    style={{ display: "flex", alignItems: "center", gap: "0.75rem", textDecoration: "none", color: "inherit", flex: 1, minWidth: 0 }}
+                    className="flex items-center gap-2.5 flex-1 min-w-0 no-underline"
                   >
-                    <Avatar name={u.display_name} avatarUrl={u.avatar_url} size={40} />
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 500, fontSize: "0.93rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.display_name}</div>
-                      <div style={{ fontSize: "0.8rem", color: "#888" }}>@{u.username}</div>
+                    <MiniAvatar name={u.display_name} url={u.avatar_url} size={38} />
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm text-foreground truncate">{u.display_name}</p>
+                      <p className="text-[11px] text-muted-foreground">@{u.username}</p>
                     </div>
                   </Link>
                   {profile.is_own_profile && (
                     followsModal === "following" ? (
-                      <button
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={() => handleUnfollow(u.username)}
                         disabled={actioningUser === u.username}
-                        style={{ flexShrink: 0, padding: "0.3rem 0.8rem", borderRadius: 6, border: "1px solid #ddd", background: "#fff", cursor: "pointer", fontSize: "0.8rem", color: "#333", opacity: actioningUser === u.username ? 0.5 : 1 }}
+                        className="flex-shrink-0"
                       >
                         {actioningUser === u.username ? "…" : "Unfollow"}
-                      </button>
+                      </Button>
                     ) : (
-                      <button
+                      <Button
+                        size="sm"
+                        variant="outline"
                         onClick={() => handleRemoveFollower(u.username)}
                         disabled={actioningUser === u.username}
-                        style={{ flexShrink: 0, padding: "0.3rem 0.8rem", borderRadius: 6, border: "1px solid #ddd", background: "#fff", cursor: "pointer", fontSize: "0.8rem", color: "#333", opacity: actioningUser === u.username ? 0.5 : 1 }}
+                        className="flex-shrink-0"
                       >
                         {actioningUser === u.username ? "…" : "Remove"}
-                      </button>
+                      </Button>
                     )
                   )}
                 </div>

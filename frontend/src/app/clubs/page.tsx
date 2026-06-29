@@ -45,7 +45,6 @@ export default function ClubsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [joiningSlug, setJoiningSlug] = useState<string | null>(null);
-  const [leavingSlug, setLeavingSlug] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -111,24 +110,6 @@ export default function ClubsPage() {
       alert(err instanceof Error ? err.message : "Could not join club.");
     } finally {
       setJoiningSlug(null);
-    }
-  }
-
-  async function handleLeave(slug: string) {
-    setLeavingSlug(slug);
-    try {
-      await apiFetch(`/api/clubs/${slug}/leave`, { method: "DELETE" });
-      setClubs((prev) =>
-        prev.map((c) =>
-          c.slug === slug
-            ? { ...c, is_member: false, role: null, member_count: c.member_count - 1 }
-            : c
-        )
-      );
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Could not leave club.");
-    } finally {
-      setLeavingSlug(null);
     }
   }
 
@@ -247,17 +228,6 @@ export default function ClubsPage() {
                 )}
                 {club.has_pending_request && (
                   <span className="text-xs text-muted-foreground">Request pending…</span>
-                )}
-                {club.is_member && club.role !== "owner" && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleLeave(club.slug)}
-                    disabled={leavingSlug === club.slug}
-                    className="text-muted-foreground hover:text-destructive hover:bg-destructive/5"
-                  >
-                    {leavingSlug === club.slug ? "Leaving…" : "Leave"}
-                  </Button>
                 )}
                 {club.is_member && club.role === "owner" && (
                   <span className="text-xs font-semibold text-purple-600">You own this club</span>

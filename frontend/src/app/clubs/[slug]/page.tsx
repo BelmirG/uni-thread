@@ -391,7 +391,7 @@ export default function ClubDetailPage() {
         </div>
 
         {/* Club header card */}
-        <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden mb-4">
+        <div className="bg-white border border-border rounded-xl shadow-sm mb-4">
           <div className="px-4 pt-4 pb-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
@@ -494,7 +494,7 @@ export default function ClubDetailPage() {
                         {club.is_member && (
                           <button
                             onClick={() => { setMenuOpen(false); handleLeave(); }}
-                            className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted border-t border-border/60 transition-colors"
+                            className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-destructive hover:bg-destructive/5 border-t border-border/60 transition-colors"
                           >
                             Leave club
                           </button>
@@ -799,6 +799,12 @@ export default function ClubDetailPage() {
                       autoFocus
                       value={content}
                       onChange={(e) => setContent(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          (e.currentTarget.closest("form") as HTMLFormElement)?.requestSubmit();
+                        }
+                      }}
                       placeholder={`Post in ${club.name}…`}
                       rows={4}
                       className="w-full resize-none text-sm placeholder:text-muted-foreground border-0 outline-none focus:ring-0 bg-transparent min-h-[90px]"

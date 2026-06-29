@@ -42,7 +42,7 @@ export default function UserSearchInput({ value, onChange, onSelect, placeholder
       <input
         value={value}
         onChange={(e) => { onChange(e.target.value); setOpen(true); }}
-        onBlur={() => setTimeout(() => { setOpen(false); onChange(""); setResults([]); }, 150)}
+        onBlur={() => setTimeout(() => { setOpen(false); setResults([]); }, 150)}
         onFocus={() => results.length > 0 && setOpen(true)}
         placeholder={placeholder ?? "Search by name or username"}
         disabled={disabled}
