@@ -20,6 +20,7 @@ from app.models.club_member import ClubMember
 from app.models.follow import Follow
 from app.models.notification import Notification
 from app.models.post import Post
+from app.models.report import Report
 from app.models.user import User
 from app.routers.posts import _build_post_select, _row_to_response, _user_votes
 from app.schemas.post import PostResponse
@@ -105,6 +106,7 @@ async def search_users(
         {
             "username": u.username,
             "display_name": u.display_name,
+            "avatar_url": u.avatar_url,
             "faculty": u.faculty,
             "program": u.program,
             "is_following": u.id in following_ids,
@@ -372,3 +374,26 @@ async def unfollow_user(
     if existing:
         await db.delete(existing)
         await db.commit()
+
+
+class ReportRequest(BaseModel):
+    reason: str = Field(min_length=10, max_length=500)
+
+
+@router.post("/{username}/report", status_code=status.HTTP_201_CREATED)
+async def report_user(
+    username: str,
+    body: ReportRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    target = await _get_active_user(username, db)
+    if target.id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot report yourself.")
+    db.add(Report(
+        reporter_id=current_user.id,
+        reported_user_id=target.id,
+        reason=body.reason.strip(),
+    ))
+    await db.commit()
+    return {"ok": True}

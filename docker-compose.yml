@@ -33,6 +33,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://ius:ius_password@postgres:5432/iusconnect
       REDIS_URL: redis://redis:6379
       SECRET_KEY: dev-secret-key-change-before-production
+      ADMIN_KEY: change-this-before-deploying
     volumes:
       - ./backend:/app
       - ./uploads:/app/uploads

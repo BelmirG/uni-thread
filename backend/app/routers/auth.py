@@ -109,7 +109,10 @@ async def login(
         )
 
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="This account has been suspended.")
+        detail = "Your account has been banned."
+        if user.ban_reason:
+            detail = f"Your account has been banned: {user.ban_reason}"
+        raise HTTPException(status_code=403, detail=detail)
 
     token = create_access_token(str(user.id))
 

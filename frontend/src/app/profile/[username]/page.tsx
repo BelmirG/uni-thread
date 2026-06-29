@@ -176,6 +176,12 @@ export default function ProfilePage() {
   const [cropSaving, setCropSaving] = useState(false);
   const [cropError, setCropError] = useState<string | null>(null);
 
+  // Report
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [reportDone, setReportDone] = useState(false);
+
   // Notifications
   const [notifOpen, setNotifOpen] = useState(false);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -388,6 +394,24 @@ export default function ProfilePage() {
     finally { setFollowLoading(false); }
   }
 
+  async function handleReport(e: React.FormEvent) {
+    e.preventDefault();
+    if (!profile || reportSubmitting) return;
+    setReportSubmitting(true);
+    try {
+      await apiFetch(`/api/users/${profile.username}/report`, {
+        method: "POST",
+        body: JSON.stringify({ reason: reportReason }),
+      });
+      setReportDone(true);
+      setTimeout(() => { setReportOpen(false); setReportDone(false); setReportReason(""); }, 2000);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Could not submit report.");
+    } finally {
+      setReportSubmitting(false);
+    }
+  }
+
   if (loading) return <p style={{ padding: "2rem", color: "#888" }}>Loading…</p>;
   if (!profile) return null;
 
@@ -591,6 +615,12 @@ export default function ProfilePage() {
             >
               Message
             </button>
+            <button
+              onClick={() => { setReportOpen(true); setReportDone(false); setReportReason(""); }}
+              style={{ padding: "0.45rem 0.85rem", borderRadius: 6, border: "1px solid #f5c6c6", background: "#fff", cursor: "pointer", fontSize: "0.9rem", color: "#c0392b" }}
+            >
+              Report
+            </button>
           </div>
         )}
 
@@ -729,6 +759,43 @@ export default function ProfilePage() {
           ))}
         </div>
       </main>
+
+      {/* ── Report modal ───────────────────────────────────────────────────── */}
+      {reportOpen && (
+        <>
+          <div onClick={() => setReportOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 300 }} />
+          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 301, background: "#fff", borderRadius: 12, padding: "1.5rem", width: "min(420px, 92vw)", boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+            <h3 style={{ margin: "0 0 0.35rem", fontSize: "1.05rem" }}>Report @{profile?.username}</h3>
+            <p style={{ margin: "0 0 1rem", fontSize: "0.85rem", color: "#666" }}>Describe the issue so it can be reviewed. Minimum 10 characters.</p>
+            {reportDone ? (
+              <p style={{ color: "#1a6b3a", fontWeight: 600, textAlign: "center", padding: "1rem 0" }}>Report submitted. Thank you.</p>
+            ) : (
+              <form onSubmit={handleReport} style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                <textarea
+                  value={reportReason}
+                  onChange={(e) => setReportReason(e.target.value)}
+                  placeholder="e.g. Harassment, spam, impersonation…"
+                  rows={4}
+                  maxLength={500}
+                  style={{ width: "100%", boxSizing: "border-box", padding: "0.6rem", fontSize: "0.9rem", border: "1px solid #ccc", borderRadius: 6, fontFamily: "inherit", resize: "vertical" }}
+                />
+                <div style={{ display: "flex", gap: "0.6rem", justifyContent: "flex-end" }}>
+                  <button type="button" onClick={() => setReportOpen(false)} style={{ padding: "0.45rem 1rem", borderRadius: 6, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontSize: "0.88rem" }}>
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={reportReason.trim().length < 10 || reportSubmitting}
+                    style={{ padding: "0.45rem 1.1rem", borderRadius: 6, border: "none", background: reportReason.trim().length < 10 ? "#ccc" : "#c0392b", color: "#fff", cursor: reportReason.trim().length < 10 ? "default" : "pointer", fontSize: "0.88rem" }}
+                  >
+                    {reportSubmitting ? "Submitting…" : "Submit report"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </>
+      )}
 
       {/* ── Crop modal ─────────────────────────────────────────────────────── */}
       {cropSrc && (

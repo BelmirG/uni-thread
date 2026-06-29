@@ -54,6 +54,7 @@ interface VoteResponse {
 interface SearchUser {
   username: string;
   display_name: string;
+  avatar_url: string | null;
   faculty: string | null;
   program: string | null;
   is_following: boolean;
@@ -139,9 +140,13 @@ function PeopleSearch({ onFollowChange }: { onFollowChange?: () => void }) {
               style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.65rem 0.85rem", border: "1px solid #e0e0e0", borderRadius: 8, background: "#fff" }}
             >
               {/* Avatar */}
-              <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#111", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", fontWeight: "bold", flexShrink: 0 }}>
-                {u.display_name[0].toUpperCase()}
-              </div>
+              {u.avatar_url ? (
+                <img src={u.avatar_url} alt="" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#111", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", fontWeight: "bold", flexShrink: 0 }}>
+                  {u.display_name[0].toUpperCase()}
+                </div>
+              )}
               {/* Info — navigates to profile on click */}
               <Link href={`/profile/${u.username}`} style={{ flex: 1, textDecoration: "none", color: "inherit", minWidth: 0 }}>
                 <div style={{ fontWeight: 500, fontSize: "0.95rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.display_name}</div>
