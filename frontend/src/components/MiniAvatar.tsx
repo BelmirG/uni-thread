@@ -1,43 +1,37 @@
 "use client";
 
+import { cn } from "@/lib/utils";
+
 export default function MiniAvatar({
   name,
   url,
   size = 32,
+  className,
 }: {
   name: string;
   url: string | null;
   size?: number;
+  className?: string;
 }) {
+  const dim = `${size}px`;
+
   if (url)
     return (
       <img
         src={url}
         alt=""
-        style={{
-          width: size,
-          height: size,
-          borderRadius: "50%",
-          objectFit: "cover",
-          flexShrink: 0,
-        }}
+        className={cn("rounded-full object-cover flex-shrink-0", className)}
+        style={{ width: dim, height: dim }}
       />
     );
+
   return (
     <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        background: "#111",
-        color: "#fff",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: size * 0.35,
-        fontWeight: "bold",
-        flexShrink: 0,
-      }}
+      className={cn(
+        "rounded-full bg-foreground text-background flex items-center justify-center font-bold flex-shrink-0",
+        className
+      )}
+      style={{ width: dim, height: dim, fontSize: size * 0.38 }}
     >
       {(name || "?")[0].toUpperCase()}
     </div>

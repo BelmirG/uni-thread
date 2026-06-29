@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 const HIDDEN_ON = ["/", "/login", "/register", "/verify-email"];
 
@@ -80,29 +81,8 @@ export default function NavBar() {
   if (HIDDEN_ON.includes(pathname)) return null;
 
   return (
-    <nav
-      style={{
-        position: "fixed",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: 60,
-        background: "#fff",
-        borderTop: "1px solid #e8e8e8",
-        display: "flex",
-        alignItems: "stretch",
-        zIndex: 1000,
-      }}
-    >
-      <div
-        style={{
-          maxWidth: 640,
-          width: "100%",
-          margin: "0 auto",
-          display: "flex",
-          alignItems: "stretch",
-        }}
-      >
+    <nav className="fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-sm border-t border-border z-50">
+      <div className="max-w-xl mx-auto h-full flex">
         {NAV.map((item) => {
           const href = item.href === "/profile" ? profileHref : item.href;
           const active =
@@ -110,28 +90,20 @@ export default function NavBar() {
               ? pathname.startsWith("/profile")
               : pathname.startsWith(item.href);
           const showDot = item.href === "/messages" && unreadMessages > 0;
+
           return (
             <Link
               key={item.href}
               href={href}
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 2,
-                textDecoration: "none",
-                color: active ? "#111" : "#aaa",
-                fontSize: "0.65rem",
-                fontWeight: active ? "600" : "normal",
-                transition: "color 0.15s",
-              }}
+              className={cn(
+                "flex-1 flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors",
+                active ? "text-primary" : "text-muted-foreground hover:text-foreground"
+              )}
             >
-              <div style={{ position: "relative" }}>
+              <div className="relative">
                 {item.icon}
                 {showDot && (
-                  <span style={{ position: "absolute", top: -2, right: -2, width: 8, height: 8, borderRadius: "50%", background: "crimson", border: "1.5px solid #fff" }} />
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-destructive border-2 border-white" />
                 )}
               </div>
               {item.label}

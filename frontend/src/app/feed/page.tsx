@@ -1,8 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  ChevronUp,
+  ChevronDown,
+  MessageCircle,
+  Share2,
+  Trash2,
+  X,
+  PenLine,
+} from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import UserSearchInput from "@/components/UserSearchInput";
 import { ImageUploader } from "@/components/ImageUploader";
@@ -12,6 +21,8 @@ import PollComposer, { PollDraft } from "@/components/PollComposer";
 import PollDisplay from "@/components/PollDisplay";
 import { FACULTIES, FACULTY_NAMES, Faculty } from "@/lib/faculties";
 import { timeAgo } from "@/lib/timeAgo";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type FeedTab = "discover" | "friends";
 
@@ -64,18 +75,6 @@ interface SearchUser {
   is_following: boolean;
 }
 
-function FacultyBadge({ tag }: { tag: string }) {
-  return (
-    <span style={{
-      fontSize: "0.72rem", fontWeight: "bold", letterSpacing: "0.03em",
-      padding: "0.15rem 0.5rem", borderRadius: 12,
-      background: "#f0f0f0", color: "#444", flexShrink: 0,
-    }}>
-      {tag}
-    </span>
-  );
-}
-
 // ── People search used in Friends tab ────────────────────────────────────────
 
 function PeopleSearch({ onFollowChange }: { onFollowChange?: () => void }) {
@@ -92,7 +91,6 @@ function PeopleSearch({ onFollowChange }: { onFollowChange?: () => void }) {
       try {
         const data = await apiFetch<SearchUser[]>(`/api/users/search?q=${encodeURIComponent(query)}`);
         setResults(data);
-        // seed following state from the response
         const map: Record<string, boolean> = {};
         data.forEach((u) => { map[u.username] = u.is_following; });
         setFollowing(map);
@@ -116,51 +114,40 @@ function PeopleSearch({ onFollowChange }: { onFollowChange?: () => void }) {
   }
 
   return (
-    <div style={{ marginBottom: "1.5rem" }}>
+    <div className="mb-5">
+      <p className="text-xs font-medium text-muted-foreground mb-2">Find people to follow</p>
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onBlur={() => setTimeout(() => { setQuery(""); setResults([]); }, 150)}
         placeholder="Search by name or username…"
-        style={{
-          width: "100%", boxSizing: "border-box",
-          padding: "0.55rem 0.75rem", fontSize: "0.95rem",
-          border: "1px solid #ccc", borderRadius: 6, fontFamily: "inherit",
-        }}
+        className="w-full h-10 px-3 text-sm rounded-xl border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
       />
       {results.length > 0 && (
-        <div onMouseDown={(e) => e.preventDefault()} style={{ marginTop: "0.5rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+        <div onMouseDown={(e) => e.preventDefault()} className="mt-1.5 space-y-1.5">
           {results.map((u) => (
-            <div
-              key={u.username}
-              style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.65rem 0.85rem", border: "1px solid #e0e0e0", borderRadius: 8, background: "#fff" }}
-            >
-              {/* Avatar */}
-              {u.avatar_url ? (
-                <img src={u.avatar_url} alt="" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-              ) : (
-                <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#111", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", fontWeight: "bold", flexShrink: 0 }}>
-                  {u.display_name[0].toUpperCase()}
-                </div>
-              )}
-              {/* Info — navigates to profile on click */}
-              <Link href={`/profile/${u.username}`} style={{ flex: 1, textDecoration: "none", color: "inherit", minWidth: 0 }}>
-                <div style={{ fontWeight: 500, fontSize: "0.95rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.display_name}</div>
-                <div style={{ fontSize: "0.8rem", color: "#888" }}>
+            <div key={u.username} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-white">
+              <MiniAvatar name={u.display_name} url={u.avatar_url} size={38} />
+              <Link href={`/profile/${u.username}`} className="flex-1 min-w-0 no-underline text-foreground">
+                <div className="font-medium text-sm truncate">{u.display_name}</div>
+                <div className="text-xs text-muted-foreground truncate">
                   @{u.username}
-                  {u.faculty && <span style={{ marginLeft: "0.4rem" }}>· {u.faculty}{u.program ? ` · ${u.program}` : ""}</span>}
+                  {u.faculty && (
+                    <span className="ml-1">
+                      · {u.faculty}{u.program ? ` · ${u.program}` : ""}
+                    </span>
+                  )}
                 </div>
               </Link>
-              {/* Follow button */}
               <button
                 onClick={() => handleFollow(u.username)}
                 disabled={loadingFollow === u.username}
-                style={{
-                  padding: "0.3rem 0.85rem", fontSize: "0.85rem", borderRadius: 6, cursor: "pointer", flexShrink: 0,
-                  border: following[u.username] ? "1px solid #ccc" : "none",
-                  background: following[u.username] ? "#fff" : "#111",
-                  color: following[u.username] ? "#111" : "#fff",
-                }}
+                className={cn(
+                  "flex-shrink-0 text-xs px-3 py-1.5 rounded-md font-medium transition-colors disabled:opacity-50",
+                  following[u.username]
+                    ? "border border-border bg-background text-foreground hover:bg-muted"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                )}
               >
                 {following[u.username] ? "Following" : "Follow"}
               </button>
@@ -213,6 +200,11 @@ export default function FeedPage() {
       .finally(() => setLoading(false));
   }, [feedTab, sort, facultyFilter, feedRefreshKey, router]);
 
+  function closeComposer() {
+    setComposerOpen(false);
+    setPollDraft(null);
+  }
+
   async function handlePost(e: React.FormEvent) {
     e.preventDefault();
     if (!content.trim() && !imageUrls.length && !pollDraft) return;
@@ -259,9 +251,10 @@ export default function FeedPage() {
         body: JSON.stringify({ vote_type: voteType }),
       });
       setPosts((prev) =>
-        prev.map((p) => p.id === postId
-          ? { ...p, upvotes: data.upvotes, downvotes: data.downvotes, current_user_vote: data.current_user_vote }
-          : p
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, upvotes: data.upvotes, downvotes: data.downvotes, current_user_vote: data.current_user_vote }
+            : p
         )
       );
     } catch { /* non-critical */ }
@@ -278,139 +271,180 @@ export default function FeedPage() {
     }
   }
 
-  const tabBtnStyle = (active: boolean): React.CSSProperties => ({
-    flex: 1, padding: "0.55rem 0", fontSize: "0.95rem", fontWeight: active ? "bold" : "normal",
-    cursor: "pointer", border: "none", borderBottom: active ? "2px solid #111" : "2px solid transparent",
-    background: "none", color: active ? "#111" : "#888",
-  });
-
-  const pillStyle = (active: boolean): React.CSSProperties => ({
-    padding: "0.25rem 0.75rem", fontSize: "0.8rem", cursor: "pointer",
-    borderRadius: 20, border: "1px solid #ccc",
-    background: active ? "#111" : "#fff",
-    color: active ? "#fff" : "#555",
-  });
+  const pillCls = (active: boolean) =>
+    cn(
+      "text-xs font-medium px-3 py-1 rounded-full border transition-colors",
+      active
+        ? "bg-primary text-primary-foreground border-primary"
+        : "border-border text-muted-foreground hover:border-foreground hover:text-foreground bg-background"
+    );
 
   return (
     <>
-      <main style={{ maxWidth: 640, margin: "0 auto", padding: "1.5rem 1rem 5rem" }}>
-
-      {/* Discover / Friends tabs */}
-      <div style={{ display: "flex", borderBottom: "1px solid #e0e0e0", marginBottom: "1rem" }}>
-        <button style={tabBtnStyle(feedTab === "discover")} onClick={() => setFeedTab("discover")}>Discover</button>
-        <button style={tabBtnStyle(feedTab === "friends")} onClick={() => setFeedTab("friends")}>Friends</button>
-      </div>
-
-      {/* Secondary controls — only Discover shows Hot/New */}
-      {feedTab === "discover" && (
-        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
-          {(["hot", "new"] as const).map((s) => (
-            <button key={s} onClick={() => setSort(s)} style={pillStyle(sort === s)}>
-              {s === "hot" ? "Hot" : "New"}
+      <main className="max-w-xl mx-auto px-4 pt-4 pb-36">
+        {/* Tabs */}
+        <div className="flex border-b border-border mb-4">
+          {(["discover", "friends"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setFeedTab(tab)}
+              className={cn(
+                "flex-1 py-3 text-sm font-medium transition-colors",
+                feedTab === tab
+                  ? "text-primary border-b-2 border-primary -mb-px"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {tab === "discover" ? "Discover" : "Friends"}
             </button>
           ))}
         </div>
-      )}
 
-      {/* Faculty filter pills — both tabs */}
-      <div style={{ display: "flex", gap: "0.4rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
-        <button onClick={() => setFacultyFilter(null)} style={pillStyle(facultyFilter === null)}>All</button>
-        {FACULTIES.map((f) => (
-          <button key={f} onClick={() => setFacultyFilter(facultyFilter === f ? null : f)} style={pillStyle(facultyFilter === f)}>{f}</button>
-        ))}
-      </div>
+        {/* Sort pills — Discover only */}
+        {feedTab === "discover" && (
+          <div className="flex gap-2 mb-3">
+            <button onClick={() => setSort("hot")} className={pillCls(sort === "hot")}>
+              Hot
+            </button>
+            <button onClick={() => setSort("new")} className={pillCls(sort === "new")}>
+              New
+            </button>
+          </div>
+        )}
 
-      {/* People search — always visible in Friends tab */}
-      {feedTab === "friends" && (
-        <div style={{ marginBottom: "1.25rem" }}>
-          <p style={{ margin: "0 0 0.6rem", fontSize: "0.85rem", color: "#555", fontWeight: 500 }}>Find people to follow</p>
-          <PeopleSearch onFollowChange={() => setFeedRefreshKey((k) => k + 1)} />
+        {/* Faculty filter pills */}
+        <div className="flex gap-1.5 mb-4 flex-wrap">
+          <button onClick={() => setFacultyFilter(null)} className={pillCls(facultyFilter === null)}>
+            All
+          </button>
+          {FACULTIES.map((f) => (
+            <button
+              key={f}
+              onClick={() => setFacultyFilter(facultyFilter === f ? null : f)}
+              className={pillCls(facultyFilter === f)}
+            >
+              {f}
+            </button>
+          ))}
         </div>
-      )}
 
-      {/* Posts */}
-      {loading && <p style={{ color: "#888" }}>Loading…</p>}
-      {!loading && posts.length === 0 && (
-        <p style={{ color: "#aaa", textAlign: "center", marginTop: "2rem" }}>
-          {feedTab === "friends"
-            ? "No posts from people you follow yet. Follow someone above to see their posts here."
-            : facultyFilter
-              ? `No posts tagged ${facultyFilter} yet.`
-              : "No posts yet. Be the first!"}
-        </p>
-      )}
+        {/* People search — Friends tab */}
+        {feedTab === "friends" && (
+          <PeopleSearch onFollowChange={() => setFeedRefreshKey((k) => k + 1)} />
+        )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-        {posts.map((post) => (
-          <PostCard
-            key={post.id}
-            post={post}
-            currentUsername={currentUsername}
-            onVote={handleVote}
-            onDelete={handleDelete}
-            onPollUpdate={(id, poll) => setPosts((prev) => prev.map((p) => p.id === id ? { ...p, poll } : p))}
-          />
-        ))}
-      </div>
+        {/* Post list */}
+        {loading && (
+          <p className="text-muted-foreground text-sm text-center py-8">Loading…</p>
+        )}
+        {!loading && posts.length === 0 && (
+          <p className="text-muted-foreground text-sm text-center py-8">
+            {feedTab === "friends"
+              ? "No posts from people you follow yet. Follow someone above to see their posts here."
+              : facultyFilter
+                ? `No posts tagged ${facultyFilter} yet.`
+                : "No posts yet. Be the first!"}
+          </p>
+        )}
 
-      {total > posts.length && (
-        <p style={{ color: "#888", textAlign: "center", marginTop: "1rem" }}>
-          Showing {posts.length} of {total} posts
-        </p>
-      )}
+        <div className="space-y-3">
+          {posts.map((post) => (
+            <PostCard
+              key={post.id}
+              post={post}
+              currentUsername={currentUsername}
+              onVote={handleVote}
+              onDelete={handleDelete}
+              onPollUpdate={(id, poll) =>
+                setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, poll } : p)))
+              }
+            />
+          ))}
+        </div>
+
+        {total > posts.length && (
+          <p className="text-muted-foreground text-xs text-center mt-4">
+            Showing {posts.length} of {total} posts
+          </p>
+        )}
       </main>
 
-      {/* Fixed compose bar — above bottom nav */}
-      <div style={{ position: "fixed", bottom: 60, left: 0, right: 0, background: "#fff", borderTop: "1px solid #e8e8e8", padding: "0.5rem 1rem", zIndex: 50 }}>
-        <div
-          onClick={() => setComposerOpen(true)}
-          style={{ maxWidth: 640, margin: "0 auto", display: "flex", alignItems: "center", padding: "0.6rem 1rem", borderRadius: 20, background: "#f5f5f5", cursor: "text", color: "#aaa", fontSize: "0.95rem" }}
-        >
-          What&apos;s on your mind?
+      {/* Fixed compose bar */}
+      <div className="fixed bottom-16 left-0 right-0 px-4 py-2 bg-white/95 backdrop-blur-sm border-t border-border z-40">
+        <div className="max-w-xl mx-auto">
+          <button
+            onClick={() => setComposerOpen(true)}
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-full bg-muted hover:bg-muted/80 transition-colors text-sm text-muted-foreground"
+          >
+            <PenLine className="w-4 h-4 flex-shrink-0" />
+            What&apos;s on your mind?
+          </button>
         </div>
       </div>
 
       {/* Compose sheet */}
       {composerOpen && (
         <>
-          <div onClick={() => { setComposerOpen(false); setPollDraft(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 100 }} />
-          <div style={{ position: "fixed", bottom: 60, left: "50%", transform: "translateX(-50%)", width: "min(600px, 94vw)", background: "#fff", borderRadius: 16, padding: "1rem 1rem 1.5rem", zIndex: 101, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 4px 32px rgba(0,0,0,0.18)" }}>
-            <div style={{ maxWidth: 640, margin: "0 auto" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                <span style={{ fontWeight: "600", fontSize: "1rem" }}>Create post</span>
-                <button onClick={() => { setComposerOpen(false); setPollDraft(null); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.5rem", color: "#999", lineHeight: 1, padding: "0 0.2rem" }}>×</button>
-              </div>
-              <form onSubmit={handlePost}>
+          <div
+            onClick={closeComposer}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100]"
+          />
+          <div className="fixed bottom-[4.5rem] left-1/2 -translate-x-1/2 w-[min(600px,94vw)] bg-white rounded-2xl z-[101] shadow-2xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
+              <span className="font-semibold text-sm">Create post</span>
+              <button
+                onClick={closeComposer}
+                className="rounded-full p-1 hover:bg-muted text-muted-foreground transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              <form onSubmit={handlePost} className="px-4 py-3 space-y-3">
                 <textarea
                   autoFocus
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   placeholder="What's on your mind?"
                   rows={4}
-                  style={{ width: "100%", boxSizing: "border-box", padding: "0.6rem", fontSize: "0.95rem", border: "1px solid #ccc", borderRadius: 4, fontFamily: "inherit", resize: "vertical" }}
+                  className="w-full resize-none text-sm placeholder:text-muted-foreground border-0 outline-none focus:ring-0 bg-transparent min-h-[90px]"
                 />
-                <ImageUploader
-                  key={uploaderKey}
-                  onUrlsChange={(urls, uploading) => { setImageUrls(urls); setImagesUploading(uploading); }}
-                />
-                <PollComposer value={pollDraft} onChange={setPollDraft} />
-                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
-                  <select
-                    value={postFacultyTag}
-                    onChange={(e) => setPostFacultyTag(e.target.value as Faculty | "")}
-                    style={{ padding: "0.4rem 0.6rem", fontSize: "0.88rem", border: "1px solid #ccc", borderRadius: 4, fontFamily: "inherit", color: postFacultyTag ? "#111" : "#888", background: "#fff" }}
-                  >
-                    <option value="">Tag faculty (optional)</option>
-                    {FACULTIES.map((f) => <option key={f} value={f}>{f} — {FACULTY_NAMES[f]}</option>)}
-                  </select>
-                  {postError && <p style={{ color: "crimson", margin: 0, fontSize: "0.9rem" }}>{postError}</p>}
-                  <button
-                    type="submit"
-                    disabled={submitting || imagesUploading || (!content.trim() && !imageUrls.length && !pollDraft)}
-                    style={{ marginLeft: "auto", padding: "0.5rem 1.2rem", cursor: "pointer" }}
-                  >
-                    {imagesUploading ? "Uploading…" : submitting ? "Posting…" : "Post"}
-                  </button>
+                <div className="border-t border-border pt-3 space-y-3">
+                  <ImageUploader
+                    key={uploaderKey}
+                    onUrlsChange={(urls, uploading) => {
+                      setImageUrls(urls);
+                      setImagesUploading(uploading);
+                    }}
+                  />
+                  <PollComposer value={pollDraft} onChange={setPollDraft} />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <select
+                      value={postFacultyTag}
+                      onChange={(e) => setPostFacultyTag(e.target.value as Faculty | "")}
+                      className="text-xs border border-input rounded-md px-2.5 py-1.5 bg-background text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="">Tag faculty (optional)</option>
+                      {FACULTIES.map((f) => (
+                        <option key={f} value={f}>
+                          {f} — {FACULTY_NAMES[f]}
+                        </option>
+                      ))}
+                    </select>
+                    {postError && <p className="text-xs text-destructive">{postError}</p>}
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="ml-auto"
+                      disabled={
+                        submitting ||
+                        imagesUploading ||
+                        (!content.trim() && !imageUrls.length && !pollDraft)
+                      }
+                    >
+                      {imagesUploading ? "Uploading…" : submitting ? "Posting…" : "Post"}
+                    </Button>
+                  </div>
                 </div>
               </form>
             </div>
@@ -421,7 +455,7 @@ export default function FeedPage() {
   );
 }
 
-// ── Post components ───────────────────────────────────────────────────────────
+// ── Share panel ───────────────────────────────────────────────────────────────
 
 function SharePanel({ postId, shareCount }: { postId: string; shareCount: number }) {
   const [open, setOpen] = useState(false);
@@ -430,7 +464,13 @@ function SharePanel({ postId, shareCount }: { postId: string; shareCount: number
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  function close() { setOpen(false); setUsername(""); setMsg(""); setStatus("idle"); setError(null); }
+  function close() {
+    setOpen(false);
+    setUsername("");
+    setMsg("");
+    setStatus("idle");
+    setError(null);
+  }
 
   async function handleShare(e: React.FormEvent) {
     e.preventDefault();
@@ -454,28 +494,49 @@ function SharePanel({ postId, shareCount }: { postId: string; shareCount: number
     <>
       <button
         onClick={() => setOpen(true)}
-        style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#555", fontSize: "0.9rem" }}
+        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
       >
-        ↗ {shareCount > 0 ? shareCount : "Share"}
+        <Share2 className="w-4 h-4" />
+        {shareCount > 0 && <span>{shareCount}</span>}
       </button>
+
       {open && (
         <>
-          <div onClick={close} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 200 }} />
-          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(360px, 90vw)", background: "#fff", borderRadius: 12, padding: "1.25rem", zIndex: 201, boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-              <span style={{ fontWeight: 600, fontSize: "1rem" }}>Share via message</span>
-              <button onClick={close} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.4rem", color: "#999", lineHeight: 1, padding: 0 }}>×</button>
+          <div onClick={close} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200]" />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(360px,90vw)] bg-white rounded-2xl shadow-2xl z-[201] p-5">
+            <div className="flex items-center justify-between mb-4">
+              <span className="font-semibold text-sm">Share via message</span>
+              <button
+                onClick={close}
+                className="rounded-full p-1 hover:bg-muted text-muted-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <form onSubmit={handleShare} style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-              <UserSearchInput value={username} onChange={setUsername} onSelect={(u) => setUsername(u)} placeholder="Search by name or username" />
-              <input value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Add a message (optional)" style={{ padding: "0.5rem 0.6rem", fontSize: "0.9rem", border: "1px solid #ccc", borderRadius: 6, fontFamily: "inherit" }} />
-              {error && <p style={{ margin: 0, fontSize: "0.82rem", color: "crimson" }}>{error}</p>}
-              {status === "sent" && <p style={{ margin: 0, fontSize: "0.88rem", color: "#1a6b3a" }}>Sent!</p>}
-              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
-                <button type="submit" disabled={status === "sending" || status === "sent" || !username.trim()} style={{ flex: 1, padding: "0.5rem", fontSize: "0.9rem", cursor: "pointer", background: "#111", color: "#fff", border: "none", borderRadius: 6 }}>
+            <form onSubmit={handleShare} className="space-y-3">
+              <UserSearchInput
+                value={username}
+                onChange={setUsername}
+                onSelect={(u) => setUsername(u)}
+                placeholder="Search by name or username"
+              />
+              <input
+                value={msg}
+                onChange={(e) => setMsg(e.target.value)}
+                placeholder="Add a message (optional)"
+                className="w-full h-9 px-3 text-sm border border-input rounded-md bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              {error && <p className="text-xs text-destructive">{error}</p>}
+              {status === "sent" && <p className="text-xs text-green-600 font-medium">Sent!</p>}
+              <div className="flex gap-2">
+                <Button
+                  type="submit"
+                  disabled={status === "sending" || status === "sent" || !username.trim()}
+                  className="flex-1"
+                >
                   {status === "sending" ? "Sending…" : "Send"}
-                </button>
-                <button type="button" onClick={close} style={{ padding: "0.5rem 1rem", fontSize: "0.9rem", cursor: "pointer", background: "none", border: "1px solid #ccc", borderRadius: 6 }}>Cancel</button>
+                </Button>
+                <Button type="button" variant="outline" onClick={close}>Cancel</Button>
               </div>
             </form>
           </div>
@@ -485,8 +546,14 @@ function SharePanel({ postId, shareCount }: { postId: string; shareCount: number
   );
 }
 
+// ── Post card ─────────────────────────────────────────────────────────────────
+
 function PostCard({
-  post, currentUsername, onVote, onDelete, onPollUpdate,
+  post,
+  currentUsername,
+  onVote,
+  onDelete,
+  onPollUpdate,
 }: {
   post: Post;
   currentUsername: string | null;
@@ -498,34 +565,100 @@ function PostCard({
   const isOwn = currentUsername !== null && post.author?.username === currentUsername;
 
   return (
-    <div style={{ border: "1px solid #e0e0e0", borderRadius: 8, padding: "1rem", background: "#fff" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", marginBottom: "0.6rem" }}>
-        <Link href={`/profile/${post.author?.username}`} style={{ flexShrink: 0 }}>
-          <MiniAvatar name={post.author?.display_name ?? "?"} url={post.author?.avatar_url ?? null} />
+    <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+        <Link href={`/profile/${post.author?.username}`} className="flex-shrink-0">
+          <MiniAvatar
+            name={post.author?.display_name ?? "?"}
+            url={post.author?.avatar_url ?? null}
+            size={40}
+          />
         </Link>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Link href={`/profile/${post.author?.username}`} style={{ color: "inherit", textDecoration: "none" }}>
-            <strong style={{ color: "#222", fontSize: "0.9rem" }}>{post.author?.display_name ?? "Unknown"}</strong>
-            {" "}<span style={{ color: "#999", fontSize: "0.82rem" }}>@{post.author?.username ?? "?"}</span>
+        <div className="flex-1 min-w-0">
+          <Link href={`/profile/${post.author?.username}`} className="no-underline hover:underline">
+            <span className="font-semibold text-sm text-foreground">
+              {post.author?.display_name ?? "Unknown"}
+            </span>{" "}
+            <span className="text-muted-foreground text-xs">
+              @{post.author?.username ?? "?"}
+            </span>
           </Link>
-          <span style={{ color: "#bbb", fontSize: "0.8rem" }}> · {timeAgo(post.created_at)}</span>
+          <span className="text-muted-foreground text-xs"> · {timeAgo(post.created_at)}</span>
         </div>
-        {post.faculty_tag && <FacultyBadge tag={post.faculty_tag} />}
+        {post.faculty_tag && (
+          <span className="text-[11px] font-semibold tracking-wide px-2 py-0.5 rounded-full bg-muted text-muted-foreground flex-shrink-0">
+            {post.faculty_tag}
+          </span>
+        )}
       </div>
-      <ImageGrid urls={post.image_urls ?? []} />
+
+      {/* Content */}
       {post.content && (
-        <p style={{ margin: "0 0 0.75rem", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{post.content}</p>
+        <p className="px-4 pb-3 text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+          {post.content}
+        </p>
       )}
+
+      {/* Images */}
+      {(post.image_urls ?? []).length > 0 && (
+        <div className="px-4 pb-3">
+          <ImageGrid urls={post.image_urls} />
+        </div>
+      )}
+
+      {/* Poll */}
       {post.poll && (
-        <PollDisplay postId={post.id} poll={post.poll} onUpdate={(p) => onPollUpdate(post.id, p)} />
+        <div className="px-4 pb-3">
+          <PollDisplay
+            postId={post.id}
+            poll={post.poll}
+            onUpdate={(p) => onPollUpdate(post.id, p)}
+          />
+        </div>
       )}
-      <div style={{ display: "flex", gap: "1rem", alignItems: "center", fontSize: "0.9rem", flexWrap: "wrap" }}>
-        <button onClick={() => onVote(post.id, "up")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: voted === "up" ? "#e05c00" : "#555", fontWeight: voted === "up" ? "bold" : "normal" }}>▲ {post.upvotes}</button>
-        <button onClick={() => onVote(post.id, "down")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: voted === "down" ? "#5555dd" : "#555", fontWeight: voted === "down" ? "bold" : "normal" }}>▼ {post.downvotes}</button>
-        <Link href={`/feed/${post.id}`} style={{ color: "#555", textDecoration: "none" }}>💬 {post.reply_count} {post.reply_count === 1 ? "reply" : "replies"}</Link>
+
+      {/* Action bar */}
+      <div className="flex items-center px-2 py-1 border-t border-border/60">
+        <button
+          onClick={() => onVote(post.id, "up")}
+          className={cn(
+            "flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+            voted === "up"
+              ? "text-orange-500"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          <ChevronUp className="w-4 h-4" />
+          {post.upvotes}
+        </button>
+        <button
+          onClick={() => onVote(post.id, "down")}
+          className={cn(
+            "flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+            voted === "down"
+              ? "text-indigo-500"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          <ChevronDown className="w-4 h-4" />
+          {post.downvotes}
+        </button>
+        <Link
+          href={`/feed/${post.id}`}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors no-underline"
+        >
+          <MessageCircle className="w-4 h-4" />
+          {post.reply_count}
+        </Link>
         <SharePanel postId={post.id} shareCount={post.share_count} />
         {isOwn && (
-          <button onClick={() => onDelete(post.id)} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", padding: 0, color: "#ccc", fontSize: "0.85rem" }}>Delete</button>
+          <button
+            onClick={() => onDelete(post.id)}
+            className="ml-auto flex items-center px-2.5 py-1.5 rounded-lg text-muted-foreground/40 hover:text-destructive hover:bg-destructive/5 transition-colors"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         )}
       </div>
     </div>
