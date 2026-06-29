@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 
 interface HealthResponse {
   status: string;
@@ -21,39 +22,54 @@ export default function Home() {
       .finally(() => setLoading(false));
   }, []);
 
+  const healthy = health?.status === "ok" && health?.database === "connected";
+
   return (
-    <main style={{ padding: "2rem", maxWidth: 480 }}>
-      <h1 style={{ marginBottom: 4 }}>IUSConnect</h1>
-      <p style={{ color: "#666", marginTop: 0 }}>
-        Campus social network · IUS Sarajevo
-      </p>
-      <hr style={{ margin: "1.5rem 0" }} />
-      <h2 style={{ fontSize: "1rem", marginBottom: "0.75rem" }}>
-        Backend health check
-      </h2>
-      {loading && <p style={{ color: "#888" }}>Contacting backend…</p>}
-      {error && (
-        <p style={{ color: "crimson" }}>
-          Could not reach backend: <code>{error}</code>
-        </p>
-      )}
-      {health && (
-        <pre
-          style={{
-            background: "#f4f4f4",
-            border: "1px solid #ddd",
-            borderRadius: 6,
-            padding: "1rem",
-            fontSize: "0.9rem",
-          }}
-        >
-          {JSON.stringify(health, null, 2)}
-        </pre>
-      )}
-      <hr style={{ margin: "1.5rem 0" }} />
-      <p>
-        <Link href="/register">Register</Link> &nbsp;·&nbsp; <Link href="/login">Log in</Link>
-      </p>
+    <main className="min-h-screen flex flex-col items-center justify-center px-4 bg-background">
+      <div className="w-full max-w-sm text-center space-y-6">
+        {/* Brand */}
+        <div className="space-y-2">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary text-primary-foreground text-2xl font-bold mb-2">
+            IUS
+          </div>
+          <h1 className="text-3xl font-bold text-foreground tracking-tight">IUSConnect</h1>
+          <p className="text-muted-foreground text-sm">
+            Campus social network · IUS Sarajevo
+          </p>
+        </div>
+
+        {/* CTAs */}
+        <div className="flex flex-col gap-3">
+          <Button asChild size="lg" className="w-full">
+            <Link href="/register">Create account</Link>
+          </Button>
+          <Button asChild size="lg" variant="outline" className="w-full">
+            <Link href="/login">Log in</Link>
+          </Button>
+        </div>
+
+        {/* Status dot */}
+        <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+          {loading ? (
+            <span>Checking backend…</span>
+          ) : error ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-destructive inline-block" />
+              <span>Backend unreachable</span>
+            </>
+          ) : healthy ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+              <span>All systems operational</span>
+            </>
+          ) : (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 inline-block" />
+              <span>Degraded</span>
+            </>
+          )}
+        </div>
+      </div>
     </main>
   );
 }
