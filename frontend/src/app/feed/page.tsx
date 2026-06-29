@@ -7,6 +7,8 @@ import { apiFetch } from "@/lib/api";
 import UserSearchInput from "@/components/UserSearchInput";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
+import PollComposer, { PollDraft } from "@/components/PollComposer";
+import PollDisplay from "@/components/PollDisplay";
 import { FACULTIES, FACULTY_NAMES, Faculty } from "@/lib/faculties";
 
 type FeedTab = "discover" | "friends";
@@ -26,6 +28,14 @@ function MiniAvatar({ name, url }: { name: string; url: string | null }) {
   );
 }
 
+interface Poll {
+  options: { id: string; text: string; votes: number }[];
+  total_votes: number;
+  user_vote_option_id: string | null;
+  expires_at: string | null;
+  is_expired: boolean;
+}
+
 interface Post {
   id: string;
   content: string;
@@ -37,6 +47,7 @@ interface Post {
   current_user_vote: "up" | "down" | null;
   reply_count: number;
   share_count: number;
+  poll: Poll | null;
   created_at: string;
 }
 
@@ -196,6 +207,7 @@ export default function FeedPage() {
   const [submitting, setSubmitting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [pollDraft, setPollDraft] = useState<PollDraft | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -218,7 +230,7 @@ export default function FeedPage() {
 
   async function handlePost(e: React.FormEvent) {
     e.preventDefault();
-    if (!content.trim() && !imageUrls.length) return;
+    if (!content.trim() && !imageUrls.length && !pollDraft) return;
     if (imagesUploading) return;
     setSubmitting(true);
     setPostError(null);
@@ -229,6 +241,8 @@ export default function FeedPage() {
           content: content.trim(),
           faculty_tag: postFacultyTag || null,
           image_urls: imageUrls,
+          poll_options: pollDraft ? pollDraft.options.map((o) => o.trim()).filter(Boolean) : [],
+          poll_expires_at: pollDraft?.expiresAt ? new Date(pollDraft.expiresAt).toISOString() : null,
         }),
       });
       if (feedTab === "discover") setPosts((prev) => [newPost, ...prev]);
@@ -237,6 +251,7 @@ export default function FeedPage() {
       setPostFacultyTag("");
       setImageUrls([]);
       setUploaderKey((k) => k + 1);
+      setPollDraft(null);
       setComposerOpen(false);
     } catch (err: unknown) {
       setPostError(err instanceof Error ? err.message : "Failed to post.");
@@ -340,6 +355,7 @@ export default function FeedPage() {
             currentUsername={currentUsername}
             onVote={handleVote}
             onDelete={handleDelete}
+            onPollUpdate={(id, poll) => setPosts((prev) => prev.map((p) => p.id === id ? { ...p, poll } : p))}
           />
         ))}
       </div>
@@ -384,6 +400,7 @@ export default function FeedPage() {
                   key={uploaderKey}
                   onUrlsChange={(urls, uploading) => { setImageUrls(urls); setImagesUploading(uploading); }}
                 />
+                <PollComposer value={pollDraft} onChange={setPollDraft} />
                 <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginTop: "0.5rem", flexWrap: "wrap" }}>
                   <select
                     value={postFacultyTag}
@@ -396,7 +413,7 @@ export default function FeedPage() {
                   {postError && <p style={{ color: "crimson", margin: 0, fontSize: "0.9rem" }}>{postError}</p>}
                   <button
                     type="submit"
-                    disabled={submitting || imagesUploading || (!content.trim() && !imageUrls.length)}
+                    disabled={submitting || imagesUploading || (!content.trim() && !imageUrls.length && !pollDraft)}
                     style={{ marginLeft: "auto", padding: "0.5rem 1.2rem", cursor: "pointer" }}
                   >
                     {imagesUploading ? "Uploading…" : submitting ? "Posting…" : "Post"}
@@ -476,12 +493,13 @@ function SharePanel({ postId, shareCount }: { postId: string; shareCount: number
 }
 
 function PostCard({
-  post, currentUsername, onVote, onDelete,
+  post, currentUsername, onVote, onDelete, onPollUpdate,
 }: {
   post: Post;
   currentUsername: string | null;
   onVote: (id: string, type: "up" | "down") => void;
   onDelete: (id: string) => void;
+  onPollUpdate: (postId: string, poll: Poll) => void;
 }) {
   const voted = post.current_user_vote;
   const isOwn = currentUsername !== null && post.author?.username === currentUsername;
@@ -504,6 +522,9 @@ function PostCard({
       <ImageGrid urls={post.image_urls ?? []} />
       {post.content && (
         <p style={{ margin: "0 0 0.75rem", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{post.content}</p>
+      )}
+      {post.poll && (
+        <PollDisplay postId={post.id} poll={post.poll} onUpdate={(p) => onPollUpdate(post.id, p)} />
       )}
       <div style={{ display: "flex", gap: "1rem", alignItems: "center", fontSize: "0.9rem", flexWrap: "wrap" }}>
         <button onClick={() => onVote(post.id, "up")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: voted === "up" ? "#e05c00" : "#555", fontWeight: voted === "up" ? "bold" : "normal" }}>▲ {post.upvotes}</button>

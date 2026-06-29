@@ -7,6 +7,8 @@ import { apiFetch, ApiError } from "@/lib/api";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
 import UserSearchInput from "@/components/UserSearchInput";
+import PollComposer, { PollDraft } from "@/components/PollComposer";
+import PollDisplay from "@/components/PollDisplay";
 
 interface Club {
   id: string;
@@ -41,6 +43,14 @@ function MiniAvatar({ name, url }: { name: string; url: string | null }) {
   );
 }
 
+interface Poll {
+  options: { id: string; text: string; votes: number }[];
+  total_votes: number;
+  user_vote_option_id: string | null;
+  expires_at: string | null;
+  is_expired: boolean;
+}
+
 interface Post {
   id: string;
   content: string;
@@ -50,6 +60,7 @@ interface Post {
   downvotes: number;
   current_user_vote: "up" | "down" | null;
   reply_count: number;
+  poll: Poll | null;
   created_at: string;
   is_deleted: boolean;
   is_pinned: boolean;
@@ -103,6 +114,7 @@ export default function ClubDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [pollDraft, setPollDraft] = useState<PollDraft | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteUsername, setInviteUsername] = useState("");
@@ -222,20 +234,26 @@ export default function ClubDetailPage() {
 
   async function handlePost(e: React.FormEvent) {
     e.preventDefault();
-    if (!content.trim() && !imageUrls.length) return;
+    if (!content.trim() && !imageUrls.length && !pollDraft) return;
     if (imagesUploading) return;
     setSubmitting(true);
     setPostError(null);
     try {
       const newPost = await apiFetch<Post>(`/api/clubs/${slug}/posts`, {
         method: "POST",
-        body: JSON.stringify({ content: content.trim(), image_urls: imageUrls }),
+        body: JSON.stringify({
+          content: content.trim(),
+          image_urls: imageUrls,
+          poll_options: pollDraft ? pollDraft.options.map((o) => o.trim()).filter(Boolean) : [],
+          poll_expires_at: pollDraft?.expiresAt ? new Date(pollDraft.expiresAt).toISOString() : null,
+        }),
       });
       setPosts((prev) => [newPost, ...prev]);
       setTotal((t) => t + 1);
       setContent("");
       setImageUrls([]);
       setUploaderKey((k) => k + 1);
+      setPollDraft(null);
       setComposerOpen(false);
     } catch (err: unknown) {
       setPostError(err instanceof Error ? err.message : "Failed to post.");
@@ -577,6 +595,13 @@ export default function ClubDetailPage() {
                 {post.content}
               </p>
             )}
+            {post.poll && (
+              <PollDisplay
+                postId={post.id}
+                poll={post.poll}
+                onUpdate={(p) => setPosts((prev) => prev.map((x) => x.id === post.id ? { ...x, poll: p } : x))}
+              />
+            )}
             <div style={{ display: "flex", gap: "1rem", alignItems: "center", fontSize: "0.9rem" }}>
               <button
                 onClick={() => handleVote(post.id, "up")}
@@ -662,11 +687,12 @@ export default function ClubDetailPage() {
                     key={uploaderKey}
                     onUrlsChange={(urls, uploading) => { setImageUrls(urls); setImagesUploading(uploading); }}
                   />
+                  <PollComposer value={pollDraft} onChange={setPollDraft} />
                   <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
                     {postError && <p style={{ color: "crimson", margin: 0, fontSize: "0.9rem" }}>{postError}</p>}
                     <button
                       type="submit"
-                      disabled={submitting || imagesUploading || (!content.trim() && !imageUrls.length)}
+                      disabled={submitting || imagesUploading || (!content.trim() && !imageUrls.length && !pollDraft)}
                       style={{ marginLeft: "auto", padding: "0.5rem 1.2rem", cursor: "pointer" }}
                     >
                       {imagesUploading ? "Uploading…" : submitting ? "Posting…" : "Post"}

@@ -26,6 +26,7 @@ from app.schemas.post import (
     VoteRequest,
     VoteResponse,
 )
+from app.routers.posts import _create_poll_options, _load_polls
 
 router = APIRouter(prefix="/api/clubs", tags=["clubs"])
 
@@ -88,8 +89,8 @@ async def _user_votes(
     return {row.post_id: row.vote_type for row in result}
 
 
-def _row_to_post(row, current_vote: str | None) -> PostResponse:
-    post, username, display_name, avatar_url, upvotes, downvotes, reply_count = row
+def _row_to_post(row, current_vote: str | None, poll=None) -> PostResponse:
+    post, username, display_name, avatar_url, upvotes, downvotes, reply_count, *_ = row
     return PostResponse(
         id=post.id,
         content="[deleted]" if post.is_deleted else post.content,
@@ -100,6 +101,7 @@ def _row_to_post(row, current_vote: str | None) -> PostResponse:
         downvotes=downvotes or 0,
         current_user_vote=current_vote,
         reply_count=reply_count or 0,
+        poll=poll,
         created_at=post.created_at,
         is_deleted=post.is_deleted,
         is_pinned=post.is_pinned,
@@ -411,10 +413,12 @@ async def get_club_posts(
     ).all()
 
     total = (await db.execute(select(func.count(Post.id)).where(where))).scalar() or 0
-    votes = await _user_votes([r[0].id for r in rows], current_user.id, db)
+    post_ids = [r[0].id for r in rows]
+    votes = await _user_votes(post_ids, current_user.id, db)
+    polls = await _load_polls(post_ids, current_user.id, db)
 
     return PostListResponse(
-        posts=[_row_to_post(r, votes.get(r[0].id)) for r in rows],
+        posts=[_row_to_post(r, votes.get(r[0].id), polls.get(r[0].id)) for r in rows],
         total=total,
     )
 
@@ -437,8 +441,18 @@ async def create_club_post(
         post_type="club",
         club_id=club.id,
         image_urls=body.image_urls,
+        poll_expires_at=body.poll_expires_at,
     )
     db.add(post)
+    await db.flush()
+
+    poll = None
+    if body.poll_options:
+        await _create_poll_options(post.id, body.poll_options, db)
+        await db.flush()
+        polls = await _load_polls([post.id], current_user.id, db)
+        poll = polls.get(post.id)
+
     await db.commit()
     await db.refresh(post)
 
@@ -456,6 +470,7 @@ async def create_club_post(
         downvotes=0,
         current_user_vote=None,
         reply_count=0,
+        poll=poll,
         created_at=post.created_at,
         is_deleted=False,
         is_pinned=False,

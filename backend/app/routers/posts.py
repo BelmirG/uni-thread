@@ -10,12 +10,16 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.direct_message import DirectMessage
 from app.models.follow import Follow
+from app.models.poll import PollOption, PollVote
 from app.models.post import Post
 from app.models.user import User
 from app.models.vote import Vote
 from app.schemas.post import (
     AuthorInfo,
     CreatePostRequest,
+    PollOptionResponse,
+    PollResponse,
+    PollVoteRequest,
     PostListResponse,
     PostResponse,
     VoteRequest,
@@ -28,13 +32,6 @@ router = APIRouter(prefix="/api/posts", tags=["posts"])
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def _build_post_select(extra_where=None, hot_score: bool = False):
-    """Return a SELECT with aggregated vote + reply counts.
-
-    When hot_score=True, appends a computed `hot_score` column so callers can
-    simply use ORDER BY hot_score DESC.  PostgreSQL resolves a bare alias name
-    in ORDER BY even when it's derived from aggregates; it does NOT resolve
-    alias names used inside an expression (e.g. upvotes - downvotes fails).
-    """
     ReplyAlias = aliased(Post)
     upvotes_col = func.count(case((Vote.vote_type == "up", 1))).label("upvotes")
     downvotes_col = func.count(case((Vote.vote_type == "down", 1))).label("downvotes")
@@ -76,7 +73,6 @@ def _build_post_select(extra_where=None, hot_score: bool = False):
 async def _user_votes(
     post_ids: list[uuid.UUID], user_id: uuid.UUID, db: AsyncSession
 ) -> dict[uuid.UUID, str]:
-    """Batch-load the current user's vote for a list of post IDs."""
     if not post_ids:
         return {}
     result = await db.execute(
@@ -87,7 +83,75 @@ async def _user_votes(
     return {row.post_id: row.vote_type for row in result}
 
 
-def _row_to_response(row, current_vote: str | None) -> PostResponse:
+async def _load_polls(
+    post_ids: list[uuid.UUID], user_id: uuid.UUID, db: AsyncSession
+) -> dict[uuid.UUID, PollResponse]:
+    if not post_ids:
+        return {}
+
+    # Load all options for these posts
+    options = (await db.execute(
+        select(PollOption)
+        .where(PollOption.post_id.in_(post_ids))
+        .order_by(PollOption.post_id, PollOption.position)
+    )).scalars().all()
+
+    if not options:
+        return {}
+
+    option_ids = [o.id for o in options]
+
+    # Vote counts per option
+    vote_counts = {
+        row.poll_option_id: row.cnt
+        for row in (await db.execute(
+            select(PollVote.poll_option_id, func.count(PollVote.id).label("cnt"))
+            .where(PollVote.poll_option_id.in_(option_ids))
+            .group_by(PollVote.poll_option_id)
+        )).all()
+    }
+
+    # Current user's votes
+    user_votes = {
+        row.post_id: row.poll_option_id
+        for row in (await db.execute(
+            select(PollVote.post_id, PollVote.poll_option_id)
+            .where(PollVote.post_id.in_(post_ids), PollVote.user_id == user_id)
+        )).all()
+    }
+
+    # Group options by post
+    from collections import defaultdict
+    by_post: dict[uuid.UUID, list[PollOption]] = defaultdict(list)
+    for o in options:
+        by_post[o.post_id].append(o)
+
+    # Load expiry info from Post
+    expiry_map = {
+        row.id: row.poll_expires_at
+        for row in (await db.execute(
+            select(Post.id, Post.poll_expires_at).where(Post.id.in_(list(by_post.keys())))
+        )).all()
+    }
+
+    now = datetime.now(timezone.utc)
+    result: dict[uuid.UUID, PollResponse] = {}
+    for post_id, opts in by_post.items():
+        total = sum(vote_counts.get(o.id, 0) for o in opts)
+        expires_at = expiry_map.get(post_id)
+        if expires_at and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        result[post_id] = PollResponse(
+            options=[PollOptionResponse(id=o.id, text=o.text, votes=vote_counts.get(o.id, 0)) for o in opts],
+            total_votes=total,
+            user_vote_option_id=user_votes.get(post_id),
+            expires_at=expires_at,
+            is_expired=bool(expires_at and now > expires_at),
+        )
+    return result
+
+
+def _row_to_response(row, current_vote: str | None, poll: PollResponse | None = None) -> PostResponse:
     post, username, display_name, avatar_url, upvotes, downvotes, reply_count, share_count, *_ = row
     return PostResponse(
         id=post.id,
@@ -101,6 +165,7 @@ def _row_to_response(row, current_vote: str | None) -> PostResponse:
         current_user_vote=current_vote,
         reply_count=reply_count or 0,
         share_count=share_count or 0,
+        poll=poll,
         created_at=post.created_at,
         is_deleted=post.is_deleted,
         is_pinned=post.is_pinned,
@@ -133,6 +198,11 @@ async def _vote_counts(
     )
 
 
+async def _create_poll_options(post_id: uuid.UUID, options: list[str], db: AsyncSession) -> None:
+    for i, text in enumerate(options):
+        db.add(PollOption(post_id=post_id, text=text.strip(), position=i))
+
+
 # ── endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=PostResponse)
@@ -147,8 +217,18 @@ async def create_post(
         post_type="feed",
         faculty_tag=body.faculty_tag,
         image_urls=body.image_urls,
+        poll_expires_at=body.poll_expires_at,
     )
     db.add(post)
+    await db.flush()
+
+    poll = None
+    if body.poll_options:
+        await _create_poll_options(post.id, body.poll_options, db)
+        await db.flush()
+        polls = await _load_polls([post.id], current_user.id, db)
+        poll = polls.get(post.id)
+
     await db.commit()
     await db.refresh(post)
 
@@ -167,6 +247,7 @@ async def create_post(
         downvotes=0,
         current_user_vote=None,
         reply_count=0,
+        poll=poll,
         created_at=post.created_at,
         is_deleted=False,
         parent_post_id=None,
@@ -179,7 +260,7 @@ async def list_posts(
     offset: int = 0,
     sort: str = "hot",
     faculty: str | None = None,
-    feed: str = "discover",   # "discover" | "friends"
+    feed: str = "discover",
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -221,9 +302,12 @@ async def list_posts(
         await db.execute(select(func.count(Post.id)).where(where))
     ).scalar() or 0
 
-    votes = await _user_votes([r[0].id for r in rows], current_user.id, db)
+    post_ids = [r[0].id for r in rows]
+    votes = await _user_votes(post_ids, current_user.id, db)
+    polls = await _load_polls(post_ids, current_user.id, db)
+
     return PostListResponse(
-        posts=[_row_to_response(r, votes.get(r[0].id)) for r in rows],
+        posts=[_row_to_response(r, votes.get(r[0].id), polls.get(r[0].id)) for r in rows],
         total=total,
     )
 
@@ -234,7 +318,6 @@ async def get_post(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Main post
     row = (
         await db.execute(_build_post_select(Post.id == post_id))
     ).first()
@@ -242,9 +325,9 @@ async def get_post(
         raise HTTPException(status_code=404, detail="Post not found.")
 
     vote_map = await _user_votes([post_id], current_user.id, db)
-    post_response = _row_to_response(row, vote_map.get(post_id))
+    poll_map = await _load_polls([post_id], current_user.id, db)
+    post_response = _row_to_response(row, vote_map.get(post_id), poll_map.get(post_id))
 
-    # All descendants at any depth via recursive CTE
     seed = select(Post.id.label("id")).where(Post.parent_post_id == post_id)
     cte = seed.cte(name="descendants", recursive=True)
     step = select(Post.id.label("id")).join(cte, Post.parent_post_id == cte.c.id)
@@ -257,8 +340,10 @@ async def get_post(
         )
     ).all()
 
-    reply_votes = await _user_votes([r[0].id for r in reply_rows], current_user.id, db)
-    replies = [_row_to_response(r, reply_votes.get(r[0].id)) for r in reply_rows]
+    reply_ids = [r[0].id for r in reply_rows]
+    reply_votes = await _user_votes(reply_ids, current_user.id, db)
+    reply_polls = await _load_polls(reply_ids, current_user.id, db)
+    replies = [_row_to_response(r, reply_votes.get(r[0].id), reply_polls.get(r[0].id)) for r in reply_rows]
 
     return {"post": post_response, "replies": replies}
 
@@ -282,7 +367,7 @@ async def create_reply(
         author_id=current_user.id,
         content=body.content,
         post_type=parent.post_type,
-        club_id=parent.club_id,  # club posts require club_id on all rows incl. replies
+        club_id=parent.club_id,
         parent_post_id=post_id,
         image_urls=body.image_urls,
     )
@@ -335,14 +420,59 @@ async def vote_post(
 
     if existing:
         if existing.vote_type == body.vote_type:
-            await db.delete(existing)          # same vote → toggle off
+            await db.delete(existing)
         else:
-            existing.vote_type = body.vote_type  # opposite vote → switch
+            existing.vote_type = body.vote_type
     else:
         db.add(Vote(post_id=post_id, user_id=current_user.id, vote_type=body.vote_type))
 
     await db.commit()
     return await _vote_counts(post_id, current_user.id, db)
+
+
+@router.post("/{post_id}/poll-vote")
+async def poll_vote(
+    post_id: uuid.UUID,
+    body: PollVoteRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    post = (await db.execute(
+        select(Post).where(Post.id == post_id, Post.is_deleted == False)
+    )).scalar_one_or_none()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+
+    now = datetime.now(timezone.utc)
+    if post.poll_expires_at:
+        expires = post.poll_expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        if now > expires:
+            raise HTTPException(status_code=400, detail="This poll has expired.")
+
+    option = (await db.execute(
+        select(PollOption).where(PollOption.id == body.option_id, PollOption.post_id == post_id)
+    )).scalar_one_or_none()
+    if not option:
+        raise HTTPException(status_code=404, detail="Poll option not found.")
+
+    existing = (await db.execute(
+        select(PollVote).where(PollVote.post_id == post_id, PollVote.user_id == current_user.id)
+    )).scalar_one_or_none()
+
+    if existing:
+        if existing.poll_option_id == body.option_id:
+            await db.delete(existing)
+        else:
+            existing.poll_option_id = body.option_id
+    else:
+        db.add(PollVote(post_id=post_id, poll_option_id=body.option_id, user_id=current_user.id))
+
+    await db.commit()
+
+    polls = await _load_polls([post_id], current_user.id, db)
+    return polls.get(post_id)
 
 
 @router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
