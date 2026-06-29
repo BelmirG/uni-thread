@@ -25,6 +25,7 @@ interface Profile {
   following_count: number;
   is_following: boolean;
   is_own_profile: boolean;
+  username_changed_at: string | null;
 }
 
 interface UserClub {
@@ -153,6 +154,7 @@ export default function ProfilePage() {
 
   // Edit state
   const [editing, setEditing] = useState(false);
+  const [editUsername, setEditUsername] = useState("");
   const [editName, setEditName] = useState("");
   const [editBio, setEditBio] = useState("");
   const [editFaculty, setEditFaculty] = useState<Faculty | "">("");
@@ -177,6 +179,10 @@ export default function ProfilePage() {
   // Notifications
   const [notifOpen, setNotifOpen] = useState(false);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [followNotifs, setFollowNotifs] = useState<{
+    id: string; actor_username: string; actor_display_name: string;
+    actor_avatar_url: string | null; is_read: boolean; created_at: string;
+  }[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -189,14 +195,19 @@ export default function ProfilePage() {
         setProfile(p);
         setPosts(userPosts);
         setClubs(userClubs);
+        setEditUsername(p.username);
         setEditName(p.display_name);
         setEditBio(p.bio ?? "");
         setEditFaculty((p.faculty as Faculty) ?? "");
         setEditProgram(p.program ?? "");
         if (p.is_own_profile) {
-          apiFetch<Invitation[]>("/api/clubs/invitations/me")
-            .then(setInvitations)
-            .catch(() => {});
+          Promise.all([
+            apiFetch<Invitation[]>("/api/clubs/invitations/me"),
+            apiFetch<typeof followNotifs>("/api/notifications"),
+          ]).then(([invs, notifs]) => {
+            setInvitations(invs);
+            setFollowNotifs(notifs);
+          }).catch(() => {});
         }
       })
       .catch((err: unknown) => {
@@ -308,9 +319,18 @@ export default function ProfilePage() {
     setSaving(true);
     setSaveError(null);
     try {
-      const updated = await apiFetch<Profile>("/api/users/me", {
+      const updated = await apiFetch<{
+        username: string;
+        display_name: string;
+        bio: string | null;
+        faculty: string | null;
+        program: string | null;
+        username_changed: boolean;
+        username_changed_at: string | null;
+      }>("/api/users/me", {
         method: "PUT",
         body: JSON.stringify({
+          username: editUsername.trim() || undefined,
           display_name: editName.trim(),
           bio: editBio.trim(),
           faculty: editFaculty || null,
@@ -319,12 +339,17 @@ export default function ProfilePage() {
       });
       setProfile((prev) => prev ? {
         ...prev,
+        username: updated.username,
         display_name: updated.display_name,
         bio: updated.bio,
         faculty: updated.faculty,
         program: updated.program,
+        username_changed_at: updated.username_changed_at,
       } : prev);
       setEditing(false);
+      if (updated.username_changed) {
+        router.replace(`/profile/${updated.username}`);
+      }
     } catch (err: unknown) {
       setSaveError(err instanceof Error ? err.message : "Failed to save.");
     } finally {
@@ -365,6 +390,11 @@ export default function ProfilePage() {
 
   if (loading) return <p style={{ padding: "2rem", color: "#888" }}>Loading…</p>;
   if (!profile) return null;
+
+  const usernameNextAllowed = profile.username_changed_at
+    ? new Date(new Date(profile.username_changed_at).getTime() + 30 * 24 * 60 * 60 * 1000)
+    : null;
+  const usernameLocked = usernameNextAllowed !== null && usernameNextAllowed > new Date();
 
   return (
     <>
@@ -421,17 +451,28 @@ export default function ProfilePage() {
           </div>
 
           {/* Notification bell — own profile only */}
-          {profile.is_own_profile && (
+          {profile.is_own_profile && (() => {
+            const unreadFollows = followNotifs.filter((n) => !n.is_read).length;
+            const totalUnread = invitations.length + unreadFollows;
+            function openBell() {
+              setNotifOpen(true);
+              if (unreadFollows > 0) {
+                apiFetch("/api/notifications/mark-read", { method: "POST" })
+                  .then(() => setFollowNotifs((prev) => prev.map((n) => ({ ...n, is_read: true }))))
+                  .catch(() => {});
+              }
+            }
+            return (
             <div style={{ position: "relative", flexShrink: 0 }}>
               <button
-                onClick={() => setNotifOpen((o) => !o)}
+                onClick={() => notifOpen ? setNotifOpen(false) : openBell()}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: "0.25rem", fontSize: "1.3rem", position: "relative", lineHeight: 1 }}
                 title="Notifications"
               >
                 🔔
-                {invitations.length > 0 && (
+                {totalUnread > 0 && (
                   <span style={{ position: "absolute", top: 0, right: 0, width: 16, height: 16, borderRadius: "50%", background: "crimson", color: "#fff", fontSize: "0.65rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
-                    {invitations.length}
+                    {totalUnread}
                   </span>
                 )}
               </button>
@@ -439,43 +480,51 @@ export default function ProfilePage() {
               {notifOpen && (
                 <>
                   <div onClick={() => setNotifOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 199 }} />
-                  <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", width: "min(320px, 90vw)", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, boxShadow: "0 6px 24px rgba(0,0,0,0.13)", zIndex: 200, overflow: "hidden" }}>
-                    <div style={{ padding: "0.65rem 1rem", fontWeight: 700, fontSize: "0.9rem", borderBottom: "1px solid #f0f0f0" }}>Notifications</div>
-                    {invitations.length === 0 ? (
-                      <p style={{ margin: 0, padding: "1rem", color: "#aaa", fontSize: "0.88rem", textAlign: "center" }}>No new notifications</p>
+                  <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", width: "min(340px, 90vw)", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 10, boxShadow: "0 6px 24px rgba(0,0,0,0.13)", zIndex: 200, overflow: "hidden", maxHeight: "70vh", overflowY: "auto" }}>
+                    <div style={{ padding: "0.65rem 1rem", fontWeight: 700, fontSize: "0.9rem", borderBottom: "1px solid #f0f0f0", position: "sticky", top: 0, background: "#fff" }}>Notifications</div>
+                    {invitations.length === 0 && followNotifs.length === 0 ? (
+                      <p style={{ margin: 0, padding: "1.25rem", color: "#aaa", fontSize: "0.88rem", textAlign: "center" }}>No notifications</p>
                     ) : (
-                      <div>
+                      <>
+                        {followNotifs.map((n) => (
+                          <div key={n.id} style={{ padding: "0.75rem 1rem", borderBottom: "1px solid #f5f5f5", background: n.is_read ? "#fff" : "#f8f8ff", display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                            {n.actor_avatar_url ? (
+                              <img src={n.actor_avatar_url} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                            ) : (
+                              <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#e0e0e0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", flexShrink: 0 }}>
+                                {n.actor_display_name[0]?.toUpperCase()}
+                              </div>
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ margin: 0, fontSize: "0.88rem" }}>
+                                <Link href={`/profile/${n.actor_username}`} onClick={() => setNotifOpen(false)} style={{ fontWeight: 600, color: "#111", textDecoration: "none" }}>{n.actor_display_name}</Link>
+                                {" started following you"}
+                              </p>
+                              <p style={{ margin: "0.1rem 0 0", fontSize: "0.75rem", color: "#aaa" }}>{timeAgo(n.created_at)}</p>
+                            </div>
+                            {!n.is_read && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "crimson", flexShrink: 0 }} />}
+                          </div>
+                        ))}
                         {invitations.map((inv) => (
                           <div key={inv.club_slug} style={{ padding: "0.75rem 1rem", borderBottom: "1px solid #f5f5f5" }}>
-                            <p style={{ margin: "0 0 0.1rem", fontSize: "0.88rem" }}>
+                            <p style={{ margin: "0 0 0.35rem", fontSize: "0.88rem" }}>
                               <strong>{inv.invited_by_display_name}</strong> invited you to join <strong>{inv.club_name}</strong>
                             </p>
-                            <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.4rem" }}>
-                              <button
-                                onClick={() => handleAcceptInvite(inv.club_slug)}
-                                style={{ padding: "0.2rem 0.7rem", fontSize: "0.8rem", cursor: "pointer", color: "#1a6b3a", border: "1px solid #1a6b3a", background: "none", borderRadius: 4 }}
-                              >
-                                Accept
-                              </button>
-                              <button
-                                onClick={() => handleDeclineInvite(inv.club_slug)}
-                                style={{ padding: "0.2rem 0.7rem", fontSize: "0.8rem", cursor: "pointer", color: "#888", border: "1px solid #ccc", background: "none", borderRadius: 4 }}
-                              >
-                                Decline
-                              </button>
-                              <Link href={`/clubs/${inv.club_slug}`} onClick={() => setNotifOpen(false)} style={{ padding: "0.2rem 0.5rem", fontSize: "0.8rem", color: "#555", textDecoration: "none", alignSelf: "center" }}>
-                                View club →
-                              </Link>
+                            <div style={{ display: "flex", gap: "0.5rem" }}>
+                              <button onClick={() => handleAcceptInvite(inv.club_slug)} style={{ padding: "0.2rem 0.7rem", fontSize: "0.8rem", cursor: "pointer", color: "#1a6b3a", border: "1px solid #1a6b3a", background: "none", borderRadius: 4 }}>Accept</button>
+                              <button onClick={() => handleDeclineInvite(inv.club_slug)} style={{ padding: "0.2rem 0.7rem", fontSize: "0.8rem", cursor: "pointer", color: "#888", border: "1px solid #ccc", background: "none", borderRadius: 4 }}>Decline</button>
+                              <Link href={`/clubs/${inv.club_slug}`} onClick={() => setNotifOpen(false)} style={{ padding: "0.2rem 0.5rem", fontSize: "0.8rem", color: "#555", textDecoration: "none", alignSelf: "center" }}>View →</Link>
                             </div>
                           </div>
                         ))}
-                      </div>
+                      </>
                     )}
                   </div>
                 </>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Stats row */}
@@ -500,7 +549,17 @@ export default function ProfilePage() {
         {profile.is_own_profile ? (
           <div style={{ display: "flex", gap: "0.6rem", marginBottom: "1.5rem", alignItems: "center" }}>
             <button
-              onClick={() => { setEditing((v) => !v); setSaveError(null); }}
+              onClick={() => {
+                if (!editing && profile) {
+                  setEditUsername(profile.username);
+                  setEditName(profile.display_name);
+                  setEditBio(profile.bio ?? "");
+                  setEditFaculty((profile.faculty as Faculty) ?? "");
+                  setEditProgram(profile.program ?? "");
+                }
+                setEditing((v) => !v);
+                setSaveError(null);
+              }}
               style={{ padding: "0.45rem 1.1rem", borderRadius: 6, border: "1px solid #ccc", background: "#fff", cursor: "pointer", fontSize: "0.9rem" }}
             >
               {editing ? "Cancel" : "Edit profile"}
@@ -538,6 +597,25 @@ export default function ProfilePage() {
         {/* Inline edit form */}
         {editing && (
           <form onSubmit={handleSave} style={{ marginBottom: "1.5rem", padding: "1rem", border: "1px solid #e0e0e0", borderRadius: 8, background: "#fafafa", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            <div>
+              <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", color: "#555" }}>
+                Username
+                {usernameLocked && usernameNextAllowed && (
+                  <span style={{ marginLeft: "0.5rem", fontSize: "0.78rem", color: "#f0ad4e" }}>
+                    (can change again on {usernameNextAllowed.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })})
+                  </span>
+                )}
+              </label>
+              <input
+                value={editUsername}
+                onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                disabled={usernameLocked}
+                maxLength={30}
+                placeholder="letters, numbers, underscores"
+                style={{ width: "100%", boxSizing: "border-box", padding: "0.45rem 0.6rem", fontSize: "0.95rem", border: "1px solid #ccc", borderRadius: 4, fontFamily: "inherit", opacity: usernameLocked ? 0.5 : 1 }}
+              />
+              {!usernameLocked && <span style={{ fontSize: "0.75rem", color: "#bbb" }}>3–30 characters · letters, numbers, underscores only · changes locked for 30 days after saving</span>}
+            </div>
             <div>
               <label style={{ display: "block", fontSize: "0.85rem", marginBottom: "0.25rem", color: "#555" }}>Display name</label>
               <input
@@ -590,7 +668,7 @@ export default function ProfilePage() {
             {saveError && <p style={{ margin: 0, color: "crimson", fontSize: "0.88rem" }}>{saveError}</p>}
             <button
               type="submit"
-              disabled={saving || !editName.trim()}
+              disabled={saving || !editName.trim() || editUsername.trim().length < 3}
               style={{ alignSelf: "flex-start", padding: "0.45rem 1.1rem", borderRadius: 6, border: "none", background: "#111", color: "#fff", cursor: "pointer", fontSize: "0.9rem" }}
             >
               {saving ? "Saving…" : "Save"}

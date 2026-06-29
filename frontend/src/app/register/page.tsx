@@ -18,6 +18,7 @@ export default function RegisterPage() {
     display_name: "",
     password: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -113,14 +114,24 @@ export default function RegisterPage() {
           style={inputStyle}
           required
         />
-        <input
-          type="password"
-          placeholder="Password (min 8 characters)"
-          value={form.password}
-          onChange={update("password")}
-          style={inputStyle}
-          required
-        />
+
+        <div style={{ position: "relative" }}>
+          <input
+            type={showPassword ? "text" : "password"}
+            placeholder="Password (min 8 characters)"
+            value={form.password}
+            onChange={update("password")}
+            style={{ ...inputStyle, paddingRight: "2.8rem" }}
+            required
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            style={{ position: "absolute", right: "0.5rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#888", fontSize: "0.82rem", padding: "0.2rem 0.3rem" }}
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
 
         {error && (
           <p style={{ color: "crimson", margin: 0, fontSize: "0.9rem" }}>

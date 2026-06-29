@@ -6,12 +6,13 @@ import { useRouter, useParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 
 interface Author {
-  username: string;
+  username: string | null;
   display_name: string;
 }
 
 interface SharedPost {
   id: string;
+  post_type: string;
   content: string | null;
   is_deleted: boolean;
   author: Author | null;
@@ -37,6 +38,8 @@ function timeLabel(iso: string): string {
 function SharedPostCard({ post, isOwn }: { post: SharedPost; isOwn: boolean }) {
   const bg = isOwn ? "rgba(255,255,255,0.15)" : "#f0f0f0";
   const color = isOwn ? "#fff" : "#333";
+  const isQA = post.post_type === "anonymous_qa";
+  const href = isQA ? `/qa/${post.id}` : `/feed/${post.id}`;
 
   if (post.is_deleted) {
     return (
@@ -47,11 +50,16 @@ function SharedPostCard({ post, isOwn }: { post: SharedPost; isOwn: boolean }) {
   }
   return (
     <Link
-      href={`/feed/${post.id}`}
+      href={href}
       style={{ display: "block", marginTop: "0.4rem", padding: "0.5rem 0.65rem", background: bg, borderRadius: 8, textDecoration: "none", color, fontSize: "0.82rem" }}
     >
-      <span style={{ fontWeight: "bold" }}>{post.author?.display_name ?? "Unknown"}</span>
-      <p style={{ margin: "0.2rem 0 0", whiteSpace: "pre-wrap", opacity: 0.85 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.2rem" }}>
+        <span style={{ fontWeight: "bold" }}>{post.author?.display_name ?? "Unknown"}</span>
+        {isQA && (
+          <span style={{ fontSize: "0.7rem", opacity: 0.65, fontStyle: "italic" }}>· Anonymous Q&A</span>
+        )}
+      </div>
+      <p style={{ margin: 0, whiteSpace: "pre-wrap", opacity: 0.85 }}>
         {(post.content ?? "").slice(0, 120)}{(post.content ?? "").length > 120 ? "…" : ""}
       </p>
     </Link>
@@ -108,6 +116,13 @@ export default function ConversationPage() {
       ws.onmessage = (event) => {
         const msg: DmMessage = JSON.parse(event.data);
         setMessages((prev) => [...prev, msg]);
+        // Mark as read immediately if the message is from the other person
+        setCurrentUsername((cu) => {
+          if (cu && msg.sender.username !== cu) {
+            apiFetch(`/api/messages/${id}/read`, { method: "POST" }).catch(() => {});
+          }
+          return cu;
+        });
       };
       ws.onclose = () => setStatus("disconnected");
       ws.onerror = () => setStatus("disconnected");
@@ -158,11 +173,6 @@ export default function ConversationPage() {
           const isOwn = msg.sender.username === currentUsername;
           return (
             <div key={msg.id} style={{ display: "flex", flexDirection: "column", alignItems: isOwn ? "flex-end" : "flex-start" }}>
-              {!isOwn && (
-                <span style={{ fontSize: "0.75rem", color: "#888", marginBottom: "0.15rem", paddingLeft: "0.25rem" }}>
-                  {msg.sender.display_name}
-                </span>
-              )}
               <div style={{
                 maxWidth: "72%",
                 padding: "0.5rem 0.75rem",
@@ -174,13 +184,15 @@ export default function ConversationPage() {
                 lineHeight: 1.4,
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
+                display: "flex",
+                flexDirection: "column",
               }}>
                 {msg.content && <span>{msg.content}</span>}
                 {msg.shared_post && <SharedPostCard post={msg.shared_post} isOwn={isOwn} />}
+                <span style={{ alignSelf: "flex-end", fontSize: "0.68rem", color: isOwn ? "rgba(255,255,255,0.5)" : "#bbb", marginTop: "0.2rem", marginLeft: "0.5rem", flexShrink: 0 }}>
+                  {timeLabel(msg.created_at)}
+                </span>
               </div>
-              <span style={{ fontSize: "0.7rem", color: "#bbb", marginTop: "0.15rem", paddingLeft: "0.25rem", paddingRight: "0.25rem" }}>
-                {timeLabel(msg.created_at)}
-              </span>
             </div>
           );
         })}

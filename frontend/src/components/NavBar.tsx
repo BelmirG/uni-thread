@@ -64,9 +64,17 @@ export default function NavBar() {
     apiFetch<{ username: string }>("/api/auth/me")
       .then((me) => setProfileHref(`/profile/${me.username}`))
       .catch(() => setProfileHref("/profile"));
-    apiFetch<{ count: number }>("/api/messages/unread-count")
-      .then((d) => setUnreadMessages(d.count))
-      .catch(() => {});
+  }, [pathname]);
+
+  useEffect(() => {
+    function fetchUnread() {
+      apiFetch<{ count: number }>("/api/messages/unread-count")
+        .then((d) => setUnreadMessages(d.count))
+        .catch(() => {});
+    }
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30_000);
+    return () => clearInterval(interval);
   }, [pathname]);
 
   if (HIDDEN_ON.includes(pathname)) return null;

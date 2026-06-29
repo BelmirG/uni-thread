@@ -1,4 +1,6 @@
+import re
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -8,12 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy import or_
 
+USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{3,30}$')
+
 from app.core.constants import FACULTIES
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.club import Club
 from app.models.club_member import ClubMember
 from app.models.follow import Follow
+from app.models.notification import Notification
 from app.models.post import Post
 from app.models.user import User
 from app.routers.posts import _build_post_select, _row_to_response, _user_votes
@@ -25,6 +30,7 @@ FacultyLiteral = Optional[Literal['FMS', 'FENS', 'FASS', 'FBA', 'FLW', 'FEDU']]
 
 
 class UpdateProfileRequest(BaseModel):
+    username: Optional[str] = Field(default=None, min_length=3, max_length=30)
     display_name: str = Field(min_length=1, max_length=100)
     bio: str = Field(default="", max_length=300)
     faculty: FacultyLiteral = None
@@ -113,6 +119,32 @@ async def update_profile(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    username_changed = False
+
+    if body.username is not None:
+        new_username = body.username.strip()
+        if new_username != current_user.username:
+            if not USERNAME_RE.match(new_username):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Username can only contain letters, numbers, and underscores (3–30 characters).",
+                )
+            if current_user.username_changed_at:
+                next_allowed = current_user.username_changed_at + timedelta(days=30)
+                if datetime.now(timezone.utc) < next_allowed:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"You can change your username again on {next_allowed.strftime('%B %d, %Y')}.",
+                    )
+            taken = (await db.execute(
+                select(User).where(User.username == new_username, User.id != current_user.id)
+            )).scalar_one_or_none()
+            if taken:
+                raise HTTPException(status_code=400, detail="That username is already taken.")
+            current_user.username = new_username
+            current_user.username_changed_at = datetime.now(timezone.utc)
+            username_changed = True
+
     current_user.display_name = body.display_name.strip()
     current_user.bio = body.bio.strip() or None
     current_user.faculty = body.faculty or None
@@ -128,6 +160,8 @@ async def update_profile(
         "faculty": current_user.faculty,
         "program": current_user.program,
         "avatar_url": current_user.avatar_url,
+        "username_changed": username_changed,
+        "username_changed_at": current_user.username_changed_at.isoformat() if current_user.username_changed_at else None,
     }
 
 
@@ -179,6 +213,7 @@ async def get_profile(
         "following_count": following_count,
         "is_following": is_following,
         "is_own_profile": target.id == current_user.id,
+        "username_changed_at": target.username_changed_at.isoformat() if target.username_changed_at else None,
     }
 
 
@@ -303,6 +338,19 @@ async def follow_user(
 
     if not existing:
         db.add(Follow(follower_id=current_user.id, following_id=target.id))
+        # Upsert a follow notification — unique constraint handles re-follows
+        existing_notif = (await db.execute(
+            select(Notification).where(
+                Notification.user_id == target.id,
+                Notification.actor_id == current_user.id,
+                Notification.type == "follow",
+            )
+        )).scalar_one_or_none()
+        if existing_notif:
+            existing_notif.is_read = False
+            existing_notif.created_at = datetime.now(timezone.utc)
+        else:
+            db.add(Notification(user_id=target.id, actor_id=current_user.id, type="follow"))
         await db.commit()
 
 

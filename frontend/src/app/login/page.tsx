@@ -8,6 +8,7 @@ import { apiFetch } from "@/lib/api";
 export default function LoginPage() {
   const router = useRouter();
   const [form, setForm] = useState({ email: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -25,7 +26,6 @@ export default function LoginPage() {
         method: "POST",
         body: JSON.stringify(form),
       });
-      // On success the backend set the httpOnly cookie.
       router.push("/feed");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed.");
@@ -59,14 +59,24 @@ export default function LoginPage() {
           style={inputStyle}
           required
         />
-        <input
-          type="password"
-          placeholder="Password"
-          value={form.password}
-          onChange={update("password")}
-          style={inputStyle}
-          required
-        />
+
+        <div style={{ position: "relative" }}>
+          <input
+            type={showPassword ? "text" : "password"}
+            placeholder="Password"
+            value={form.password}
+            onChange={update("password")}
+            style={{ ...inputStyle, paddingRight: "2.8rem" }}
+            required
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            style={{ position: "absolute", right: "0.5rem", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#888", fontSize: "0.82rem", padding: "0.2rem 0.3rem" }}
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
 
         {error && (
           <p style={{ color: "crimson", margin: 0, fontSize: "0.9rem" }}>

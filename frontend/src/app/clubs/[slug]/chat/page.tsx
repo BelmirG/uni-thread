@@ -109,7 +109,7 @@ export default function ClubChatPage() {
   };
 
   return (
-    <main style={{ display: "flex", flexDirection: "column", height: "100vh", maxWidth: 700, margin: "0 auto" }}>
+    <main style={{ position: "fixed", top: 0, bottom: 60, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 700, display: "flex", flexDirection: "column" }}>
       {/* Header */}
       <div style={{ padding: "0.75rem 1rem", borderBottom: "1px solid #e0e0e0", background: "#fff", display: "flex", alignItems: "center", gap: "0.75rem" }}>
         <Link href={`/clubs/${slug}`} style={{ fontSize: "0.9rem", color: "#555", textDecoration: "none" }}>← {clubName || "Club"}</Link>
@@ -155,12 +155,14 @@ export default function ClubChatPage() {
                 lineHeight: 1.4,
                 whiteSpace: "pre-wrap",
                 wordBreak: "break-word",
+                display: "flex",
+                flexDirection: "column",
               }}>
-                {msg.content}
+                <span>{msg.content}</span>
+                <span style={{ alignSelf: "flex-end", fontSize: "0.68rem", color: isOwn ? "rgba(255,255,255,0.5)" : "#bbb", marginTop: "0.2rem", marginLeft: "0.5rem", flexShrink: 0 }}>
+                  {timeLabel(msg.created_at)}
+                </span>
               </div>
-              <span style={{ fontSize: "0.7rem", color: "#bbb", marginTop: "0.15rem", paddingLeft: "0.25rem", paddingRight: "0.25rem" }}>
-                {timeLabel(msg.created_at)}
-              </span>
             </div>
           );
         })}

@@ -6,6 +6,7 @@ import { useRouter, useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
+import UserSearchInput from "@/components/UserSearchInput";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -110,6 +111,7 @@ function AnswerNode({ node, depth }: { node: TreeNode; depth: number }) {
                 onClick={() => ctx.onStartReply(p.id)}
                 style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: isReplying ? "#111" : "#888", fontWeight: isReplying ? "600" : "normal", fontSize: "0.82rem" }}
               >💬 Reply</button>
+              <SharePanel postId={p.id} />
             </div>
           </>
         )}
@@ -154,6 +156,70 @@ function AnswerNode({ node, depth }: { node: TreeNode; depth: number }) {
         )}
       </div>
     </div>
+  );
+}
+
+// ── share panel ───────────────────────────────────────────────────────────────
+
+function SharePanel({ postId }: { postId: string }) {
+  const [open, setOpen] = useState(false);
+  const [username, setUsername] = useState("");
+  const [msg, setMsg] = useState("");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  function close() { setOpen(false); setUsername(""); setMsg(""); setStatus("idle"); setError(null); }
+
+  async function handleShare(e: React.FormEvent) {
+    e.preventDefault();
+    if (!username.trim()) return;
+    setStatus("sending");
+    setError(null);
+    try {
+      await apiFetch("/api/messages/share", {
+        method: "POST",
+        body: JSON.stringify({ recipient_username: username.trim(), post_id: postId, content: msg.trim() }),
+      });
+      setStatus("sent");
+      setTimeout(close, 1500);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Could not share.");
+      setStatus("error");
+    }
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#888", fontSize: "0.82rem" }}
+      >
+        ↗ Share
+      </button>
+      {open && (
+        <>
+          <div onClick={close} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 200 }} />
+          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(360px, 90vw)", background: "#fff", borderRadius: 12, padding: "1.25rem", zIndex: 201, boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+              <span style={{ fontWeight: 600, fontSize: "1rem" }}>Share via message</span>
+              <button onClick={close} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.4rem", color: "#999", lineHeight: 1, padding: 0 }}>×</button>
+            </div>
+            <form onSubmit={handleShare} style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+              <UserSearchInput value={username} onChange={setUsername} onSelect={(u) => setUsername(u)} placeholder="Search by name or username" />
+              <input value={msg} onChange={(e) => setMsg(e.target.value)} placeholder="Add a message (optional)" style={{ padding: "0.5rem 0.6rem", fontSize: "0.9rem", border: "1px solid #ccc", borderRadius: 6, fontFamily: "inherit" }} />
+              {error && <p style={{ margin: 0, fontSize: "0.82rem", color: "crimson" }}>{error}</p>}
+              {status === "sent" && <p style={{ margin: 0, fontSize: "0.88rem", color: "#1a6b3a" }}>Sent!</p>}
+              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
+                <button type="submit" disabled={status === "sending" || status === "sent" || !username.trim()} style={{ flex: 1, padding: "0.5rem", fontSize: "0.9rem", cursor: "pointer", background: "#111", color: "#fff", border: "none", borderRadius: 6 }}>
+                  {status === "sending" ? "Sending…" : "Send"}
+                </button>
+                <button type="button" onClick={close} style={{ padding: "0.5rem 1rem", fontSize: "0.9rem", cursor: "pointer", background: "none", border: "1px solid #ccc", borderRadius: 6 }}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </>
+      )}
+    </>
   );
 }
 
@@ -298,9 +364,10 @@ export default function QADetailPage() {
           {question.content && (
             <p style={{ margin: "0 0 0.75rem", whiteSpace: "pre-wrap", lineHeight: 1.5, fontSize: "1.05rem" }}>{question.content}</p>
           )}
-          <div style={{ display: "flex", gap: "1rem", fontSize: "0.9rem" }}>
+          <div style={{ display: "flex", gap: "1rem", fontSize: "0.9rem", alignItems: "center" }}>
             <button onClick={() => handleVote(question.id, "up")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: question.current_user_vote === "up" ? "#e05c00" : "#555", fontWeight: question.current_user_vote === "up" ? "bold" : "normal" }}>▲ {question.upvotes}</button>
             <button onClick={() => handleVote(question.id, "down")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: question.current_user_vote === "down" ? "#5555dd" : "#555", fontWeight: question.current_user_vote === "down" ? "bold" : "normal" }}>▼ {question.downvotes}</button>
+            <SharePanel postId={question.id} />
           </div>
         </div>
 

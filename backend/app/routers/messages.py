@@ -50,14 +50,21 @@ def _build_msg_payload(
 ) -> dict:
     shared = None
     if shared_post is not None:
+        is_anon = shared_post.author_id is None
+        if shared_post.is_deleted:
+            author_info = None
+        elif is_anon:
+            author_info = {"username": None, "display_name": "Anonymous"}
+        elif post_author:
+            author_info = {"username": post_author.username, "display_name": post_author.display_name}
+        else:
+            author_info = None
         shared = {
             "id": str(shared_post.id),
+            "post_type": shared_post.post_type,
             "content": shared_post.content if not shared_post.is_deleted else None,
             "is_deleted": shared_post.is_deleted,
-            "author": {
-                "username": post_author.username if post_author else "?",
-                "display_name": post_author.display_name if post_author else "?",
-            } if not shared_post.is_deleted else None,
+            "author": author_info,
         }
     return {
         "id": str(msg.id),
@@ -269,6 +276,34 @@ async def unread_count(
         )
     )).scalar() or 0
     return {"count": count}
+
+
+@router.post("/{conversation_id}/read")
+async def mark_read(
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        conv_id = uuid.UUID(conversation_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Not found.")
+    conv = (await db.execute(
+        select(Conversation).where(Conversation.id == conv_id)
+    )).scalar_one_or_none()
+    if not conv or (conv.user1_id != current_user.id and conv.user2_id != current_user.id):
+        raise HTTPException(status_code=403, detail="Access denied.")
+    await db.execute(
+        update(DirectMessage)
+        .where(
+            DirectMessage.conversation_id == conv_id,
+            DirectMessage.sender_id != current_user.id,
+            DirectMessage.is_read == False,
+        )
+        .values(is_read=True)
+    )
+    await db.commit()
+    return {"ok": True}
 
 
 @router.get("/{conversation_id}")
