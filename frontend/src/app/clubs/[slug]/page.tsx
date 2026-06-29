@@ -11,6 +11,21 @@ import PollComposer, { PollDraft } from "@/components/PollComposer";
 import PollDisplay from "@/components/PollDisplay";
 import MiniAvatar from "@/components/MiniAvatar";
 import { timeAgo } from "@/lib/timeAgo";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import {
+  ArrowLeft,
+  ChevronUp,
+  ChevronDown,
+  MessageCircle,
+  Trash2,
+  MoreVertical,
+  X,
+  Users,
+  UserPlus,
+  Pin,
+  MessageSquare,
+} from "lucide-react";
 
 interface Club {
   id: string;
@@ -330,13 +345,18 @@ export default function ClubDetailPage() {
     }
   }
 
-  if (loading) return <p style={{ padding: "2rem", color: "#888" }}>Loading…</p>;
+  if (loading) {
+    return <p className="text-muted-foreground text-sm text-center py-16">Loading…</p>;
+  }
 
   if (pageError) {
     return (
-      <main style={{ maxWidth: 640, margin: "0 auto", padding: "1.5rem 1rem" }}>
-        <Link href="/clubs" style={{ fontSize: "0.9rem" }}>← Clubs</Link>
-        <div style={{ marginTop: "1.5rem", padding: "1rem", border: "1px solid #f5c6cb", borderRadius: 8, background: "#fff5f5", color: "crimson" }}>
+      <main className="max-w-xl mx-auto px-4 pt-4">
+        <Link href="/clubs" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors no-underline mb-4">
+          <ArrowLeft className="w-4 h-4" />
+          Clubs
+        </Link>
+        <div className="p-4 rounded-xl border border-destructive/30 bg-destructive/5 text-destructive text-sm">
           <strong>Could not load club:</strong> {pageError}
         </div>
       </main>
@@ -345,389 +365,513 @@ export default function ClubDetailPage() {
 
   if (!club) return null;
 
-  const roleColor: Record<string, string> = { owner: "#7b2d8b", moderator: "#1a6b3a", member: "#555" };
+  const isMod = club.role && ["owner", "moderator"].includes(club.role);
 
   return (
     <>
-    <main style={{ maxWidth: 640, margin: "0 auto", padding: "1.5rem 1rem 5rem" }}>
-      {/* Back link + chat shortcut */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <Link href="/clubs" style={{ fontSize: "0.9rem" }}>← Clubs</Link>
-        {club.is_member && (
+      <main className="max-w-xl mx-auto px-4 pt-4 pb-36">
+        {/* Back link + chat */}
+        <div className="flex items-center justify-between mb-4">
           <Link
-            href={`/clubs/${slug}/chat`}
-            style={{ fontSize: "0.9rem", padding: "0.3rem 0.8rem", border: "1px solid #ccc", borderRadius: 16, textDecoration: "none", color: "#333" }}
+            href="/clubs"
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors no-underline"
           >
-            💬 Chat
+            <ArrowLeft className="w-4 h-4" />
+            Clubs
           </Link>
-        )}
-      </div>
-
-      {/* Club header */}
-      <div style={{ border: "1px solid #e0e0e0", borderRadius: 8, padding: "1rem", margin: "1rem 0 1.5rem", background: "#fff" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
-          <div style={{ flex: 1 }}>
-            <h1 style={{ margin: "0 0 0.25rem", fontSize: "1.4rem" }}>
-              {club.name}
-              {club.is_private && (
-                <span style={{ marginLeft: "0.5rem", fontSize: "0.75rem", color: "#888", background: "#f0f0f0", padding: "0.15rem 0.4rem", borderRadius: 4, fontWeight: "normal" }}>
-                  Private
-                </span>
-              )}
-            </h1>
-            <div style={{ fontSize: "0.85rem", color: "#888" }}>
-              {club.member_count} {club.member_count === 1 ? "member" : "members"}
-              {club.role && (
-                <span style={{ marginLeft: "0.5rem", color: roleColor[club.role] ?? "#555" }}>
-                  · {club.role}
-                </span>
-              )}
-            </div>
-            {club.description && (
-              <p style={{ margin: "0.5rem 0 0", color: "#555", fontSize: "0.95rem" }}>{club.description}</p>
-            )}
-          </div>
-
-          {/* Actions */}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-            {!club.is_member && !club.has_pending_request && (
-              <button onClick={handleJoin} style={{ padding: "0.4rem 1rem", cursor: "pointer" }}>
-                {club.is_private ? "Request to join" : "Join"}
-              </button>
-            )}
-            {club.has_pending_request && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.25rem" }}>
-                <span style={{ fontSize: "0.85rem", color: "#888" }}>Request pending…</span>
-                <button onClick={handleCancelRequest} style={{ fontSize: "0.8rem", color: "#aaa", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                  Cancel
-                </button>
-              </div>
-            )}
-
-            {/* ⋮ menu */}
-            <div style={{ position: "relative" }}>
-              <button
-                onClick={() => setMenuOpen((o) => !o)}
-                style={{ background: "none", border: "1px solid #e0e0e0", borderRadius: 6, cursor: "pointer", padding: "0.3rem 0.6rem", fontSize: "1.1rem", color: "#555", lineHeight: 1 }}
-              >
-                ⋮
-              </button>
-
-              {menuOpen && (
-                <>
-                  <div onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 199 }} />
-                  <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 170, zIndex: 200, overflow: "hidden" }}>
-                    <button
-                      onClick={() => { setMenuOpen(false); showMembers ? setShowMembers(false) : loadMembers(); }}
-                      style={{ display: "block", width: "100%", textAlign: "left", padding: "0.65rem 1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem", color: "#333" }}
-                    >
-                      {showMembers ? "Hide members" : "Members"}
-                    </button>
-
-                    {club.role && ["owner", "moderator"].includes(club.role) && (
-                      <>
-                        <button
-                          onClick={() => { setMenuOpen(false); showRequests ? setShowRequests(false) : loadJoinRequests(); }}
-                          style={{ display: "block", width: "100%", textAlign: "left", padding: "0.65rem 1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem", color: "#333", borderTop: "1px solid #f0f0f0" }}
-                        >
-                          {showRequests ? "Hide requests" : "Join requests"}
-                        </button>
-                        <button
-                          onClick={() => { setMenuOpen(false); setInviteOpen((o) => !o); setInviteMsg(null); }}
-                          style={{ display: "block", width: "100%", textAlign: "left", padding: "0.65rem 1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem", color: "#333", borderTop: "1px solid #f0f0f0" }}
-                        >
-                          Invite member
-                        </button>
-                      </>
-                    )}
-
-                    {club.is_member && (
-                      <button
-                        onClick={() => { setMenuOpen(false); handleLeave(); }}
-                        style={{ display: "block", width: "100%", textAlign: "left", padding: "0.65rem 1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem", color: "#555", borderTop: "1px solid #f0f0f0" }}
-                      >
-                        Leave club
-                      </button>
-                    )}
-
-                    {club.role === "owner" && (
-                      <button
-                        onClick={() => { setMenuOpen(false); handleDelete(); }}
-                        style={{ display: "block", width: "100%", textAlign: "left", padding: "0.65rem 1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem", color: "crimson", borderTop: "1px solid #f0f0f0" }}
-                      >
-                        Delete club
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+          {club.is_member && (
+            <Link
+              href={`/clubs/${slug}/chat`}
+              className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-muted transition-colors no-underline text-foreground"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              Chat
+            </Link>
+          )}
         </div>
 
-        {/* Join requests (owner/moderator only) */}
-        {showRequests && (
-          <div style={{ marginTop: "0.75rem", borderTop: "1px solid #eee", paddingTop: "0.75rem" }}>
-            <strong style={{ fontSize: "0.88rem" }}>Pending join requests</strong>
-            {joinRequests.length === 0 ? (
-              <p style={{ color: "#aaa", margin: "0.4rem 0 0", fontSize: "0.88rem" }}>No pending requests.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginTop: "0.4rem" }}>
-                {joinRequests.map((r) => (
-                  <div key={r.username} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.88rem" }}>
-                    <span><strong>{r.display_name}</strong> @{r.username}</span>
-                    <div style={{ display: "flex", gap: "0.5rem" }}>
-                      <button
-                        onClick={() => handleApprove(r.username)}
-                        style={{ padding: "0.2rem 0.6rem", fontSize: "0.82rem", cursor: "pointer", color: "#1a6b3a", border: "1px solid #1a6b3a", background: "none", borderRadius: 4 }}
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => handleReject(r.username)}
-                        style={{ padding: "0.2rem 0.6rem", fontSize: "0.82rem", cursor: "pointer", color: "#888", border: "1px solid #ccc", background: "none", borderRadius: 4 }}
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Member list */}
-        {showMembers && (
-          <div style={{ marginTop: "0.75rem", borderTop: "1px solid #eee", paddingTop: "0.75rem" }}>
-            {members.length === 0 ? (
-              <p style={{ color: "#aaa", margin: 0, fontSize: "0.88rem" }}>No members yet.</p>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
-                {members.map((m) => (
-                  <div key={m.username} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.88rem" }}>
-                    <span><strong>{m.display_name}</strong> @{m.username}</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span style={{ color: roleColor[m.role] ?? "#888" }}>{m.role === "owner" ? "Admin" : m.role}</span>
-                      {club.role === "owner" && m.role !== "owner" && (
-                        <>
-                          {m.role === "member" && (
-                            <button
-                              onClick={() => handleRoleChange(m.username, "moderator")}
-                              style={{ background: "none", border: "1px solid #1a6b3a", borderRadius: 4, cursor: "pointer", color: "#1a6b3a", fontSize: "0.75rem", padding: "0.1rem 0.4rem" }}
-                            >
-                              Make Mod
-                            </button>
-                          )}
-                          {m.role === "moderator" && (
-                            <>
-                              <button
-                                onClick={() => handleRoleChange(m.username, "owner")}
-                                style={{ background: "none", border: "1px solid #7b2d8b", borderRadius: 4, cursor: "pointer", color: "#7b2d8b", fontSize: "0.75rem", padding: "0.1rem 0.4rem" }}
-                              >
-                                Make Admin
-                              </button>
-                              <button
-                                onClick={() => handleRoleChange(m.username, "member")}
-                                style={{ background: "none", border: "1px solid #ccc", borderRadius: 4, cursor: "pointer", color: "#888", fontSize: "0.75rem", padding: "0.1rem 0.4rem" }}
-                              >
-                                Demote
-                              </button>
-                            </>
-                          )}
-                          <button
-                            onClick={() => handleRemoveMember(m.username)}
-                            style={{ background: "none", border: "none", cursor: "pointer", color: "#ccc", fontSize: "0.82rem", padding: 0 }}
-                          >
-                            Remove
-                          </button>
-                        </>
+        {/* Club header card */}
+        <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden mb-4">
+          <div className="px-4 pt-4 pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                  <h1 className="text-lg font-bold text-foreground">{club.name}</h1>
+                  {club.is_private && (
+                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                      Private
+                    </span>
+                  )}
+                  {club.role && (
+                    <span
+                      className={cn(
+                        "text-[10px] font-semibold px-1.5 py-0.5 rounded",
+                        club.role === "owner"
+                          ? "bg-purple-100 text-purple-700"
+                          : club.role === "moderator"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-muted text-muted-foreground"
                       )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {!club.is_member && (
-        <p style={{ color: "#888", fontSize: "0.9rem", marginBottom: "1.5rem" }}>
-          Join this club to post here.
-        </p>
-      )}
-
-      {/* Posts */}
-      {posts.length === 0 && <p style={{ color: "#888" }}>No posts yet. Be the first!</p>}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-        {posts.map((post) => (
-          <div
-            key={post.id}
-            style={{ border: post.is_pinned ? "1px solid #d0a0e0" : "1px solid #e0e0e0", borderRadius: 8, padding: "1rem", background: "#fff" }}
-          >
-            {post.is_pinned && (
-              <div style={{ fontSize: "0.75rem", color: "#7b2d8b", fontWeight: 600, marginBottom: "0.35rem" }}>📌 Pinned</div>
-            )}
-            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-              {post.author
-                ? <Link href={`/profile/${post.author.username}`} style={{ flexShrink: 0 }}><MiniAvatar name={post.author.display_name} url={post.author.avatar_url} /></Link>
-                : <MiniAvatar name="?" url={null} />}
-              <div style={{ fontSize: "0.82rem", color: "#888" }}>
-                {post.author
-                  ? <><Link href={`/profile/${post.author.username}`} style={{ color: "inherit", textDecoration: "none" }}><strong style={{ color: "#444" }}>{post.author.display_name}</strong> @{post.author.username}</Link></>
-                  : <em>Unknown</em>}
-                {" · "}{timeAgo(post.created_at)}
-              </div>
-            </div>
-            <ImageGrid urls={post.image_urls ?? []} />
-            {post.content && (
-              <p style={{ margin: "0 0 0.75rem", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
-                {post.content}
-              </p>
-            )}
-            {post.poll && (
-              <PollDisplay
-                postId={post.id}
-                poll={post.poll}
-                onUpdate={(p) => setPosts((prev) => prev.map((x) => x.id === post.id ? { ...x, poll: p } : x))}
-              />
-            )}
-            <div style={{ display: "flex", gap: "1rem", alignItems: "center", fontSize: "0.9rem" }}>
-              <button
-                onClick={() => handleVote(post.id, "up")}
-                style={{
-                  background: "none", border: "none", cursor: "pointer", padding: 0,
-                  color: post.current_user_vote === "up" ? "#e05c00" : "#555",
-                  fontWeight: post.current_user_vote === "up" ? "bold" : "normal",
-                }}
-              >
-                ▲ {post.upvotes}
-              </button>
-              <button
-                onClick={() => handleVote(post.id, "down")}
-                style={{
-                  background: "none", border: "none", cursor: "pointer", padding: 0,
-                  color: post.current_user_vote === "down" ? "#5555dd" : "#555",
-                  fontWeight: post.current_user_vote === "down" ? "bold" : "normal",
-                }}
-              >
-                ▼ {post.downvotes}
-              </button>
-              <Link href={`/feed/${post.id}`} style={{ color: "#555", textDecoration: "none" }}>
-                💬 {post.reply_count} {post.reply_count === 1 ? "reply" : "replies"}
-              </Link>
-              <div style={{ marginLeft: "auto", display: "flex", gap: "0.75rem", alignItems: "center" }}>
-                {club.role && ["owner", "moderator"].includes(club.role) && (
-                  post.is_pinned
-                    ? <button onClick={() => handleUnpinPost(post.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#7b2d8b", fontSize: "0.85rem" }}>Unpin</button>
-                    : <button onClick={() => handlePinPost(post.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#aaa", fontSize: "0.85rem" }}>📌 Pin</button>
-                )}
-                {(post.author?.username === currentUsername || club.role === "owner") && (
-                  <button
-                    onClick={() => handleDeletePost(post.id)}
-                    style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#ccc", fontSize: "0.85rem" }}
-                  >
-                    Delete
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {total > posts.length && (
-        <p style={{ color: "#888", textAlign: "center", marginTop: "1rem" }}>
-          Showing {posts.length} of {total} posts
-        </p>
-      )}
-    </main>
-
-    {club.is_member && (
-      <>
-        {/* Fixed compose bar */}
-        <div style={{ position: "fixed", bottom: 60, left: 0, right: 0, background: "#fff", borderTop: "1px solid #e8e8e8", padding: "0.5rem 1rem", zIndex: 50 }}>
-          <div
-            onClick={() => setComposerOpen(true)}
-            style={{ maxWidth: 640, margin: "0 auto", display: "flex", alignItems: "center", padding: "0.6rem 1rem", borderRadius: 20, background: "#f5f5f5", cursor: "text", color: "#aaa", fontSize: "0.95rem" }}
-          >
-            Post in {club.name}…
-          </div>
-        </div>
-
-        {composerOpen && (
-          <>
-            <div onClick={() => { setComposerOpen(false); setPollDraft(null); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 100 }} />
-            <div style={{ position: "fixed", bottom: 60, left: "50%", transform: "translateX(-50%)", width: "min(600px, 94vw)", background: "#fff", borderRadius: 16, padding: "1rem 1rem 1.5rem", zIndex: 101, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 4px 32px rgba(0,0,0,0.18)" }}>
-              <div style={{ maxWidth: 640, margin: "0 auto" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                  <span style={{ fontWeight: "600", fontSize: "1rem" }}>Post in {club.name}</span>
-                  <button onClick={() => { setComposerOpen(false); setPollDraft(null); }} style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.5rem", color: "#999", lineHeight: 1, padding: "0 0.2rem" }}>×</button>
-                </div>
-                <form onSubmit={handlePost}>
-                  <textarea
-                    autoFocus
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    placeholder={`Post in ${club.name}…`}
-                    rows={4}
-                    style={{ width: "100%", boxSizing: "border-box", padding: "0.6rem", fontSize: "0.95rem", border: "1px solid #ccc", borderRadius: 4, fontFamily: "inherit", resize: "vertical" }}
-                  />
-                  <ImageUploader
-                    key={uploaderKey}
-                    onUrlsChange={(urls, uploading) => { setImageUrls(urls); setImagesUploading(uploading); }}
-                  />
-                  <PollComposer value={pollDraft} onChange={setPollDraft} />
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.5rem" }}>
-                    {postError && <p style={{ color: "crimson", margin: 0, fontSize: "0.9rem" }}>{postError}</p>}
-                    <button
-                      type="submit"
-                      disabled={submitting || imagesUploading || (!content.trim() && !imageUrls.length && !pollDraft)}
-                      style={{ marginLeft: "auto", padding: "0.5rem 1.2rem", cursor: "pointer" }}
                     >
-                      {imagesUploading ? "Uploading…" : submitting ? "Posting…" : "Post"}
+                      {club.role}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Users className="w-3 h-3" />
+                  {club.member_count} {club.member_count === 1 ? "member" : "members"}
+                </div>
+                {club.description && (
+                  <p className="text-sm text-muted-foreground mt-1.5">{club.description}</p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {!club.is_member && !club.has_pending_request && (
+                  <Button size="sm" onClick={handleJoin}>
+                    {club.is_private ? "Request to join" : "Join"}
+                  </Button>
+                )}
+                {club.has_pending_request && (
+                  <div className="flex flex-col items-end gap-0.5">
+                    <span className="text-xs text-muted-foreground">Request pending…</span>
+                    <button
+                      onClick={handleCancelRequest}
+                      className="text-[10px] text-muted-foreground/60 hover:text-foreground transition-colors"
+                    >
+                      Cancel
                     </button>
                   </div>
-                </form>
+                )}
+
+                {/* ⋮ menu */}
+                <div className="relative">
+                  <button
+                    onClick={() => setMenuOpen((o) => !o)}
+                    className="p-1.5 rounded-lg border border-border hover:bg-muted text-muted-foreground transition-colors"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                  {menuOpen && (
+                    <>
+                      <div onClick={() => setMenuOpen(false)} className="fixed inset-0 z-[199]" />
+                      <div className="absolute right-0 top-[calc(100%+4px)] bg-white border border-border rounded-xl shadow-lg min-w-[170px] z-[200] overflow-hidden">
+                        <button
+                          onClick={() => {
+                            setMenuOpen(false);
+                            showMembers ? setShowMembers(false) : loadMembers();
+                          }}
+                          className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
+                        >
+                          <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                          {showMembers ? "Hide members" : "Members"}
+                        </button>
+                        {isMod && (
+                          <>
+                            <button
+                              onClick={() => {
+                                setMenuOpen(false);
+                                showRequests ? setShowRequests(false) : loadJoinRequests();
+                              }}
+                              className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted border-t border-border/60 transition-colors"
+                            >
+                              <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                              {showRequests ? "Hide requests" : "Join requests"}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setMenuOpen(false);
+                                setInviteOpen((o) => !o);
+                                setInviteMsg(null);
+                              }}
+                              className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted border-t border-border/60 transition-colors"
+                            >
+                              <UserPlus className="w-3.5 h-3.5 text-muted-foreground" />
+                              Invite member
+                            </button>
+                          </>
+                        )}
+                        {club.is_member && (
+                          <button
+                            onClick={() => { setMenuOpen(false); handleLeave(); }}
+                            className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-muted-foreground hover:bg-muted border-t border-border/60 transition-colors"
+                          >
+                            Leave club
+                          </button>
+                        )}
+                        {club.role === "owner" && (
+                          <button
+                            onClick={() => { setMenuOpen(false); handleDelete(); }}
+                            className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-destructive hover:bg-destructive/5 border-t border-border/60 transition-colors"
+                          >
+                            Delete club
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          </>
-        )}
-      </>
-    )}
-
-    {/* Invite overlay */}
-    {inviteOpen && (
-      <>
-        <div onClick={() => { setInviteOpen(false); setInviteMsg(null); setInviteUsername(""); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200 }} />
-        <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "min(400px, 90vw)", background: "#fff", borderRadius: 12, padding: "1.25rem", zIndex: 201, boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-            <span style={{ fontWeight: 700, fontSize: "1rem" }}>Invite a member</span>
-            <button onClick={() => { setInviteOpen(false); setInviteMsg(null); setInviteUsername(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "#999", fontSize: "1.4rem", lineHeight: 1 }}>×</button>
           </div>
-          <form onSubmit={handleInvite}>
-            <UserSearchInput
-              value={inviteUsername}
-              onChange={setInviteUsername}
-              onSelect={(u) => setInviteUsername(u)}
-              placeholder="Search by name or username…"
-            />
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginTop: "0.75rem" }}>
-              <button type="submit" disabled={inviting || !inviteUsername.trim()} style={{ padding: "0.4rem 1rem", cursor: "pointer", fontSize: "0.9rem" }}>
-                {inviting ? "Sending…" : "Send invite"}
-              </button>
-              {inviteMsg && (
-                <span style={{ fontSize: "0.85rem", color: inviteMsg.startsWith("Invitation sent") ? "#1a6b3a" : "crimson" }}>
-                  {inviteMsg}
-                </span>
+
+          {/* Join requests */}
+          {showRequests && (
+            <div className="border-t border-border/60 px-4 py-3">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Pending join requests</p>
+              {joinRequests.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No pending requests.</p>
+              ) : (
+                <div className="space-y-2">
+                  {joinRequests.map((r) => (
+                    <div key={r.username} className="flex items-center justify-between gap-2 text-sm">
+                      <span>
+                        <strong>{r.display_name}</strong>{" "}
+                        <span className="text-muted-foreground">@{r.username}</span>
+                      </span>
+                      <div className="flex gap-1.5">
+                        <Button size="sm" onClick={() => handleApprove(r.username)}>Approve</Button>
+                        <Button size="sm" variant="outline" onClick={() => handleReject(r.username)}>Reject</Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-          </form>
+          )}
+
+          {/* Members list */}
+          {showMembers && (
+            <div className="border-t border-border/60 px-4 py-3">
+              {members.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No members yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {members.map((m) => (
+                    <div key={m.username} className="flex items-center justify-between gap-2">
+                      <span className="text-sm">
+                        <strong>{m.display_name}</strong>{" "}
+                        <span className="text-muted-foreground">@{m.username}</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={cn(
+                            "text-[10px] font-semibold px-1.5 py-0.5 rounded",
+                            m.role === "owner"
+                              ? "bg-purple-100 text-purple-700"
+                              : m.role === "moderator"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {m.role === "owner" ? "Admin" : m.role}
+                        </span>
+                        {club.role === "owner" && m.role !== "owner" && (
+                          <>
+                            {m.role === "member" && (
+                              <button
+                                onClick={() => handleRoleChange(m.username, "moderator")}
+                                className="text-[10px] font-medium px-1.5 py-0.5 rounded border border-green-600 text-green-700 hover:bg-green-50 transition-colors"
+                              >
+                                Make Mod
+                              </button>
+                            )}
+                            {m.role === "moderator" && (
+                              <>
+                                <button
+                                  onClick={() => handleRoleChange(m.username, "owner")}
+                                  className="text-[10px] font-medium px-1.5 py-0.5 rounded border border-purple-600 text-purple-700 hover:bg-purple-50 transition-colors"
+                                >
+                                  Make Admin
+                                </button>
+                                <button
+                                  onClick={() => handleRoleChange(m.username, "member")}
+                                  className="text-[10px] font-medium px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted transition-colors"
+                                >
+                                  Demote
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={() => handleRemoveMember(m.username)}
+                              className="text-[10px] text-muted-foreground/40 hover:text-destructive transition-colors"
+                            >
+                              Remove
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      </>
-    )}
+
+        {!club.is_member && (
+          <p className="text-muted-foreground text-sm mb-4">Join this club to post here.</p>
+        )}
+
+        {/* Posts */}
+        {posts.length === 0 && (
+          <p className="text-muted-foreground text-sm text-center py-8">No posts yet. Be the first!</p>
+        )}
+
+        <div className="space-y-3">
+          {posts.map((post) => {
+            const voted = post.current_user_vote;
+            return (
+              <div
+                key={post.id}
+                className={cn(
+                  "bg-white border rounded-xl shadow-sm overflow-hidden",
+                  post.is_pinned ? "border-purple-200" : "border-border"
+                )}
+              >
+                {post.is_pinned && (
+                  <div className="flex items-center gap-1 px-4 pt-2.5 text-[11px] font-semibold text-purple-600">
+                    <Pin className="w-3 h-3" />
+                    Pinned
+                  </div>
+                )}
+
+                {/* Author */}
+                <div className="flex items-center gap-2.5 px-4 pt-3 pb-2">
+                  {post.author ? (
+                    <Link href={`/profile/${post.author.username}`} className="flex-shrink-0">
+                      <MiniAvatar name={post.author.display_name} url={post.author.avatar_url} />
+                    </Link>
+                  ) : (
+                    <MiniAvatar name="?" url={null} />
+                  )}
+                  <div className="text-xs text-muted-foreground min-w-0">
+                    {post.author ? (
+                      <Link
+                        href={`/profile/${post.author.username}`}
+                        className="no-underline text-muted-foreground"
+                      >
+                        <strong className="text-foreground">{post.author.display_name}</strong>
+                        {" @"}{post.author.username}
+                      </Link>
+                    ) : (
+                      <em>Unknown</em>
+                    )}
+                    {" · "}{timeAgo(post.created_at)}
+                  </div>
+                </div>
+
+                {/* Images */}
+                {(post.image_urls ?? []).length > 0 && (
+                  <div className="px-4 pb-2">
+                    <ImageGrid urls={post.image_urls} />
+                  </div>
+                )}
+
+                {/* Content */}
+                {post.content && (
+                  <p className="px-4 pb-3 text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+                    {post.content}
+                  </p>
+                )}
+
+                {/* Poll */}
+                {post.poll && (
+                  <div className="px-4 pb-3">
+                    <PollDisplay
+                      postId={post.id}
+                      poll={post.poll}
+                      onUpdate={(p) =>
+                        setPosts((prev) => prev.map((x) => x.id === post.id ? { ...x, poll: p } : x))
+                      }
+                    />
+                  </div>
+                )}
+
+                {/* Action bar */}
+                <div className="flex items-center px-2 py-1 border-t border-border/60">
+                  <button
+                    onClick={() => handleVote(post.id, "up")}
+                    className={cn(
+                      "flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                      voted === "up"
+                        ? "text-orange-500"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    )}
+                  >
+                    <ChevronUp className="w-4 h-4" />
+                    {post.upvotes}
+                  </button>
+                  <button
+                    onClick={() => handleVote(post.id, "down")}
+                    className={cn(
+                      "flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                      voted === "down"
+                        ? "text-indigo-500"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    )}
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                    {post.downvotes}
+                  </button>
+                  <Link
+                    href={`/feed/${post.id}`}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors no-underline"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    {post.reply_count} {post.reply_count === 1 ? "reply" : "replies"}
+                  </Link>
+
+                  <div className="ml-auto flex items-center gap-1">
+                    {isMod && (
+                      post.is_pinned ? (
+                        <button
+                          onClick={() => handleUnpinPost(post.id)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-purple-600 hover:bg-purple-50 transition-colors"
+                        >
+                          <Pin className="w-3.5 h-3.5" />
+                          Unpin
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handlePinPost(post.id)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted transition-colors"
+                        >
+                          <Pin className="w-3.5 h-3.5" />
+                        </button>
+                      )
+                    )}
+                    {(post.author?.username === currentUsername || club.role === "owner") && (
+                      <button
+                        onClick={() => handleDeletePost(post.id)}
+                        className="flex items-center px-2.5 py-1.5 rounded-lg text-muted-foreground/40 hover:text-destructive hover:bg-destructive/5 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {total > posts.length && (
+          <p className="text-muted-foreground text-xs text-center mt-4">
+            Showing {posts.length} of {total} posts
+          </p>
+        )}
+      </main>
+
+      {/* Fixed compose bar */}
+      {club.is_member && (
+        <>
+          <div className="fixed bottom-16 left-0 right-0 px-4 py-2 bg-white/95 backdrop-blur-sm border-t border-border z-40">
+            <div className="max-w-xl mx-auto">
+              <button
+                onClick={() => setComposerOpen(true)}
+                className="w-full flex items-center gap-3 px-4 py-2.5 rounded-full bg-muted hover:bg-muted/80 transition-colors text-sm text-muted-foreground"
+              >
+                Post in {club.name}…
+              </button>
+            </div>
+          </div>
+
+          {composerOpen && (
+            <>
+              <div
+                onClick={() => { setComposerOpen(false); setPollDraft(null); }}
+                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100]"
+              />
+              <div className="fixed bottom-[4.5rem] left-1/2 -translate-x-1/2 w-[min(600px,94vw)] bg-white rounded-2xl z-[101] shadow-2xl max-h-[80vh] flex flex-col">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
+                  <span className="font-semibold text-sm">Post in {club.name}</span>
+                  <button
+                    onClick={() => { setComposerOpen(false); setPollDraft(null); }}
+                    className="rounded-full p-1 hover:bg-muted text-muted-foreground transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="overflow-y-auto flex-1">
+                  <form onSubmit={handlePost} className="px-4 py-3 space-y-3">
+                    <textarea
+                      autoFocus
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder={`Post in ${club.name}…`}
+                      rows={4}
+                      className="w-full resize-none text-sm placeholder:text-muted-foreground border-0 outline-none focus:ring-0 bg-transparent min-h-[90px]"
+                    />
+                    <div className="border-t border-border pt-3 space-y-3">
+                      <ImageUploader
+                        key={uploaderKey}
+                        onUrlsChange={(urls, uploading) => { setImageUrls(urls); setImagesUploading(uploading); }}
+                      />
+                      <PollComposer value={pollDraft} onChange={setPollDraft} />
+                      <div className="flex items-center gap-2">
+                        {postError && <p className="text-xs text-destructive">{postError}</p>}
+                        <Button
+                          type="submit"
+                          size="sm"
+                          className="ml-auto"
+                          disabled={submitting || imagesUploading || (!content.trim() && !imageUrls.length && !pollDraft)}
+                        >
+                          {imagesUploading ? "Uploading…" : submitting ? "Posting…" : "Post"}
+                        </Button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* Invite overlay */}
+      {inviteOpen && (
+        <>
+          <div
+            onClick={() => { setInviteOpen(false); setInviteMsg(null); setInviteUsername(""); }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200]"
+          />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(400px,90vw)] bg-white rounded-2xl shadow-2xl z-[201] p-5">
+            <div className="flex items-center justify-between mb-4">
+              <span className="font-semibold text-sm">Invite a member</span>
+              <button
+                onClick={() => { setInviteOpen(false); setInviteMsg(null); setInviteUsername(""); }}
+                className="rounded-full p-1 hover:bg-muted text-muted-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleInvite} className="space-y-3">
+              <UserSearchInput
+                value={inviteUsername}
+                onChange={setInviteUsername}
+                onSelect={(u) => setInviteUsername(u)}
+                placeholder="Search by name or username…"
+              />
+              <div className="flex items-center gap-2">
+                <Button type="submit" disabled={inviting || !inviteUsername.trim()}>
+                  {inviting ? "Sending…" : "Send invite"}
+                </Button>
+                {inviteMsg && (
+                  <span
+                    className={cn(
+                      "text-xs font-medium",
+                      inviteMsg.startsWith("Invitation sent") ? "text-green-600" : "text-destructive"
+                    )}
+                  >
+                    {inviteMsg}
+                  </span>
+                )}
+              </div>
+            </form>
+          </div>
+        </>
+      )}
     </>
   );
 }

@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Plus, X, Lock, Users, ChevronRight } from "lucide-react";
 
 interface Club {
   id: string;
@@ -35,7 +38,6 @@ export default function ClubsPage() {
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Create form state
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
@@ -130,173 +132,204 @@ export default function ClubsPage() {
     }
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: "100%", boxSizing: "border-box", padding: "0.5rem 0.6rem",
-    fontSize: "0.95rem", border: "1px solid #ccc", borderRadius: 4,
-    fontFamily: "inherit",
-  };
-
   return (
-    <main style={{ maxWidth: 640, margin: "0 auto", padding: "1.5rem 1rem" }}>
-      <h1 style={{ margin: "0 0 1.5rem" }}>Clubs</h1>
-
-      {/* Create club */}
-      {!showForm ? (
-        <button
-          onClick={() => setShowForm(true)}
-          style={{ marginBottom: "1.5rem", padding: "0.5rem 1.2rem", cursor: "pointer" }}
-        >
-          + Create a club
-        </button>
-      ) : (
-        <form
-          onSubmit={handleCreate}
-          style={{ border: "1px solid #ddd", borderRadius: 8, padding: "1rem", marginBottom: "1.5rem" }}
-        >
-          <h3 style={{ margin: "0 0 0.75rem" }}>New club</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Club name (e.g. Book Club)"
-              maxLength={100}
-              style={inputStyle}
-            />
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Description (optional)"
-              rows={2}
-              maxLength={500}
-              style={{ ...inputStyle, resize: "vertical" }}
-            />
-            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.9rem" }}>
-              <input
-                type="checkbox"
-                checked={isPrivate}
-                onChange={(e) => setIsPrivate(e.target.checked)}
-              />
-              Private club (only members can see posts)
-            </label>
-          </div>
-          {formError && (
-            <p style={{ color: "crimson", margin: "0.4rem 0 0", fontSize: "0.9rem" }}>{formError}</p>
-          )}
-          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
-            <button type="submit" disabled={submitting || !name.trim()} style={{ padding: "0.4rem 1rem", cursor: "pointer" }}>
-              {submitting ? "Creating…" : "Create"}
-            </button>
-            <button type="button" onClick={() => setShowForm(false)} style={{ padding: "0.4rem 1rem", cursor: "pointer" }}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* Pending invitations */}
-      {invitations.length > 0 && (
-        <div style={{ marginBottom: "1.5rem" }}>
-          <h3 style={{ margin: "0 0 0.6rem", fontSize: "0.95rem", color: "#555" }}>Pending invitations</h3>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-            {invitations.map((inv) => (
-              <div key={inv.club_slug} style={{ border: "1px solid #d0d0e8", borderRadius: 8, padding: "0.75rem 1rem", background: "#f8f8ff", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem" }}>
-                <div>
-                  <span style={{ fontWeight: 600 }}>{inv.club_name}</span>
-                  <span style={{ fontSize: "0.82rem", color: "#888", marginLeft: "0.5rem" }}>
-                    invited by {inv.invited_by_display_name}
-                  </span>
-                </div>
-                <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
-                  <button
-                    onClick={() => handleAcceptInvite(inv.club_slug)}
-                    style={{ padding: "0.25rem 0.75rem", fontSize: "0.85rem", cursor: "pointer", color: "#1a6b3a", border: "1px solid #1a6b3a", background: "none", borderRadius: 4 }}
-                  >
-                    Accept
-                  </button>
-                  <button
-                    onClick={() => handleDeclineInvite(inv.club_slug)}
-                    style={{ padding: "0.25rem 0.75rem", fontSize: "0.85rem", cursor: "pointer", color: "#888", border: "1px solid #ccc", background: "none", borderRadius: 4 }}
-                  >
-                    Decline
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Club list */}
-      {loading && <p style={{ color: "#888" }}>Loading…</p>}
-      {!loading && clubs.length === 0 && (
-        <p style={{ color: "#888" }}>No clubs yet. Create the first one!</p>
-      )}
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-        {clubs.map((club) => (
-          <div
-            key={club.id}
-            style={{ border: "1px solid #e0e0e0", borderRadius: 8, background: "#fff", overflow: "hidden" }}
+    <>
+      <main className="max-w-xl mx-auto px-4 pt-4 pb-36">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-xl font-bold text-foreground">Clubs</h1>
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
           >
-            {/* Clickable area — navigates to the club page */}
-            <Link
-              href={`/clubs/${club.slug}`}
-              style={{ display: "block", padding: "1rem", textDecoration: "none", color: "inherit" }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div>
-                  <span style={{ fontWeight: "bold", fontSize: "1.05rem" }}>{club.name}</span>
-                  {club.is_private && (
-                    <span style={{ marginLeft: "0.5rem", fontSize: "0.78rem", color: "#888", background: "#f0f0f0", padding: "0.1rem 0.4rem", borderRadius: 4 }}>
-                      Private
-                    </span>
-                  )}
-                  <div style={{ fontSize: "0.85rem", color: "#888", marginTop: "0.2rem" }}>
-                    {club.member_count} {club.member_count === 1 ? "member" : "members"}
-                    {club.role && (
-                      <span style={{ marginLeft: "0.5rem", color: "#555" }}>· {club.role}</span>
-                    )}
-                  </div>
-                  {club.description && (
-                    <p style={{ margin: "0.4rem 0 0", fontSize: "0.9rem", color: "#555" }}>{club.description}</p>
-                  )}
-                </div>
-                <span style={{ fontSize: "0.88rem", color: "#999", flexShrink: 0 }}>View →</span>
-              </div>
-            </Link>
+            <Plus className="w-3.5 h-3.5" />
+            Create
+          </button>
+        </div>
 
-            {/* Join/Leave — separate from the link so clicks don't navigate */}
-            <div style={{ borderTop: "1px solid #f0f0f0", padding: "0.5rem 1rem", display: "flex", justifyContent: "flex-end" }}>
-              {!club.is_member && !club.has_pending_request && (
-                <button
-                  onClick={() => handleJoin(club.slug)}
-                  disabled={joiningSlug === club.slug}
-                  style={{ padding: "0.3rem 0.9rem", fontSize: "0.88rem", cursor: joiningSlug === club.slug ? "default" : "pointer", opacity: joiningSlug === club.slug ? 0.6 : 1 }}
+        {/* Pending invitations */}
+        {invitations.length > 0 && (
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+              Invitations
+            </p>
+            <div className="space-y-2">
+              {invitations.map((inv) => (
+                <div
+                  key={inv.club_slug}
+                  className="bg-primary/5 border border-primary/15 rounded-xl px-4 py-3 flex items-center justify-between gap-3"
                 >
-                  {joiningSlug === club.slug ? "Joining…" : club.is_private ? "Request to join" : "Join"}
-                </button>
-              )}
-              {club.has_pending_request && (
-                <span style={{ fontSize: "0.82rem", color: "#888", padding: "0.3rem 0" }}>
-                  Request pending…
-                </span>
-              )}
-              {club.is_member && club.role !== "owner" && (
-                <button
-                  onClick={() => handleLeave(club.slug)}
-                  disabled={leavingSlug === club.slug}
-                  style={{ padding: "0.3rem 0.9rem", fontSize: "0.88rem", cursor: leavingSlug === club.slug ? "default" : "pointer", color: "#888", opacity: leavingSlug === club.slug ? 0.6 : 1 }}
-                >
-                  {leavingSlug === club.slug ? "Leaving…" : "Leave"}
-                </button>
-              )}
-              {club.is_member && club.role === "owner" && (
-                <span style={{ fontSize: "0.82rem", color: "#9b59b6", padding: "0.3rem 0" }}>You own this club</span>
-              )}
+                  <div className="min-w-0">
+                    <span className="font-semibold text-sm text-foreground">{inv.club_name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {" · "}invited by {inv.invited_by_display_name}
+                    </span>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <Button size="sm" onClick={() => handleAcceptInvite(inv.club_slug)}>
+                      Accept
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => handleDeclineInvite(inv.club_slug)}>
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
-    </main>
+        )}
+
+        {/* List */}
+        {loading && <p className="text-muted-foreground text-sm text-center py-8">Loading…</p>}
+        {!loading && clubs.length === 0 && (
+          <p className="text-muted-foreground text-sm text-center py-8">
+            No clubs yet. Create the first one!
+          </p>
+        )}
+
+        <div className="space-y-3">
+          {clubs.map((club) => (
+            <div key={club.id} className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+              <Link href={`/clubs/${club.slug}`} className="block px-4 pt-4 pb-3 no-underline">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                      <span className="font-semibold text-sm text-foreground">{club.name}</span>
+                      {club.is_private && (
+                        <span className="flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                          <Lock className="w-2.5 h-2.5" />
+                          Private
+                        </span>
+                      )}
+                      {club.role && (
+                        <span
+                          className={cn(
+                            "text-[10px] font-semibold px-1.5 py-0.5 rounded",
+                            club.role === "owner"
+                              ? "bg-purple-100 text-purple-700"
+                              : club.role === "moderator"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {club.role}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Users className="w-3 h-3" />
+                      {club.member_count} {club.member_count === 1 ? "member" : "members"}
+                    </div>
+                    {club.description && (
+                      <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">
+                        {club.description}
+                      </p>
+                    )}
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 flex-shrink-0 mt-0.5" />
+                </div>
+              </Link>
+
+              <div className="flex items-center justify-end px-4 py-2 border-t border-border/60">
+                {!club.is_member && !club.has_pending_request && (
+                  <Button
+                    size="sm"
+                    variant={club.is_private ? "outline" : "default"}
+                    onClick={() => handleJoin(club.slug)}
+                    disabled={joiningSlug === club.slug}
+                  >
+                    {joiningSlug === club.slug
+                      ? "Joining…"
+                      : club.is_private
+                      ? "Request to join"
+                      : "Join"}
+                  </Button>
+                )}
+                {club.has_pending_request && (
+                  <span className="text-xs text-muted-foreground">Request pending…</span>
+                )}
+                {club.is_member && club.role !== "owner" && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleLeave(club.slug)}
+                    disabled={leavingSlug === club.slug}
+                    className="text-muted-foreground hover:text-destructive hover:bg-destructive/5"
+                  >
+                    {leavingSlug === club.slug ? "Leaving…" : "Leave"}
+                  </Button>
+                )}
+                {club.is_member && club.role === "owner" && (
+                  <span className="text-xs font-semibold text-purple-600">You own this club</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </main>
+
+      {/* Create club sheet */}
+      {showForm && (
+        <>
+          <div
+            onClick={() => setShowForm(false)}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100]"
+          />
+          <div className="fixed bottom-[4.5rem] left-1/2 -translate-x-1/2 w-[min(600px,94vw)] bg-white rounded-2xl z-[101] shadow-2xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
+              <span className="font-semibold text-sm">New club</span>
+              <button
+                onClick={() => setShowForm(false)}
+                className="rounded-full p-1 hover:bg-muted text-muted-foreground transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              <form onSubmit={handleCreate} className="px-4 py-3 space-y-3">
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Club name (e.g. Book Club)"
+                  maxLength={100}
+                  className="w-full h-9 px-3 text-sm border border-input rounded-md bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Description (optional)"
+                  rows={2}
+                  maxLength={500}
+                  className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                />
+                <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isPrivate}
+                    onChange={(e) => setIsPrivate(e.target.checked)}
+                    className="rounded border-input"
+                  />
+                  <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+                  Private club (only members can see posts)
+                </label>
+                {formError && <p className="text-xs text-destructive">{formError}</p>}
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    type="submit"
+                    disabled={submitting || !name.trim()}
+                    className="flex-1"
+                  >
+                    {submitting ? "Creating…" : "Create club"}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </>
+      )}
+    </>
   );
 }
