@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -55,6 +56,7 @@ def _build_post_select(extra_where=None):
             Post,
             User.username,
             User.display_name,
+            User.avatar_url,
             func.count(case((Vote.vote_type == "up", 1))).label("upvotes"),
             func.count(case((Vote.vote_type == "down", 1))).label("downvotes"),
             func.count(ReplyAlias.id).label("reply_count"),
@@ -65,7 +67,7 @@ def _build_post_select(extra_where=None):
             ReplyAlias,
             and_(ReplyAlias.parent_post_id == Post.id, ReplyAlias.is_deleted == False),
         )
-        .group_by(Post.id, User.username, User.display_name)
+        .group_by(Post.id, User.username, User.display_name, User.avatar_url)
     )
     if extra_where is not None:
         stmt = stmt.where(extra_where)
@@ -86,19 +88,20 @@ async def _user_votes(
 
 
 def _row_to_post(row, current_vote: str | None) -> PostResponse:
-    post, username, display_name, upvotes, downvotes, reply_count = row
+    post, username, display_name, avatar_url, upvotes, downvotes, reply_count = row
     return PostResponse(
         id=post.id,
         content="[deleted]" if post.is_deleted else post.content,
         post_type=post.post_type,
         image_urls=post.image_urls or [],
-        author=AuthorInfo(username=username, display_name=display_name) if username else None,
+        author=AuthorInfo(username=username, display_name=display_name, avatar_url=avatar_url) if username else None,
         upvotes=upvotes or 0,
         downvotes=downvotes or 0,
         current_user_vote=current_vote,
         reply_count=reply_count or 0,
         created_at=post.created_at,
         is_deleted=post.is_deleted,
+        is_pinned=post.is_pinned,
         parent_post_id=post.parent_post_id,
     )
 
@@ -313,11 +316,38 @@ async def leave_club(
     membership = await _get_membership(club.id, current_user.id, db)
     if not membership:
         raise HTTPException(status_code=404, detail="You are not a member of this club.")
+
     if membership.role == "owner":
-        raise HTTPException(
-            status_code=400,
-            detail="Owners cannot leave their own club. Delete the club instead.",
-        )
+        # Check if there are other members who can take over
+        successor = (
+            await db.execute(
+                select(ClubMember)
+                .where(
+                    ClubMember.club_id == club.id,
+                    ClubMember.user_id != current_user.id,
+                )
+                .order_by(
+                    case(
+                        (ClubMember.role == "owner", 0),
+                        (ClubMember.role == "moderator", 1),
+                        else_=2,
+                    ),
+                    ClubMember.joined_at.asc(),
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+        if not successor:
+            raise HTTPException(
+                status_code=400,
+                detail="You are the only member. Delete the club instead of leaving.",
+            )
+
+        # Promote the successor only if there is no other owner
+        if successor.role != "owner":
+            successor.role = "owner"
+
     await db.delete(membership)
     await db.commit()
 
@@ -345,7 +375,10 @@ async def get_club_posts(
     )
     rows = (
         await db.execute(
-            _build_post_select(where).order_by(Post.created_at.desc()).limit(limit).offset(offset)
+            _build_post_select(where)
+            .order_by(Post.is_pinned.desc(), Post.created_at.desc())
+            .limit(limit)
+            .offset(offset)
         )
     ).all()
 
@@ -387,7 +420,9 @@ async def create_club_post(
         post_type="club",
         image_urls=post.image_urls or [],
         author=AuthorInfo(
-            username=current_user.username, display_name=current_user.display_name
+            username=current_user.username,
+            display_name=current_user.display_name,
+            avatar_url=current_user.avatar_url,
         ),
         upvotes=0,
         downvotes=0,
@@ -395,6 +430,7 @@ async def create_club_post(
         reply_count=0,
         created_at=post.created_at,
         is_deleted=False,
+        is_pinned=False,
         parent_post_id=None,
     )
 
@@ -526,6 +562,94 @@ async def remove_member(
         raise HTTPException(status_code=400, detail="Use the leave endpoint to leave the club yourself.")
 
     await db.delete(target_membership)
+    await db.commit()
+
+
+class UpdateMemberRoleRequest(BaseModel):
+    role: str  # "member" | "moderator" | "owner"
+
+
+@router.put("/{slug}/members/{username}/role", status_code=status.HTTP_204_NO_CONTENT)
+async def update_member_role(
+    slug: str,
+    username: str,
+    body: UpdateMemberRoleRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if body.role not in ("member", "moderator", "owner"):
+        raise HTTPException(status_code=422, detail="role must be 'member', 'moderator', or 'owner'.")
+
+    club = await _get_club_or_404(slug, db)
+    requester = await _get_membership(club.id, current_user.id, db)
+    if not requester or requester.role != "owner":
+        raise HTTPException(status_code=403, detail="Only the owner can change member roles.")
+
+    target = (
+        await db.execute(select(User).where(User.username == username))
+    ).scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if target.id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot change your own role.")
+
+    target_membership = await _get_membership(club.id, target.id, db)
+    if not target_membership:
+        raise HTTPException(status_code=404, detail="That user is not a member of this club.")
+
+    target_membership.role = body.role
+    await db.commit()
+
+
+@router.post("/{slug}/posts/{post_id}/pin", status_code=status.HTTP_204_NO_CONTENT)
+async def pin_club_post(
+    slug: str,
+    post_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    club = await _get_club_or_404(slug, db)
+    membership = await _get_membership(club.id, current_user.id, db)
+    if not membership or membership.role not in ("owner", "moderator"):
+        raise HTTPException(status_code=403, detail="Only the owner or a moderator can pin posts.")
+
+    post = await db.get(Post, post_id)
+    if not post or post.club_id != club.id or post.is_deleted:
+        raise HTTPException(status_code=404, detail="Post not found.")
+
+    if not post.is_pinned:
+        pin_count = (
+            await db.execute(
+                select(func.count(Post.id)).where(
+                    Post.club_id == club.id,
+                    Post.is_pinned == True,
+                    Post.is_deleted == False,
+                )
+            )
+        ).scalar() or 0
+        if pin_count >= 3:
+            raise HTTPException(status_code=400, detail="A club can have at most 3 pinned posts.")
+        post.is_pinned = True
+        await db.commit()
+
+
+@router.delete("/{slug}/posts/{post_id}/pin", status_code=status.HTTP_204_NO_CONTENT)
+async def unpin_club_post(
+    slug: str,
+    post_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    club = await _get_club_or_404(slug, db)
+    membership = await _get_membership(club.id, current_user.id, db)
+    if not membership or membership.role not in ("owner", "moderator"):
+        raise HTTPException(status_code=403, detail="Only the owner or a moderator can unpin posts.")
+
+    post = await db.get(Post, post_id)
+    if not post or post.club_id != club.id:
+        raise HTTPException(status_code=404, detail="Post not found.")
+
+    post.is_pinned = False
     await db.commit()
 
 

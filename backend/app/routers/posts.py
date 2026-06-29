@@ -103,6 +103,7 @@ def _row_to_response(row, current_vote: str | None) -> PostResponse:
         share_count=share_count or 0,
         created_at=post.created_at,
         is_deleted=post.is_deleted,
+        is_pinned=post.is_pinned,
         parent_post_id=post.parent_post_id,
     )
 
@@ -158,7 +159,9 @@ async def create_post(
         faculty_tag=post.faculty_tag,
         image_urls=post.image_urls or [],
         author=AuthorInfo(
-            username=current_user.username, display_name=current_user.display_name
+            username=current_user.username,
+            display_name=current_user.display_name,
+            avatar_url=current_user.avatar_url,
         ),
         upvotes=0,
         downvotes=0,
@@ -293,7 +296,9 @@ async def create_reply(
         post_type=reply.post_type,
         image_urls=reply.image_urls or [],
         author=AuthorInfo(
-            username=current_user.username, display_name=current_user.display_name
+            username=current_user.username,
+            display_name=current_user.display_name,
+            avatar_url=current_user.avatar_url,
         ),
         upvotes=0,
         downvotes=0,

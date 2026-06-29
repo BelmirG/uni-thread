@@ -357,7 +357,7 @@ export default function FeedPage() {
       {composerOpen && (
         <>
           <div onClick={() => setComposerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 100 }} />
-          <div style={{ position: "fixed", bottom: 60, left: 0, right: 0, background: "#fff", borderRadius: "16px 16px 0 0", padding: "1rem 1rem 1.5rem", zIndex: 101, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 -4px 24px rgba(0,0,0,0.12)" }}>
+          <div style={{ position: "fixed", bottom: 60, left: "50%", transform: "translateX(-50%)", width: "min(600px, 94vw)", background: "#fff", borderRadius: 16, padding: "1rem 1rem 1.5rem", zIndex: 101, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 4px 32px rgba(0,0,0,0.18)" }}>
             <div style={{ maxWidth: 640, margin: "0 auto" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
                 <span style={{ fontWeight: "600", fontSize: "1rem" }}>Create post</span>

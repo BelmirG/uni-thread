@@ -51,6 +51,7 @@ interface Post {
   reply_count: number;
   created_at: string;
   is_deleted: boolean;
+  is_pinned: boolean;
 }
 
 interface Member {
@@ -101,6 +102,7 @@ export default function ClubDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -263,6 +265,40 @@ export default function ClubDetailPage() {
     } catch { /* non-critical */ }
   }
 
+  function sortPosts(list: Post[]) {
+    return [...list.filter((p) => p.is_pinned), ...list.filter((p) => !p.is_pinned)];
+  }
+
+  async function handlePinPost(postId: string) {
+    try {
+      await apiFetch(`/api/clubs/${slug}/posts/${postId}/pin`, { method: "POST" });
+      setPosts((prev) => sortPosts(prev.map((p) => p.id === postId ? { ...p, is_pinned: true } : p)));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Could not pin post.");
+    }
+  }
+
+  async function handleUnpinPost(postId: string) {
+    try {
+      await apiFetch(`/api/clubs/${slug}/posts/${postId}/pin`, { method: "DELETE" });
+      setPosts((prev) => sortPosts(prev.map((p) => p.id === postId ? { ...p, is_pinned: false } : p)));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Could not unpin post.");
+    }
+  }
+
+  async function handleRoleChange(username: string, role: string) {
+    try {
+      await apiFetch(`/api/clubs/${slug}/members/${username}/role`, {
+        method: "PUT",
+        body: JSON.stringify({ role }),
+      });
+      setMembers((prev) => prev.map((m) => m.username === username ? { ...m, role } : m));
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : "Could not change role.");
+    }
+  }
+
   if (loading) return <p style={{ padding: "2rem", color: "#888" }}>Loading…</p>;
 
   if (pageError) {
@@ -322,7 +358,7 @@ export default function ClubDetailPage() {
           </div>
 
           {/* Actions */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", alignItems: "flex-end" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
             {!club.is_member && !club.has_pending_request && (
               <button onClick={handleJoin} style={{ padding: "0.4rem 1rem", cursor: "pointer" }}>
                 {club.is_private ? "Request to join" : "Join"}
@@ -332,35 +368,61 @@ export default function ClubDetailPage() {
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.25rem" }}>
                 <span style={{ fontSize: "0.85rem", color: "#888" }}>Request pending…</span>
                 <button onClick={handleCancelRequest} style={{ fontSize: "0.8rem", color: "#aaa", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-                  Cancel request
+                  Cancel
                 </button>
               </div>
             )}
-            {club.is_member && club.role !== "owner" && (
-              <button onClick={handleLeave} style={{ padding: "0.4rem 1rem", cursor: "pointer", color: "#888" }}>Leave</button>
-            )}
-            {club.is_member && club.role === "owner" && (
+
+            {/* ⋮ menu */}
+            <div style={{ position: "relative" }}>
               <button
-                onClick={handleDelete}
-                style={{ padding: "0.4rem 1rem", cursor: "pointer", color: "crimson", border: "1px solid crimson", background: "none", borderRadius: 4 }}
+                onClick={() => setMenuOpen((o) => !o)}
+                style={{ background: "none", border: "1px solid #e0e0e0", borderRadius: 6, cursor: "pointer", padding: "0.3rem 0.6rem", fontSize: "1.1rem", color: "#555", lineHeight: 1 }}
               >
-                Delete club
+                ⋮
               </button>
-            )}
-            <button
-              onClick={showMembers ? () => setShowMembers(false) : loadMembers}
-              style={{ padding: "0.3rem 0.8rem", fontSize: "0.85rem", cursor: "pointer", color: "#555" }}
-            >
-              {showMembers ? "Hide members" : "See members"}
-            </button>
-            {club.role && ["owner", "moderator"].includes(club.role) && (
-              <button
-                onClick={showRequests ? () => setShowRequests(false) : loadJoinRequests}
-                style={{ padding: "0.3rem 0.8rem", fontSize: "0.85rem", cursor: "pointer", color: "#555" }}
-              >
-                {showRequests ? "Hide requests" : "Join requests"}
-              </button>
-            )}
+
+              {menuOpen && (
+                <>
+                  <div onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 199 }} />
+                  <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", background: "#fff", border: "1px solid #e0e0e0", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 170, zIndex: 200, overflow: "hidden" }}>
+                    <button
+                      onClick={() => { setMenuOpen(false); showMembers ? setShowMembers(false) : loadMembers(); }}
+                      style={{ display: "block", width: "100%", textAlign: "left", padding: "0.65rem 1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem", color: "#333" }}
+                    >
+                      {showMembers ? "Hide members" : "Members"}
+                    </button>
+
+                    {club.role && ["owner", "moderator"].includes(club.role) && (
+                      <button
+                        onClick={() => { setMenuOpen(false); showRequests ? setShowRequests(false) : loadJoinRequests(); }}
+                        style={{ display: "block", width: "100%", textAlign: "left", padding: "0.65rem 1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem", color: "#333", borderTop: "1px solid #f0f0f0" }}
+                      >
+                        {showRequests ? "Hide requests" : "Join requests"}
+                      </button>
+                    )}
+
+                    {club.is_member && (
+                      <button
+                        onClick={() => { setMenuOpen(false); handleLeave(); }}
+                        style={{ display: "block", width: "100%", textAlign: "left", padding: "0.65rem 1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem", color: "#555", borderTop: "1px solid #f0f0f0" }}
+                      >
+                        Leave club
+                      </button>
+                    )}
+
+                    {club.role === "owner" && (
+                      <button
+                        onClick={() => { setMenuOpen(false); handleDelete(); }}
+                        style={{ display: "block", width: "100%", textAlign: "left", padding: "0.65rem 1rem", background: "none", border: "none", cursor: "pointer", fontSize: "0.9rem", color: "crimson", borderTop: "1px solid #f0f0f0" }}
+                      >
+                        Delete club
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -406,15 +468,41 @@ export default function ClubDetailPage() {
                 {members.map((m) => (
                   <div key={m.username} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.88rem" }}>
                     <span><strong>{m.display_name}</strong> @{m.username}</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                      <span style={{ color: roleColor[m.role] ?? "#888" }}>{m.role}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <span style={{ color: roleColor[m.role] ?? "#888" }}>{m.role === "owner" ? "Admin" : m.role}</span>
                       {club.role === "owner" && m.role !== "owner" && (
-                        <button
-                          onClick={() => handleRemoveMember(m.username)}
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "#ccc", fontSize: "0.82rem", padding: 0 }}
-                        >
-                          Remove
-                        </button>
+                        <>
+                          {m.role === "member" && (
+                            <button
+                              onClick={() => handleRoleChange(m.username, "moderator")}
+                              style={{ background: "none", border: "1px solid #1a6b3a", borderRadius: 4, cursor: "pointer", color: "#1a6b3a", fontSize: "0.75rem", padding: "0.1rem 0.4rem" }}
+                            >
+                              Make Mod
+                            </button>
+                          )}
+                          {m.role === "moderator" && (
+                            <>
+                              <button
+                                onClick={() => handleRoleChange(m.username, "owner")}
+                                style={{ background: "none", border: "1px solid #7b2d8b", borderRadius: 4, cursor: "pointer", color: "#7b2d8b", fontSize: "0.75rem", padding: "0.1rem 0.4rem" }}
+                              >
+                                Make Admin
+                              </button>
+                              <button
+                                onClick={() => handleRoleChange(m.username, "member")}
+                                style={{ background: "none", border: "1px solid #ccc", borderRadius: 4, cursor: "pointer", color: "#888", fontSize: "0.75rem", padding: "0.1rem 0.4rem" }}
+                              >
+                                Demote
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => handleRemoveMember(m.username)}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: "#ccc", fontSize: "0.82rem", padding: 0 }}
+                          >
+                            Remove
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -438,13 +526,18 @@ export default function ClubDetailPage() {
         {posts.map((post) => (
           <div
             key={post.id}
-            style={{ border: "1px solid #e0e0e0", borderRadius: 8, padding: "1rem", background: "#fff" }}
+            style={{ border: post.is_pinned ? "1px solid #d0a0e0" : "1px solid #e0e0e0", borderRadius: 8, padding: "1rem", background: "#fff" }}
           >
+            {post.is_pinned && (
+              <div style={{ fontSize: "0.75rem", color: "#7b2d8b", fontWeight: 600, marginBottom: "0.35rem" }}>📌 Pinned</div>
+            )}
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-              <MiniAvatar name={post.author?.display_name ?? "?"} url={post.author?.avatar_url ?? null} />
+              {post.author
+                ? <Link href={`/profile/${post.author.username}`} style={{ flexShrink: 0 }}><MiniAvatar name={post.author.display_name} url={post.author.avatar_url} /></Link>
+                : <MiniAvatar name="?" url={null} />}
               <div style={{ fontSize: "0.82rem", color: "#888" }}>
                 {post.author
-                  ? <><strong style={{ color: "#444" }}>{post.author.display_name}</strong> @{post.author.username}</>
+                  ? <><Link href={`/profile/${post.author.username}`} style={{ color: "inherit", textDecoration: "none" }}><strong style={{ color: "#444" }}>{post.author.display_name}</strong> @{post.author.username}</Link></>
                   : <em>Unknown</em>}
                 {" · "}{timeAgo(post.created_at)}
               </div>
@@ -479,15 +572,21 @@ export default function ClubDetailPage() {
               <Link href={`/feed/${post.id}`} style={{ color: "#555", textDecoration: "none" }}>
                 💬 {post.reply_count} {post.reply_count === 1 ? "reply" : "replies"}
               </Link>
-              {/* Post author or club owner can delete */}
-              {(post.author?.username === currentUsername || club.role === "owner") && (
-                <button
-                  onClick={() => handleDeletePost(post.id)}
-                  style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", padding: 0, color: "#ccc", fontSize: "0.85rem" }}
-                >
-                  Delete
-                </button>
-              )}
+              <div style={{ marginLeft: "auto", display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                {club.role && ["owner", "moderator"].includes(club.role) && (
+                  post.is_pinned
+                    ? <button onClick={() => handleUnpinPost(post.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#7b2d8b", fontSize: "0.85rem" }}>Unpin</button>
+                    : <button onClick={() => handlePinPost(post.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#aaa", fontSize: "0.85rem" }}>📌 Pin</button>
+                )}
+                {(post.author?.username === currentUsername || club.role === "owner") && (
+                  <button
+                    onClick={() => handleDeletePost(post.id)}
+                    style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#ccc", fontSize: "0.85rem" }}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -515,7 +614,7 @@ export default function ClubDetailPage() {
         {composerOpen && (
           <>
             <div onClick={() => setComposerOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 100 }} />
-            <div style={{ position: "fixed", bottom: 60, left: 0, right: 0, background: "#fff", borderRadius: "16px 16px 0 0", padding: "1rem 1rem 1.5rem", zIndex: 101, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 -4px 24px rgba(0,0,0,0.12)" }}>
+            <div style={{ position: "fixed", bottom: 60, left: "50%", transform: "translateX(-50%)", width: "min(600px, 94vw)", background: "#fff", borderRadius: 16, padding: "1rem 1rem 1.5rem", zIndex: 101, maxHeight: "80vh", overflowY: "auto", boxShadow: "0 4px 32px rgba(0,0,0,0.18)" }}>
               <div style={{ maxWidth: 640, margin: "0 auto" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
                   <span style={{ fontWeight: "600", fontSize: "1rem" }}>Post in {club.name}</span>

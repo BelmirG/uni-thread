@@ -43,6 +43,7 @@ class PostResponse(BaseModel):
     share_count: int = 0
     created_at: datetime
     is_deleted: bool
+    is_pinned: bool = False
     parent_post_id: Optional[uuid.UUID]
 
 

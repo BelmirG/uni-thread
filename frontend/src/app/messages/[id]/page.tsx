@@ -138,7 +138,7 @@ export default function ConversationPage() {
   };
 
   return (
-    <main style={{ display: "flex", flexDirection: "column", height: "100vh", maxWidth: 700, margin: "0 auto" }}>
+    <main style={{ position: "fixed", top: 0, bottom: 60, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 700, display: "flex", flexDirection: "column" }}>
       {/* Header */}
       <div style={{ padding: "0.75rem 1rem", borderBottom: "1px solid #e0e0e0", background: "#fff", display: "flex", alignItems: "center", gap: "0.75rem" }}>
         <Link href="/messages" style={{ fontSize: "0.9rem", color: "#555", textDecoration: "none" }}>← Messages</Link>

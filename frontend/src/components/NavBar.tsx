@@ -59,12 +59,13 @@ export default function NavBar() {
   const pathname = usePathname();
   const [profileHref, setProfileHref] = useState("/profile");
 
-  // Resolve /profile → /profile/{username} once we know who's logged in
+  // Re-resolve /profile → /profile/{username} on every navigation so switching
+  // accounts always shows the correct profile link immediately.
   useEffect(() => {
     apiFetch<{ username: string }>("/api/auth/me")
       .then((me) => setProfileHref(`/profile/${me.username}`))
-      .catch(() => {});
-  }, []);
+      .catch(() => setProfileHref("/profile"));
+  }, [pathname]);
 
   if (HIDDEN_ON.includes(pathname)) return null;
 
