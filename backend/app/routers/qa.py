@@ -2,9 +2,8 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, literal, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased
 
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -19,27 +18,39 @@ router = APIRouter(prefix="/api/qa", tags=["qa"])
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
+_QA_DESCENDANT_COUNT = literal_column("""(
+    WITH RECURSIVE d(id) AS (
+        SELECT r.id FROM posts r
+        WHERE r.parent_post_id = posts.id AND r.is_deleted = false
+        UNION ALL
+        SELECT p.id FROM posts p JOIN d ON p.parent_post_id = d.id
+        WHERE p.is_deleted = false
+    )
+    SELECT COUNT(*) FROM d
+)""")
+
+
 def _build_qa_select(extra_where=None):
     """
     Select posts with aggregated vote + reply counts.
     Deliberately does NOT join the users table — author identity is never
     loaded, so it cannot accidentally appear in any serialized response.
     """
-    ReplyAlias = aliased(Post)
-    stmt = (
-        select(
-            Post,
-            func.count(case((Vote.vote_type == "up", 1))).label("upvotes"),
-            func.count(case((Vote.vote_type == "down", 1))).label("downvotes"),
-            func.count(ReplyAlias.id).label("reply_count"),
-        )
-        .outerjoin(Vote, Vote.post_id == Post.id)
-        .outerjoin(
-            ReplyAlias,
-            and_(ReplyAlias.parent_post_id == Post.id, ReplyAlias.is_deleted == False),
-        )
-        .group_by(Post.id)
+    upvotes_col = (
+        select(func.count())
+        .where(and_(Vote.post_id == Post.id, Vote.vote_type == "up"))
+        .correlate(Post)
+        .scalar_subquery()
+        .label("upvotes")
     )
+    downvotes_col = (
+        select(func.count())
+        .where(and_(Vote.post_id == Post.id, Vote.vote_type == "down"))
+        .correlate(Post)
+        .scalar_subquery()
+        .label("downvotes")
+    )
+    stmt = select(Post, upvotes_col, downvotes_col, _QA_DESCENDANT_COUNT.label("reply_count"))
     if extra_where is not None:
         stmt = stmt.where(extra_where)
     return stmt
@@ -214,10 +225,14 @@ async def get_question(
     owned_q = await _user_owns([post_id], current_user.id, db)
     question = _row_to_response(row, vote_map.get(post_id), is_own=post_id in owned_q)
 
-    # All descendants at any depth via recursive CTE
-    seed = select(Post.id.label("id")).where(Post.parent_post_id == post_id)
+    MAX_DEPTH = 6
+    seed = select(Post.id.label("id"), literal(0).label("depth")).where(Post.parent_post_id == post_id)
     cte = seed.cte(name="descendants", recursive=True)
-    step = select(Post.id.label("id")).join(cte, Post.parent_post_id == cte.c.id)
+    step = (
+        select(Post.id.label("id"), (cte.c.depth + 1).label("depth"))
+        .join(cte, Post.parent_post_id == cte.c.id)
+        .where(cte.c.depth < MAX_DEPTH)
+    )
     cte = cte.union_all(step)
 
     answer_rows = (

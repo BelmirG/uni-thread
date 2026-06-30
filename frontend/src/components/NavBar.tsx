@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-const HIDDEN_ON = ["/", "/login", "/register", "/verify-email"];
+const HIDDEN_ON = ["/", "/login", "/register", "/verify-email", "/forgot-password", "/reset-password"];
 
 const NAV = [
   {
@@ -61,6 +61,27 @@ export default function NavBar() {
   const [profileHref, setProfileHref] = useState("/profile");
   const [unreadMessages, setUnreadMessages] = useState(0);
 
+  // Remember last visited path per section so the nav returns you there
+  const [lastPaths, setLastPaths] = useState<Record<string, string>>(() => {
+    if (typeof window === "undefined") return {};
+    const result: Record<string, string> = {};
+    for (const item of NAV) {
+      const stored = sessionStorage.getItem(`nav_last_${item.href}`);
+      if (stored) result[item.href] = stored;
+    }
+    return result;
+  });
+
+  useEffect(() => {
+    for (const item of NAV) {
+      if (pathname.startsWith(item.href)) {
+        sessionStorage.setItem(`nav_last_${item.href}`, pathname);
+        setLastPaths((prev) => ({ ...prev, [item.href]: pathname }));
+        break;
+      }
+    }
+  }, [pathname]);
+
   useEffect(() => {
     if (HIDDEN_ON.includes(pathname)) return;
     apiFetch<{ username: string }>("/api/auth/me")
@@ -85,7 +106,10 @@ export default function NavBar() {
     <nav className="fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-sm border-t border-border z-50">
       <div className="max-w-xl mx-auto h-full flex">
         {NAV.map((item) => {
-          const href = item.href === "/profile" ? profileHref : item.href;
+          const href =
+            item.href === "/profile"
+              ? profileHref
+              : (lastPaths[item.href] ?? item.href);
           const active =
             item.href === "/profile"
               ? pathname.startsWith("/profile")

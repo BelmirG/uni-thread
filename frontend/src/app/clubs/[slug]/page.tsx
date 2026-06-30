@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
@@ -80,6 +80,7 @@ interface Post {
 interface Member {
   username: string;
   display_name: string;
+  avatar_url: string | null;
   role: string;
   joined_at: string;
 }
@@ -102,6 +103,9 @@ export default function ClubDetailPage() {
   const [club, setClub] = useState<Club | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const LIMIT = 20;
   const [members, setMembers] = useState<Member[]>([]);
   const [showMembers, setShowMembers] = useState(false);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
@@ -121,17 +125,22 @@ export default function ClubDetailPage() {
   const [composerOpen, setComposerOpen] = useState(false);
   const [pollDraft, setPollDraft] = useState<PollDraft | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteUsername, setInviteUsername] = useState("");
   const [inviting, setInviting] = useState(false);
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
+
+  function buildParams(offset: number) {
+    return new URLSearchParams({ limit: String(LIMIT), offset: String(offset) });
+  }
 
   useEffect(() => {
     async function load() {
       try {
         const [clubData, postsData, me] = await Promise.all([
           apiFetch<Club>(`/api/clubs/${slug}`),
-          apiFetch<PostListResponse>(`/api/clubs/${slug}/posts`),
+          apiFetch<PostListResponse>(`/api/clubs/${slug}/posts?${buildParams(0)}`),
           apiFetch<{ username: string }>("/api/auth/me"),
         ]);
         setClub(clubData);
@@ -149,7 +158,29 @@ export default function ClubDetailPage() {
       }
     }
     load();
-  }, [slug, router]);
+  }, [slug, router]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting) return;
+        setPosts((current) => {
+          if (loadingMore || current.length >= total || loading) return current;
+          setLoadingMore(true);
+          apiFetch<PostListResponse>(`/api/clubs/${slug}/posts?${buildParams(current.length)}`)
+            .then((data) => { setPosts((prev) => [...prev, ...data.posts]); setTotal(data.total); })
+            .catch(() => {})
+            .finally(() => setLoadingMore(false));
+          return current;
+        });
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loading, loadingMore, total, slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadMembers() {
     try {
@@ -466,12 +497,12 @@ export default function ClubDetailPage() {
                         <button
                           onClick={() => {
                             setMenuOpen(false);
-                            showMembers ? setShowMembers(false) : loadMembers();
+                            loadMembers();
                           }}
                           className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
                         >
                           <Users className="w-3.5 h-3.5 text-muted-foreground" />
-                          {showMembers ? "Hide members" : "Members"}
+                          Members
                         </button>
                         {isMod && (
                           <>
@@ -547,73 +578,6 @@ export default function ClubDetailPage() {
             </div>
           )}
 
-          {/* Members list */}
-          {showMembers && (
-            <div className="border-t border-border/60 px-4 py-3">
-              {members.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No members yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {members.map((m) => (
-                    <div key={m.username} className="flex items-center justify-between gap-2">
-                      <span className="text-sm">
-                        <strong>{m.display_name}</strong>{" "}
-                        <span className="text-muted-foreground">@{m.username}</span>
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={cn(
-                            "text-[10px] font-semibold px-1.5 py-0.5 rounded",
-                            m.role === "owner"
-                              ? "bg-purple-100 text-purple-700"
-                              : m.role === "moderator"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          {m.role === "owner" ? "Admin" : m.role}
-                        </span>
-                        {club.role === "owner" && m.role !== "owner" && (
-                          <>
-                            {m.role === "member" && (
-                              <button
-                                onClick={() => handleRoleChange(m.username, "moderator")}
-                                className="text-[10px] font-medium px-1.5 py-0.5 rounded border border-green-600 text-green-700 hover:bg-green-50 transition-colors"
-                              >
-                                Make Mod
-                              </button>
-                            )}
-                            {m.role === "moderator" && (
-                              <>
-                                <button
-                                  onClick={() => handleRoleChange(m.username, "owner")}
-                                  className="text-[10px] font-medium px-1.5 py-0.5 rounded border border-purple-600 text-purple-700 hover:bg-purple-50 transition-colors"
-                                >
-                                  Make Admin
-                                </button>
-                                <button
-                                  onClick={() => handleRoleChange(m.username, "member")}
-                                  className="text-[10px] font-medium px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted transition-colors"
-                                >
-                                  Demote
-                                </button>
-                              </>
-                            )}
-                            <button
-                              onClick={() => handleRemoveMember(m.username)}
-                              className="text-[10px] text-muted-foreground/40 hover:text-destructive transition-colors"
-                            >
-                              Remove
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {!club.is_member && (
@@ -770,10 +734,12 @@ export default function ClubDetailPage() {
           })}
         </div>
 
-        {total > posts.length && (
-          <p className="text-muted-foreground text-xs text-center mt-4">
-            Showing {posts.length} of {total} posts
-          </p>
+        <div ref={sentinelRef} className="h-4" />
+        {loadingMore && (
+          <p className="text-muted-foreground text-xs text-center py-4">Loading more…</p>
+        )}
+        {!loadingMore && posts.length > 0 && posts.length >= total && (
+          <p className="text-muted-foreground text-xs text-center py-4">You&apos;re all caught up.</p>
         )}
       </main>
 
@@ -893,6 +859,98 @@ export default function ClubDetailPage() {
                 )}
               </div>
             </form>
+          </div>
+        </>
+      )}
+
+      {/* Members modal */}
+      {showMembers && (
+        <>
+          <div onClick={() => { setShowMembers(false); setMemberSearch(""); }} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200]" />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(360px,92vw)] bg-white rounded-2xl shadow-2xl z-[201] flex flex-col max-h-[65vh]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
+              <span className="font-semibold text-sm">Members · {club?.member_count ?? members.length}</span>
+              <button onClick={() => { setShowMembers(false); setMemberSearch(""); }} className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-3 py-2 border-b border-border flex-shrink-0">
+              <input
+                type="text"
+                value={memberSearch}
+                onChange={(e) => setMemberSearch(e.target.value)}
+                placeholder="Search members…"
+                className="w-full text-sm px-3 py-1.5 rounded-lg bg-muted border-none outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {members.length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-6">No members yet.</p>
+              ) : (() => {
+                const q = memberSearch.trim().toLowerCase();
+                const filtered = q
+                  ? members.filter((m) =>
+                      m.display_name.toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
+                    )
+                  : members;
+                return filtered.length === 0 ? (
+                  <p className="text-muted-foreground text-sm text-center py-6">No members match &ldquo;{memberSearch}&rdquo;.</p>
+                ) : filtered.map((m) => (
+                  <div key={m.username} className="px-4 py-3 border-b border-border/50">
+                    {/* Top row: avatar + name */}
+                    <div className="flex items-center gap-3">
+                      <Link
+                        href={`/profile/${m.username}`}
+                        onClick={() => setShowMembers(false)}
+                        className="flex items-center gap-2.5 flex-1 min-w-0 no-underline"
+                      >
+                        <MiniAvatar name={m.display_name} url={m.avatar_url} size={38} />
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm text-foreground truncate">{m.display_name}</p>
+                          <p className="text-[11px] text-muted-foreground">@{m.username}</p>
+                        </div>
+                      </Link>
+                      {/* Role badge — always visible on the right */}
+                      <span className={cn(
+                        "text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0",
+                        m.role === "owner" ? "bg-purple-100 text-purple-700"
+                          : m.role === "moderator" ? "bg-green-100 text-green-700"
+                          : "bg-muted text-muted-foreground"
+                      )}>
+                        {m.role === "owner" ? "Admin" : m.role}
+                      </span>
+                    </div>
+                    {/* Bottom row: action buttons (only for owner managing non-owners) */}
+                    {club?.role === "owner" && m.role !== "owner" && (
+                      <div className="flex items-center gap-1.5 mt-2 ml-[50px]">
+                        {m.role === "member" && (
+                          <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 text-green-700 border-green-600 hover:bg-green-50"
+                            onClick={() => handleRoleChange(m.username, "moderator")}>
+                            Make Mod
+                          </Button>
+                        )}
+                        {m.role === "moderator" && (
+                          <>
+                            <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 text-purple-700 border-purple-600 hover:bg-purple-50"
+                              onClick={() => handleRoleChange(m.username, "owner")}>
+                              Make Admin
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-6 text-[10px] px-2"
+                              onClick={() => handleRoleChange(m.username, "member")}>
+                              Demote
+                            </Button>
+                          </>
+                        )}
+                        <button onClick={() => handleRemoveMember(m.username)}
+                          className="text-[10px] text-muted-foreground hover:text-destructive transition-colors">
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ));
+              })()}
+            </div>
           </div>
         </>
       )}

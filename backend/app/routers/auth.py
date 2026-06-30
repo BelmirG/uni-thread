@@ -6,12 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.core.email import send_verification_email
+from app.core.email import send_reset_email, send_verification_email
 from app.core.security import create_access_token, hash_password, verify_password
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RegisterRequest, UserResponse
+from app.schemas.auth import ForgotPasswordRequest, LoginRequest, RegisterRequest, ResetPasswordRequest, UserResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -137,3 +137,44 @@ async def logout(response: Response):
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.post("/forgot-password")
+async def forgot_password(body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    user = (await db.execute(
+        select(User).where(User.email == body.email.lower())
+    )).scalar_one_or_none()
+
+    # Always return the same response — don't reveal whether the email exists
+    if user and user.is_email_verified:
+        token = secrets.token_urlsafe(32)
+        user.password_reset_token = token
+        user.password_reset_expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        await db.commit()
+        send_reset_email(body.email, token)
+
+    return {"message": "If that email is registered you will receive a reset link shortly."}
+
+
+@router.post("/reset-password")
+async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    user = (await db.execute(
+        select(User).where(User.password_reset_token == body.token)
+    )).scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link.")
+
+    expires = user.password_reset_expires_at
+    if expires is not None and expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+
+    if expires is None or expires < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Reset link has expired. Please request a new one.")
+
+    user.password_hash = hash_password(body.new_password)
+    user.password_reset_token = None
+    user.password_reset_expires_at = None
+    await db.commit()
+
+    return {"message": "Password updated. You can now log in."}

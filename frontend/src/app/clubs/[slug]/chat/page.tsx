@@ -349,9 +349,9 @@ function SwipeableBubble({
     >
       <div className="flex flex-col max-w-[72%]">
         {showName && !isOwn && (
-          <span className={cn("text-[11px] font-semibold mb-0.5 px-1", color)}>
+          <Link href={`/profile/${msg.author.username}`} className={cn("text-[11px] font-semibold mb-0.5 px-1 hover:underline", color)}>
             {msg.author.display_name}
-          </span>
+          </Link>
         )}
         <div
           className={cn(

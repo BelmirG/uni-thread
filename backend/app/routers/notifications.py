@@ -13,29 +13,39 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 @router.get("")
 async def get_notifications(
+    limit: int = 30,
+    offset: int = 0,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from sqlalchemy import func
     Actor = aliased(User)
-    rows = (await db.execute(
+    base = (
         select(Notification, Actor)
         .join(Actor, Actor.id == Notification.actor_id)
         .where(Notification.user_id == current_user.id)
-        .order_by(Notification.created_at.desc())
-        .limit(30)
+    )
+    total = (await db.execute(
+        select(func.count()).select_from(Notification).where(Notification.user_id == current_user.id)
+    )).scalar_one()
+    rows = (await db.execute(
+        base.order_by(Notification.created_at.desc()).limit(limit).offset(offset)
     )).all()
-    return [
-        {
-            "id": str(n.id),
-            "type": n.type,
-            "is_read": n.is_read,
-            "created_at": n.created_at.isoformat(),
-            "actor_username": actor.username,
-            "actor_display_name": actor.display_name,
-            "actor_avatar_url": actor.avatar_url,
-        }
-        for n, actor in rows
-    ]
+    return {
+        "total": total,
+        "notifications": [
+            {
+                "id": str(n.id),
+                "type": n.type,
+                "is_read": n.is_read,
+                "created_at": n.created_at.isoformat(),
+                "actor_username": actor.username,
+                "actor_display_name": actor.display_name,
+                "actor_avatar_url": actor.avatar_url,
+            }
+            for n, actor in rows
+        ],
+    }
 
 
 @router.post("/mark-read")

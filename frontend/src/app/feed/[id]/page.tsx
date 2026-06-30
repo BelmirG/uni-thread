@@ -11,6 +11,7 @@ import {
   Trash2,
   X,
   ArrowLeft,
+  CornerDownRight,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import UserSearchInput from "@/components/UserSearchInput";
@@ -174,7 +175,8 @@ function CommentNode({ node, depth }: { node: TreeNode; depth: number }) {
   const isOwn = ctx.currentUsername !== null && p.author?.username === ctx.currentUsername;
   const isReplying = ctx.replyingToId === p.id;
   const voted = p.current_user_vote;
-  const indent = Math.min(depth, 5) * 16;
+  const indent = Math.min(depth, 4) * 14;
+  const isCutOff = node.children.length === 0 && p.reply_count > 0;
 
   return (
     <div className="mb-1">
@@ -295,6 +297,17 @@ function CommentNode({ node, depth }: { node: TreeNode; depth: number }) {
               <CommentNode key={child.post.id} node={child} depth={depth + 1} />
             ))}
           </div>
+        )}
+
+        {/* Thread cut-off — show link to continue in a fresh page rooted at this comment */}
+        {isCutOff && (
+          <Link
+            href={`/feed/${p.id}`}
+            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-1 mb-2 ml-1"
+          >
+            <CornerDownRight className="w-3 h-3" />
+            Continue this thread
+          </Link>
         )}
       </div>
     </div>
@@ -580,7 +593,7 @@ export default function PostDetailPage() {
         {/* Comments list */}
         <div>
           <h3 className="text-sm font-semibold text-muted-foreground mb-3">
-            {allReplies.length} {allReplies.length === 1 ? "comment" : "comments"}
+            {post.reply_count} {post.reply_count === 1 ? "comment" : "comments"}
           </h3>
           {tree.map((node) => (
             <CommentNode key={node.post.id} node={node} depth={0} />

@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,12 +9,19 @@ from app.core.security import decode_access_token
 from app.database import get_db
 from app.models.user import User
 
+# auto_error=False so missing header doesn't 403 before we check the cookie
+_bearer = HTTPBearer(auto_error=False)
+
 
 async def get_current_user(
     request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: AsyncSession = Depends(get_db),
 ) -> User:
+    # Cookie takes priority (browser); Bearer header used by Swagger / API clients
     token = request.cookies.get("access_token")
+    if not token and credentials:
+        token = credentials.credentials
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

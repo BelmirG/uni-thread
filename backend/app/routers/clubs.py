@@ -568,14 +568,14 @@ async def get_club_members(
     club = await _get_club_or_404(slug, db)
     rows = (
         await db.execute(
-            select(User.username, User.display_name, ClubMember.role, ClubMember.joined_at)
+            select(User.username, User.display_name, User.avatar_url, ClubMember.role, ClubMember.joined_at)
             .join(ClubMember, ClubMember.user_id == User.id)
             .where(ClubMember.club_id == club.id)
             .order_by(ClubMember.joined_at.asc())
         )
     ).all()
     return [
-        {"username": r.username, "display_name": r.display_name, "role": r.role, "joined_at": r.joined_at}
+        {"username": r.username, "display_name": r.display_name, "avatar_url": r.avatar_url, "role": r.role, "joined_at": r.joined_at}
         for r in rows
     ]
 

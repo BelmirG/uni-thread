@@ -175,10 +175,10 @@ export default function ProfilePage() {
         if (p.is_own_profile) {
           Promise.all([
             apiFetch<Invitation[]>("/api/clubs/invitations/me"),
-            apiFetch<FollowNotif[]>("/api/notifications"),
-          ]).then(([invs, notifs]) => {
+            apiFetch<{ total: number; notifications: FollowNotif[] }>("/api/notifications"),
+          ]).then(([invs, notifData]) => {
             setInvitations(invs);
-            setFollowNotifs(notifs);
+            setFollowNotifs(notifData.notifications);
           }).catch(() => {});
         }
       })

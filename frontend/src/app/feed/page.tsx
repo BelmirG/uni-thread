@@ -169,11 +169,13 @@ export default function FeedPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [feedTab, setFeedTab] = useState<FeedTab>("discover");
   const [feedRefreshKey, setFeedRefreshKey] = useState(0);
   const [sort, setSort] = useState<"hot" | "new">("hot");
   const [facultyFilter, setFacultyFilter] = useState<Faculty | null>(null);
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
   const [content, setContent] = useState("");
   const [postFacultyTag, setPostFacultyTag] = useState<Faculty | "">("");
   const [imageUrls, setImageUrls] = useState<string[]>([]);
@@ -186,14 +188,20 @@ export default function FeedPage() {
   const [composerOpen, setComposerOpen] = useState(false);
   const [pollDraft, setPollDraft] = useState<PollDraft | null>(null);
 
-  useEffect(() => {
-    setLoading(true);
-    const params = new URLSearchParams({ feed: feedTab });
+  const LIMIT = 20;
+
+  function buildParams(offset: number) {
+    const params = new URLSearchParams({ feed: feedTab, limit: String(LIMIT), offset: String(offset) });
     if (feedTab === "discover") params.set("sort", sort);
     if (facultyFilter) params.set("faculty", facultyFilter);
+    return params;
+  }
 
+  // Initial load / filter change — reset everything
+  useEffect(() => {
+    setLoading(true);
     Promise.all([
-      apiFetch<PostListResponse>(`/api/posts?${params}`),
+      apiFetch<PostListResponse>(`/api/posts?${buildParams(0)}`),
       apiFetch<{ username: string }>("/api/auth/me"),
     ])
       .then(([postsData, me]) => {
@@ -203,7 +211,35 @@ export default function FeedPage() {
       })
       .catch(() => router.replace("/login"))
       .finally(() => setLoading(false));
-  }, [feedTab, sort, facultyFilter, feedRefreshKey, router]);
+  }, [feedTab, sort, facultyFilter, feedRefreshKey, router]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Infinite scroll — watch the sentinel div
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting) return;
+        setPosts((current) => {
+          if (loadingMore || current.length >= total || loading) return current;
+          setLoadingMore(true);
+          apiFetch<PostListResponse>(`/api/posts?${buildParams(current.length)}`)
+            .then((data) => {
+              setPosts((prev) => [...prev, ...data.posts]);
+              setTotal(data.total);
+            })
+            .catch(() => {})
+            .finally(() => setLoadingMore(false));
+          return current;
+        });
+      },
+      { rootMargin: "200px" }
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loading, loadingMore, total, feedTab, sort, facultyFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function closeComposer() {
     setComposerOpen(false);
@@ -371,10 +407,13 @@ export default function FeedPage() {
           ))}
         </div>
 
-        {total > posts.length && (
-          <p className="text-muted-foreground text-xs text-center mt-4">
-            Showing {posts.length} of {total} posts
-          </p>
+        {/* Sentinel — IntersectionObserver triggers next page load when this comes into view */}
+        <div ref={sentinelRef} className="h-4" />
+        {loadingMore && (
+          <p className="text-muted-foreground text-xs text-center py-4">Loading more…</p>
+        )}
+        {!loadingMore && posts.length > 0 && posts.length >= total && (
+          <p className="text-muted-foreground text-xs text-center py-4">You&apos;re all caught up.</p>
         )}
       </main>
 

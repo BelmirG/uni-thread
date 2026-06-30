@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -123,6 +123,9 @@ export default function QAPage() {
   const [posts, setPosts] = useState<QAPost[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const LIMIT = 20;
   const [content, setContent] = useState("");
   const [facultyTag, setFacultyTag] = useState<Faculty | "">("");
   const [facultyFilter, setFacultyFilter] = useState<Faculty | null>(null);
@@ -135,14 +138,41 @@ export default function QAPage() {
   const [postError, setPostError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
 
+  function buildParams(offset: number) {
+    const params = new URLSearchParams({ limit: String(LIMIT), offset: String(offset) });
+    if (facultyFilter) params.set("faculty", facultyFilter);
+    return params;
+  }
+
   useEffect(() => {
     setLoading(true);
-    const param = facultyFilter ? `?faculty=${facultyFilter}` : "";
-    apiFetch<QAListResponse>(`/api/qa${param}`)
+    apiFetch<QAListResponse>(`/api/qa?${buildParams(0)}`)
       .then((data) => { setPosts(data.posts); setTotal(data.total); })
       .catch(() => router.replace("/login"))
       .finally(() => setLoading(false));
-  }, [facultyFilter, router]);
+  }, [facultyFilter, router]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting) return;
+        setPosts((current) => {
+          if (loadingMore || current.length >= total || loading) return current;
+          setLoadingMore(true);
+          apiFetch<QAListResponse>(`/api/qa?${buildParams(current.length)}`)
+            .then((data) => { setPosts((prev) => [...prev, ...data.posts]); setTotal(data.total); })
+            .catch(() => {})
+            .finally(() => setLoadingMore(false));
+          return current;
+        });
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loading, loadingMore, total, facultyFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handlePost(e: React.FormEvent) {
     e.preventDefault();
@@ -324,10 +354,12 @@ export default function QAPage() {
           })}
         </div>
 
-        {total > posts.length && (
-          <p className="text-muted-foreground text-xs text-center mt-4">
-            Showing {posts.length} of {total} questions
-          </p>
+        <div ref={sentinelRef} className="h-4" />
+        {loadingMore && (
+          <p className="text-muted-foreground text-xs text-center py-4">Loading more…</p>
+        )}
+        {!loadingMore && posts.length > 0 && posts.length >= total && (
+          <p className="text-muted-foreground text-xs text-center py-4">You&apos;re all caught up.</p>
         )}
       </main>
 

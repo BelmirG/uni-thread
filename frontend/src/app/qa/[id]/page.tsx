@@ -11,6 +11,7 @@ import {
   X,
   ArrowLeft,
   Lock,
+  CornerDownRight,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { ImageUploader } from "@/components/ImageUploader";
@@ -156,7 +157,8 @@ function AnswerNode({ node, depth }: { node: TreeNode; depth: number }) {
   const p = node.post;
   const isReplying = ctx.replyingToId === p.id;
   const voted = p.current_user_vote;
-  const indent = Math.min(depth, 5) * 16;
+  const indent = Math.min(depth, 4) * 14;
+  const isCutOff = node.children.length === 0 && p.reply_count > 0;
 
   return (
     <div className="mb-1">
@@ -274,6 +276,17 @@ function AnswerNode({ node, depth }: { node: TreeNode; depth: number }) {
               <AnswerNode key={child.post.id} node={child} depth={depth + 1} />
             ))}
           </div>
+        )}
+
+        {/* Thread cut-off */}
+        {isCutOff && (
+          <a
+            href={`/qa/${p.id}`}
+            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-1 mb-2 ml-1"
+          >
+            <CornerDownRight className="w-3 h-3" />
+            Continue this thread
+          </a>
         )}
       </div>
     </div>
@@ -498,7 +511,7 @@ export default function QADetailPage() {
         {/* Answers */}
         <div>
           <h3 className="text-sm font-semibold text-muted-foreground mb-3">
-            {allAnswers.length} {allAnswers.length === 1 ? "answer" : "answers"}
+            {question.reply_count} {question.reply_count === 1 ? "answer" : "answers"}
           </h3>
           {tree.map((node) => (
             <AnswerNode key={node.post.id} node={node} depth={0} />
