@@ -1,3 +1,4 @@
+import json
 import re
 import uuid
 from datetime import datetime, timezone
@@ -8,6 +9,7 @@ from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.core.redis import redis
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.club import Club
@@ -643,6 +645,14 @@ async def invite_member(
 
     db.add(ClubInvitation(club_id=club.id, invited_by=current_user.id, invited_user_id=target.id))
     await db.commit()
+    await redis.publish(f"notif:{target.id}", json.dumps({
+        "type": "club_invite",
+        "actor_username": current_user.username,
+        "actor_display_name": current_user.display_name,
+        "actor_avatar_url": current_user.avatar_url,
+        "club_name": club.name,
+        "club_slug": club.slug,
+    }))
 
 
 @router.post("/{slug}/invitations/accept", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import UserSearchInput from "@/components/UserSearchInput";
 import MiniAvatar from "@/components/MiniAvatar";
 import { timeAgo } from "@/lib/timeAgo";
-import { Plus, X } from "lucide-react";
+import { Plus, X, ImageIcon, FileText } from "lucide-react";
+import { useToast } from "@/components/ToastProvider";
 
 interface OtherUser {
   username: string;
@@ -18,6 +19,8 @@ interface OtherUser {
 interface LastMessage {
   content: string | null;
   is_post_share: boolean;
+  has_photo: boolean;
+  has_file: boolean;
   sender_username: string;
   created_at: string;
 }
@@ -29,9 +32,26 @@ interface ConversationItem {
   unread_count: number;
 }
 
-function lastMsgPreview(lm: LastMessage): string {
-  if (lm.is_post_share) return lm.content ? `${lm.content} [shared post]` : "[shared a post]";
-  return lm.content ?? "";
+function LastMsgPreview({ lm, unread }: { lm: LastMessage; unread: boolean }) {
+  const cls = `text-xs truncate flex items-center gap-1 ${unread ? "text-foreground font-medium" : "text-muted-foreground"}`;
+  const iconCls = "w-3 h-3 flex-shrink-0";
+  const text = lm.content ?? "";
+
+  const attachment = (() => {
+    if (lm.is_post_share) return <><FileText className={iconCls} /><span>Shared a post</span></>;
+    if (lm.has_photo && lm.has_file) return <><ImageIcon className={iconCls} /><span>Photo</span><span>·</span><FileText className={iconCls} /><span>File</span></>;
+    if (lm.has_photo) return <><ImageIcon className={iconCls} /><span>Photo</span></>;
+    if (lm.has_file) return <><FileText className={iconCls} /><span>File</span></>;
+    return null;
+  })();
+
+  return (
+    <span className={cls}>
+      {text && <span className="truncate">{text}</span>}
+      {text && attachment && <span className="flex-shrink-0">·</span>}
+      {attachment}
+    </span>
+  );
 }
 
 export default function MessagesPage() {
@@ -42,6 +62,17 @@ export default function MessagesPage() {
   const [newUsername, setNewUsername] = useState("");
   const [newError, setNewError] = useState<string | null>(null);
   const [newLoading, setNewLoading] = useState(false);
+  const { onNotification } = useToast();
+  const loadingRef = useRef(false);
+
+  function reload() {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    apiFetch<ConversationItem[]>("/api/messages")
+      .then(setConversations)
+      .catch(() => {})
+      .finally(() => { loadingRef.current = false; });
+  }
 
   useEffect(() => {
     apiFetch<ConversationItem[]>("/api/messages")
@@ -50,7 +81,15 @@ export default function MessagesPage() {
         if (err instanceof ApiError && err.status === 401) router.replace("/login");
       })
       .finally(() => setLoading(false));
-  }, [router]);
+
+    // Refresh list when a DM arrives via SSE
+    const unsub = onNotification((p) => {
+      if (p.type === "dm") reload();
+    });
+    // Polling fallback every 10 s
+    const interval = setInterval(reload, 10000);
+    return () => { unsub(); clearInterval(interval); };
+  }, [router, onNotification]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function openNew() {
     setNewOpen(true);
@@ -112,11 +151,16 @@ export default function MessagesPage() {
                     </span>
                   )}
                 </div>
-                <p className={`text-xs truncate ${unread ? "text-foreground font-medium" : "text-muted-foreground"}`}>
-                  {c.last_message
-                    ? `${c.last_message.sender_username === c.other_user.username ? "" : "You: "}${lastMsgPreview(c.last_message)}`
-                    : "No messages yet"}
-                </p>
+                {c.last_message ? (
+                  <div className="flex items-center gap-1 text-xs min-w-0">
+                    {c.last_message.sender_username !== c.other_user.username && (
+                      <span className={`flex-shrink-0 ${unread ? "text-foreground font-medium" : "text-muted-foreground"}`}>You:</span>
+                    )}
+                    <LastMsgPreview lm={c.last_message} unread={unread} />
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No messages yet</p>
+                )}
               </div>
             </Link>
           );

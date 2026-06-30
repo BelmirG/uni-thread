@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
-import { ArrowLeft, Send, MoreVertical, Trash2, X, CornerUpLeft, Plus, ImageIcon, FileText, Download, ExternalLink, GalleryHorizontalEnd, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Send, MoreVertical, Trash2, X, CornerUpLeft, Plus, ImageIcon, FileText, Download, ExternalLink, GalleryHorizontalEnd, ChevronLeft, ChevronRight, Bell } from "lucide-react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import MiniAvatar from "@/components/MiniAvatar";
@@ -52,6 +52,7 @@ interface DmMessage {
 interface ConvResponse {
   other_user: Author;
   messages: DmMessage[];
+  is_muted: boolean;
 }
 
 function timeLabel(iso: string): string {
@@ -471,7 +472,9 @@ export default function ConversationPage() {
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [lightbox, setLightbox] = useState<{ urls: string[]; index: number } | null>(null);
   const [mediaOpen, setMediaOpen] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
 
+  const closeMenuTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -481,6 +484,7 @@ export default function ConversationPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => () => { if (closeMenuTimerRef.current) clearTimeout(closeMenuTimerRef.current); }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -499,6 +503,7 @@ export default function ConversationPage() {
         setMessages(conv.messages);
         setOtherUser(conv.other_user);
         setCurrentUsername(me.username);
+        setIsMuted(conv.is_muted);
       } catch (err: unknown) {
         if (err instanceof ApiError && err.status === 401) router.replace("/login");
         else if (err instanceof ApiError && err.status === 403) router.replace("/messages");
@@ -642,6 +647,28 @@ export default function ConversationPage() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   }
 
+  function handleToggleMute() {
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    apiFetch(`/api/messages/${id}/mute`, { method: newMuted ? "POST" : "DELETE" }).catch(() => {
+      setIsMuted(!newMuted);
+    });
+  }
+
+  function handleMenuMouseEnter() {
+    if (closeMenuTimerRef.current) {
+      clearTimeout(closeMenuTimerRef.current);
+      closeMenuTimerRef.current = null;
+    }
+  }
+
+  function handleMenuMouseLeave() {
+    closeMenuTimerRef.current = setTimeout(() => {
+      setMenuOpen(false);
+      closeMenuTimerRef.current = null;
+    }, 200);
+  }
+
   async function handleDeleteConversation() {
     if (!window.confirm("Delete this conversation? This cannot be undone.")) return;
     setMenuOpen(false);
@@ -673,27 +700,38 @@ export default function ConversationPage() {
               {status === "connected" ? "Live" : status === "connecting" ? "Connecting…" : "Disconnected"}
             </span>
           </div>
-          <div className="relative">
+          <div className="relative" onMouseEnter={handleMenuMouseEnter} onMouseLeave={handleMenuMouseLeave}>
             <button onClick={() => setMenuOpen((o) => !o)} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
               <MoreVertical className="w-4 h-4" />
             </button>
             {menuOpen && (
-              <>
-                <div onClick={() => setMenuOpen(false)} className="fixed inset-0 z-[199]" />
-                <div className="absolute right-0 top-[calc(100%+4px)] bg-white border border-border rounded-xl shadow-lg min-w-[160px] z-[200] overflow-hidden">
-                  <button
-                    onClick={() => { setMenuOpen(false); setMediaOpen(true); }}
-                    className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
+              <div className="absolute right-0 top-full bg-white border border-border rounded-xl shadow-lg min-w-[180px] z-[200] overflow-hidden">
+                <button
+                  onClick={() => { setMenuOpen(false); setMediaOpen(true); }}
+                  className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors"
+                >
+                  <GalleryHorizontalEnd className="w-3.5 h-3.5" />
+                  Media
+                </button>
+                <div className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-foreground border-t border-border">
+                  <Bell className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="flex-1 select-none">Notifications</span>
+                  <div
+                    onClick={handleToggleMute}
+                    role="switch"
+                    aria-checked={!isMuted}
+                    className={`relative cursor-pointer inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors duration-500 ${isMuted ? "bg-orange-400" : "bg-green-500"}`}
                   >
-                    <GalleryHorizontalEnd className="w-3.5 h-3.5" />
-                    Media
-                  </button>
-                  <button onClick={handleDeleteConversation} className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-destructive hover:bg-destructive/5 transition-colors border-t border-border">
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete chat
-                  </button>
+                    <span
+                      className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-500 ease-in-out ${isMuted ? "translate-x-1" : "translate-x-[18px]"}`}
+                    />
+                  </div>
                 </div>
-              </>
+                <button onClick={handleDeleteConversation} className="flex items-center gap-2 w-full text-left px-4 py-2.5 text-sm text-destructive hover:bg-destructive/5 transition-colors border-t border-border">
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete chat
+                </button>
+              </div>
             )}
           </div>
         </div>

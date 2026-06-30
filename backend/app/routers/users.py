@@ -1,3 +1,4 @@
+import json
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -9,6 +10,8 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy import or_
+
+from app.core.redis import redis
 
 USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{3,30}$')
 
@@ -354,6 +357,12 @@ async def follow_user(
         else:
             db.add(Notification(user_id=target.id, actor_id=current_user.id, type="follow"))
         await db.commit()
+        await redis.publish(f"notif:{target.id}", json.dumps({
+            "type": "follow",
+            "actor_username": current_user.username,
+            "actor_display_name": current_user.display_name,
+            "actor_avatar_url": current_user.avatar_url,
+        }))
 
 
 @router.delete("/{username}/follow", status_code=status.HTTP_204_NO_CONTENT)

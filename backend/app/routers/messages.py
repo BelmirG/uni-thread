@@ -76,6 +76,32 @@ def _build_msg_payload(
     }
 
 
+def _build_preview(content: str, attachments: list, shared_post_id) -> str:
+    has_images = any(
+        a.get("mime_type", "").startswith("image/") for a in attachments
+    )
+    has_files = any(
+        not a.get("mime_type", "").startswith("image/") for a in attachments
+    )
+
+    if has_images and has_files:
+        attachment_label = "📷 Photo · 📎 File"
+    elif has_images:
+        attachment_label = "📷 Photo" if len([a for a in attachments if a.get("mime_type", "").startswith("image/")]) == 1 else f"📷 {len(attachments)} photos"
+    elif has_files:
+        attachment_label = "📎 File"
+    elif shared_post_id:
+        attachment_label = "📎 Shared a post"
+    else:
+        attachment_label = None
+
+    text = (content or "").strip()[:60]
+
+    if text and attachment_label:
+        return f"{text} · {attachment_label}"
+    return text or attachment_label or ""
+
+
 # ── REST endpoints (literal paths first, then parameterised) ──────────────────
 
 @router.get("/search-users")
@@ -120,6 +146,7 @@ async def list_conversations(
             DirectMessage.conversation_id,
             DirectMessage.content,
             DirectMessage.shared_post_id,
+            DirectMessage.attachments,
             DirectMessage.sender_id,
             DirectMessage.created_at,
             func.row_number()
@@ -149,6 +176,7 @@ async def list_conversations(
             OtherUser.avatar_url,
             last_msg.c.content,
             last_msg.c.shared_post_id,
+            last_msg.c.attachments,
             last_msg.c.created_at,
             SenderUser.username.label("last_sender"),
             func.coalesce(unread_subq.c.unread_count, 0).label("unread_count"),
@@ -170,9 +198,14 @@ async def list_conversations(
     for r in rows:
         last = None
         if r.created_at is not None:
+            attachments = r.attachments or []
+            has_photo = any(a.get("mime_type", "").startswith("image/") for a in attachments)
+            has_file = any(not a.get("mime_type", "").startswith("image/") for a in attachments)
             last = {
                 "content": r.content,
                 "is_post_share": r.shared_post_id is not None,
+                "has_photo": has_photo,
+                "has_file": has_file,
                 "sender_username": r.last_sender,
                 "created_at": r.created_at.isoformat(),
             }
@@ -246,9 +279,13 @@ async def share_post(
         )).scalar_one_or_none()
 
     conv = await _get_or_create_conversation(current_user, other, db)
+    conv_id = conv.id
+    conv_user1_id = conv.user1_id
+    conv_muted_by_user1 = conv.muted_by_user1
+    conv_muted_by_user2 = conv.muted_by_user2
 
     msg = DirectMessage(
-        conversation_id=conv.id,
+        conversation_id=conv_id,
         sender_id=current_user.id,
         content=body.content or None,
         shared_post_id=post.id,
@@ -258,9 +295,70 @@ async def share_post(
     await db.refresh(msg)
 
     payload = json.dumps(_build_msg_payload(msg, current_user, post, post_author))
-    await redis.publish(f"dm:{conv.id}", payload)
+    await redis.publish(f"dm:{conv_id}", payload)
 
-    return {"conversation_id": str(conv.id)}
+    recipient_id = other.id
+    recipient_is_muted = (
+        conv_muted_by_user2 if conv_user1_id == current_user.id else conv_muted_by_user1
+    )
+    if not recipient_is_muted:
+        await redis.publish(f"notif:{recipient_id}", json.dumps({
+            "type": "dm",
+            "actor_username": current_user.username,
+            "actor_display_name": current_user.display_name,
+            "actor_avatar_url": current_user.avatar_url,
+            "conversation_id": str(conv_id),
+            "preview": (body.content or "").strip()[:60],
+            "has_photo": False,
+            "has_file": False,
+            "is_post_share": True,
+        }))
+
+    return {"conversation_id": str(conv_id)}
+
+
+@router.post("/{conversation_id}/mute", status_code=204)
+async def mute_conversation(
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        conv_id = uuid.UUID(conversation_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Not found.")
+    conv = (await db.execute(
+        select(Conversation).where(Conversation.id == conv_id)
+    )).scalar_one_or_none()
+    if not conv or (conv.user1_id != current_user.id and conv.user2_id != current_user.id):
+        raise HTTPException(status_code=403, detail="Access denied.")
+    if conv.user1_id == current_user.id:
+        conv.muted_by_user1 = True
+    else:
+        conv.muted_by_user2 = True
+    await db.commit()
+
+
+@router.delete("/{conversation_id}/mute", status_code=204)
+async def unmute_conversation(
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        conv_id = uuid.UUID(conversation_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Not found.")
+    conv = (await db.execute(
+        select(Conversation).where(Conversation.id == conv_id)
+    )).scalar_one_or_none()
+    if not conv or (conv.user1_id != current_user.id and conv.user2_id != current_user.id):
+        raise HTTPException(status_code=403, detail="Access denied.")
+    if conv.user1_id == current_user.id:
+        conv.muted_by_user1 = False
+    else:
+        conv.muted_by_user2 = False
+    await db.commit()
 
 
 @router.get("/unread-count")
@@ -356,9 +454,14 @@ async def get_messages(
     )
     await db.commit()
 
+    is_muted = (
+        conv.muted_by_user1 if conv.user1_id == current_user.id else conv.muted_by_user2
+    )
+
     return {
         "other_user": {"username": other_user.username, "display_name": other_user.display_name, "avatar_url": other_user.avatar_url},
         "messages": [_build_msg_payload(row[0], row[1], row[2], row[3]) for row in rows],
+        "is_muted": is_muted,
     }
 
 
@@ -421,6 +524,10 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
             return
 
         await websocket.accept()
+
+        # Cache user IDs as plain values — conv ORM attrs expire after each commit
+        conv_user1_id = conv.user1_id
+        conv_user2_id = conv.user2_id
 
         channel = f"dm:{conv_id}"
         pubsub = redis.pubsub()
@@ -496,6 +603,34 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
 
                 payload = json.dumps(_build_msg_payload(dm, user, shared_post, post_author))
                 await redis.publish(channel, payload)
+
+                # Push notification to the recipient — re-query mute status so
+                # toggling mute mid-session takes effect immediately
+                recipient_id = conv_user2_id if conv_user1_id == user.id else conv_user1_id
+                mute_row = (await db.execute(
+                    select(Conversation.muted_by_user1, Conversation.muted_by_user2)
+                    .where(Conversation.id == conv_id)
+                )).first()
+                recipient_is_muted = False
+                if mute_row:
+                    recipient_is_muted = (
+                        mute_row.muted_by_user2 if conv_user1_id == user.id
+                        else mute_row.muted_by_user1
+                    )
+                has_photo = any(a.get("mime_type", "").startswith("image/") for a in attachments)
+                has_file = any(not a.get("mime_type", "").startswith("image/") for a in attachments)
+                await redis.publish(f"notif:{recipient_id}", json.dumps({
+                    "type": "dm",
+                    "actor_username": user.username,
+                    "actor_display_name": user.display_name,
+                    "actor_avatar_url": user.avatar_url,
+                    "conversation_id": str(conv_id),
+                    "preview": (content or "").strip()[:60],
+                    "has_photo": has_photo,
+                    "has_file": has_file,
+                    "is_post_share": bool(shared_post_uuid),
+                    "silent": recipient_is_muted,
+                }))
 
         redis_task = asyncio.create_task(redis_to_ws())
         ws_task = asyncio.create_task(ws_to_redis())

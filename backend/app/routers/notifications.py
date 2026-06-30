@@ -1,8 +1,15 @@
-from fastapi import APIRouter, Depends
+import asyncio
+import json
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.core.redis import redis
+from app.core.security import decode_access_token
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.notification import Notification
@@ -60,3 +67,39 @@ async def mark_all_read(
     )
     await db.commit()
     return {"ok": True}
+
+
+@router.websocket("/ws")
+async def notifications_ws(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time push notifications.
+    Auth via JWT cookie (same as the DM WebSocket).
+    """
+    token = websocket.cookies.get("access_token")
+    if not token:
+        await websocket.close(code=4001, reason="Not authenticated")
+        return
+    user_id_str = decode_access_token(token)
+    if not user_id_str:
+        await websocket.close(code=4001, reason="Invalid token")
+        return
+
+    user_id = uuid.UUID(user_id_str)
+    await websocket.accept()
+
+    channel = f"notif:{user_id}"
+    pubsub = redis.pubsub()
+    await pubsub.subscribe(channel)
+
+    try:
+        async for msg in pubsub.listen():
+            if msg["type"] == "message":
+                try:
+                    await websocket.send_text(msg["data"])
+                except (WebSocketDisconnect, Exception):
+                    break
+    except (WebSocketDisconnect, asyncio.CancelledError, Exception):
+        pass
+    finally:
+        await pubsub.unsubscribe(channel)
+        await pubsub.aclose()
