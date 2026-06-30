@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func, text
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -28,6 +28,9 @@ class Post(Base):
     faculty_tag: Mapped[str | None] = mapped_column(String(10), nullable=True)
     image_urls: Mapped[list] = mapped_column(
         ARRAY(String), nullable=False, server_default=text("'{}'"), default=list
+    )
+    file_attachments: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'"), default=list
     )
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default=text("false"))

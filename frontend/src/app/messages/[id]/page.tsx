@@ -81,14 +81,20 @@ function SharedPostCard({ post, isOwn }: { post: SharedPost; isOwn: boolean }) {
 function SwipeableMessage({
   msg,
   isOwn,
+  isHovered,
   onSwipe,
   onScrollToQuote,
+  onHoverEnter,
+  onHoverLeave,
   msgRef,
 }: {
   msg: DmMessage;
   isOwn: boolean;
+  isHovered: boolean;
   onSwipe: (msg: DmMessage) => void;
   onScrollToQuote: (quote: string) => void;
+  onHoverEnter: () => void;
+  onHoverLeave: () => void;
   msgRef: (el: HTMLDivElement | null) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -98,7 +104,6 @@ function SwipeableMessage({
   const offsetRef = useRef(0);
   const onSwipeRef = useRef(onSwipe);
   const [offset, setOffset] = useState(0);
-  const [hovered, setHovered] = useState(false);
 
   useEffect(() => { onSwipeRef.current = onSwipe; });
 
@@ -147,14 +152,14 @@ function SwipeableMessage({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { quote, body } = parseContent(msg.content);
-  const replyBtnOpacity = offset > 10 ? Math.min(offset / 40, 1) : hovered ? 1 : 0;
+  const replyBtnOpacity = offset > 10 ? Math.min(offset / 40, 1) : isHovered ? 1 : 0;
 
   return (
     <div
       ref={(el) => { containerRef.current = el; msgRef(el); }}
       className={cn("flex w-full items-end gap-1.5", isOwn ? "flex-row-reverse" : "flex-row")}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={onHoverEnter}
+      onMouseLeave={onHoverLeave}
     >
       {!isOwn && (
         <div className="flex-shrink-0 mb-0.5">
@@ -198,9 +203,9 @@ function SwipeableMessage({
         </span>
       </div>
 
-      {/* Reply button: fades in on hover (desktop) or swipe (mobile) */}
+      {/* Reply button: visible on hover (desktop) or swipe (mobile) */}
       <button
-        onClick={() => onSwipeRef.current(msg)}
+        onClick={() => { onHoverLeave(); onSwipeRef.current(msg); }}
         className="flex-shrink-0 self-center p-1 rounded-full text-muted-foreground"
         style={{
           opacity: replyBtnOpacity,
@@ -226,6 +231,7 @@ export default function ConversationPage() {
   const [input, setInput] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<DmMessage | null>(null);
+  const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -376,7 +382,10 @@ export default function ConversationPage() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2 bg-muted/30">
+      <div
+        className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-2 bg-muted/30"
+        onScroll={() => setHoveredMsgId(null)}
+      >
         {messages.length === 0 && status === "connected" && (
           <p className="text-muted-foreground text-sm text-center m-auto">No messages yet. Say hello!</p>
         )}
@@ -385,7 +394,10 @@ export default function ConversationPage() {
             key={msg.id}
             msg={msg}
             isOwn={msg.sender.username === currentUsername}
-            onSwipe={(m) => { setReplyTo(m); setTimeout(() => inputRef.current?.focus(), 50); }}
+            isHovered={hoveredMsgId === msg.id}
+            onHoverEnter={() => setHoveredMsgId(msg.id)}
+            onHoverLeave={() => setHoveredMsgId(null)}
+            onSwipe={(m) => { setHoveredMsgId(null); setReplyTo(m); setTimeout(() => inputRef.current?.focus(), 50); }}
             onScrollToQuote={scrollToQuote}
             msgRef={(el) => {
               if (el) msgRefs.current.set(msg.id, el);

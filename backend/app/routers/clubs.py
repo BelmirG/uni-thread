@@ -96,6 +96,7 @@ def _row_to_post(row, current_vote: str | None, poll=None) -> PostResponse:
         content="[deleted]" if post.is_deleted else post.content,
         post_type=post.post_type,
         image_urls=post.image_urls or [],
+        file_attachments=post.file_attachments or [],
         author=AuthorInfo(username=username, display_name=display_name, avatar_url=avatar_url) if username else None,
         upvotes=upvotes or 0,
         downvotes=downvotes or 0,
@@ -441,6 +442,7 @@ async def create_club_post(
         post_type="club",
         club_id=club.id,
         image_urls=body.image_urls,
+        file_attachments=[a.model_dump() for a in body.file_attachments],
         poll_expires_at=body.poll_expires_at,
     )
     db.add(post)
@@ -461,6 +463,7 @@ async def create_club_post(
         content=post.content,
         post_type="club",
         image_urls=post.image_urls or [],
+        file_attachments=post.file_attachments or [],
         author=AuthorInfo(
             username=current_user.username,
             display_name=current_user.display_name,

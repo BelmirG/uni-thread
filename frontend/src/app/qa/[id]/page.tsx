@@ -1,7 +1,6 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import {
   ChevronUp,
@@ -16,6 +15,8 @@ import {
 import { apiFetch } from "@/lib/api";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
+import { FileAttachmentList } from "@/components/FileAttachmentList";
+import type { FileAttachment } from "@/components/FileUploader";
 import UserSearchInput from "@/components/UserSearchInput";
 import { timeAgo } from "@/lib/timeAgo";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ interface QAPost {
   content: string;
   faculty_tag: string | null;
   image_urls: string[];
+  file_attachments: FileAttachment[];
   parent_post_id: string | null;
   upvotes: number;
   downvotes: number;
@@ -176,6 +178,12 @@ function AnswerNode({ node, depth }: { node: TreeNode; depth: number }) {
 
             {/* Images */}
             <ImageGrid urls={p.image_urls ?? []} />
+            {/* File attachments */}
+            {(p.file_attachments ?? []).length > 0 && (
+              <div className="mb-1.5">
+                <FileAttachmentList attachments={p.file_attachments} />
+              </div>
+            )}
 
             {/* Content */}
             {p.content && (
@@ -410,13 +418,13 @@ export default function QADetailPage() {
     <Ctx.Provider value={ctxValue}>
       <main className="max-w-xl mx-auto px-4 pt-4 pb-36">
         {/* Back link */}
-        <Link
-          href="/qa"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors no-underline mb-4"
+        <button
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Q&amp;A
-        </Link>
+          Back
+        </button>
 
         {/* Question card */}
         <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden mb-4">
@@ -435,6 +443,12 @@ export default function QADetailPage() {
           {(question.image_urls ?? []).length > 0 && (
             <div className="px-4 pb-3">
               <ImageGrid urls={question.image_urls} />
+            </div>
+          )}
+
+          {(question.file_attachments ?? []).length > 0 && (
+            <div className="px-4 pb-3">
+              <FileAttachmentList attachments={question.file_attachments} />
             </div>
           )}
 

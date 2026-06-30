@@ -16,6 +16,8 @@ import {
 import { apiFetch } from "@/lib/api";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
+import { FileUploader, FileAttachment } from "@/components/FileUploader";
+import { FileAttachmentList } from "@/components/FileAttachmentList";
 import { FACULTIES, FACULTY_NAMES, Faculty } from "@/lib/faculties";
 import UserSearchInput from "@/components/UserSearchInput";
 import { timeAgo } from "@/lib/timeAgo";
@@ -27,6 +29,7 @@ interface QAPost {
   content: string;
   faculty_tag: string | null;
   image_urls: string[];
+  file_attachments: FileAttachment[];
   upvotes: number;
   downvotes: number;
   current_user_vote: "up" | "down" | null;
@@ -126,6 +129,8 @@ export default function QAPage() {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [imagesUploading, setImagesUploading] = useState(false);
   const [uploaderKey, setUploaderKey] = useState(0);
+  const [fileAttachments, setFileAttachments] = useState<FileAttachment[]>([]);
+  const [filesUploading, setFilesUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -141,20 +146,21 @@ export default function QAPage() {
 
   async function handlePost(e: React.FormEvent) {
     e.preventDefault();
-    if (!content.trim() && !imageUrls.length) return;
-    if (imagesUploading) return;
+    if (!content.trim() && !imageUrls.length && !fileAttachments.length) return;
+    if (imagesUploading || filesUploading) return;
     setSubmitting(true);
     setPostError(null);
     try {
       const newPost = await apiFetch<QAPost>("/api/qa", {
         method: "POST",
-        body: JSON.stringify({ content: content.trim(), faculty_tag: facultyTag || null, image_urls: imageUrls }),
+        body: JSON.stringify({ content: content.trim(), faculty_tag: facultyTag || null, image_urls: imageUrls, file_attachments: fileAttachments }),
       });
       setPosts((prev) => [newPost, ...prev]);
       setTotal((t) => t + 1);
       setContent("");
       setFacultyTag("");
       setImageUrls([]);
+      setFileAttachments([]);
       setUploaderKey((k) => k + 1);
       setComposerOpen(false);
     } catch (err: unknown) {
@@ -257,6 +263,13 @@ export default function QAPage() {
                 {(post.image_urls ?? []).length > 0 && (
                   <div className="px-4 pb-3">
                     <ImageGrid urls={post.image_urls} />
+                  </div>
+                )}
+
+                {/* File attachments */}
+                {(post.file_attachments ?? []).length > 0 && (
+                  <div className="px-4 pb-3">
+                    <FileAttachmentList attachments={post.file_attachments} />
                   </div>
                 )}
 
@@ -366,6 +379,10 @@ export default function QAPage() {
                     key={uploaderKey}
                     onUrlsChange={(urls, uploading) => { setImageUrls(urls); setImagesUploading(uploading); }}
                   />
+                  <FileUploader
+                    key={uploaderKey + 1000}
+                    onChange={(attachments, uploading) => { setFileAttachments(attachments); setFilesUploading(uploading); }}
+                  />
                   <div className="flex items-center gap-2 flex-wrap">
                     <select
                       value={facultyTag}
@@ -382,9 +399,9 @@ export default function QAPage() {
                       type="submit"
                       size="sm"
                       className="ml-auto"
-                      disabled={submitting || imagesUploading || (!content.trim() && !imageUrls.length)}
+                      disabled={submitting || imagesUploading || filesUploading || (!content.trim() && !imageUrls.length && !fileAttachments.length)}
                     >
-                      {imagesUploading ? "Uploading…" : submitting ? "Posting…" : "Post anonymously"}
+                      {imagesUploading || filesUploading ? "Uploading…" : submitting ? "Posting…" : "Post anonymously"}
                     </Button>
                   </div>
                 </div>

@@ -16,6 +16,8 @@ import { apiFetch } from "@/lib/api";
 import UserSearchInput from "@/components/UserSearchInput";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
+import { FileUploader, FileAttachment } from "@/components/FileUploader";
+import { FileAttachmentList } from "@/components/FileAttachmentList";
 import MiniAvatar from "@/components/MiniAvatar";
 import PollComposer, { PollDraft } from "@/components/PollComposer";
 import PollDisplay from "@/components/PollDisplay";
@@ -45,6 +47,7 @@ interface Post {
   content: string;
   faculty_tag: string | null;
   image_urls: string[];
+  file_attachments: FileAttachment[];
   author: Author | null;
   upvotes: number;
   downvotes: number;
@@ -176,6 +179,8 @@ export default function FeedPage() {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [imagesUploading, setImagesUploading] = useState(false);
   const [uploaderKey, setUploaderKey] = useState(0);
+  const [fileAttachments, setFileAttachments] = useState<FileAttachment[]>([]);
+  const [filesUploading, setFilesUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -203,12 +208,14 @@ export default function FeedPage() {
   function closeComposer() {
     setComposerOpen(false);
     setPollDraft(null);
+    setFileAttachments([]);
+    setFilesUploading(false);
   }
 
   async function handlePost(e: React.FormEvent) {
     e.preventDefault();
-    if (!content.trim() && !imageUrls.length && !pollDraft) return;
-    if (imagesUploading) return;
+    if (!content.trim() && !imageUrls.length && !pollDraft && !fileAttachments.length) return;
+    if (imagesUploading || filesUploading) return;
     if (pollDraft) {
       const validOptions = pollDraft.options.map((o) => o.trim()).filter(Boolean);
       if (validOptions.length < 2) {
@@ -225,6 +232,7 @@ export default function FeedPage() {
           content: content.trim(),
           faculty_tag: postFacultyTag || null,
           image_urls: imageUrls,
+          file_attachments: fileAttachments,
           poll_options: pollDraft ? pollDraft.options.map((o) => o.trim()).filter(Boolean) : [],
           poll_expires_at: pollDraft?.expiresAt ? new Date(pollDraft.expiresAt).toISOString() : null,
         }),
@@ -234,6 +242,7 @@ export default function FeedPage() {
       setContent("");
       setPostFacultyTag("");
       setImageUrls([]);
+      setFileAttachments([]);
       setUploaderKey((k) => k + 1);
       setPollDraft(null);
       setComposerOpen(false);
@@ -417,6 +426,13 @@ export default function FeedPage() {
                       setImagesUploading(uploading);
                     }}
                   />
+                  <FileUploader
+                    key={uploaderKey + 1000}
+                    onChange={(attachments, uploading) => {
+                      setFileAttachments(attachments);
+                      setFilesUploading(uploading);
+                    }}
+                  />
                   <PollComposer value={pollDraft} onChange={setPollDraft} />
                   <div className="flex items-center gap-2 flex-wrap">
                     <select
@@ -439,10 +455,11 @@ export default function FeedPage() {
                       disabled={
                         submitting ||
                         imagesUploading ||
-                        (!content.trim() && !imageUrls.length && !pollDraft)
+                        filesUploading ||
+                        (!content.trim() && !imageUrls.length && !pollDraft && !fileAttachments.length)
                       }
                     >
-                      {imagesUploading ? "Uploading…" : submitting ? "Posting…" : "Post"}
+                      {imagesUploading || filesUploading ? "Uploading…" : submitting ? "Posting…" : "Post"}
                     </Button>
                   </div>
                 </div>
@@ -604,6 +621,13 @@ function PostCard({
       {(post.image_urls ?? []).length > 0 && (
         <div className="px-4 pb-3">
           <ImageGrid urls={post.image_urls} />
+        </div>
+      )}
+
+      {/* File attachments */}
+      {(post.file_attachments ?? []).length > 0 && (
+        <div className="px-4 pb-3">
+          <FileAttachmentList attachments={post.file_attachments} />
         </div>
       )}
 

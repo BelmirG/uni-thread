@@ -6,6 +6,8 @@ import { useRouter, useParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
+import { FileUploader, FileAttachment } from "@/components/FileUploader";
+import { FileAttachmentList } from "@/components/FileAttachmentList";
 import UserSearchInput from "@/components/UserSearchInput";
 import PollComposer, { PollDraft } from "@/components/PollComposer";
 import PollDisplay from "@/components/PollDisplay";
@@ -63,6 +65,7 @@ interface Post {
   id: string;
   content: string;
   image_urls: string[];
+  file_attachments: FileAttachment[];
   author: Author | null;
   upvotes: number;
   downvotes: number;
@@ -111,6 +114,8 @@ export default function ClubDetailPage() {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [imagesUploading, setImagesUploading] = useState(false);
   const [uploaderKey, setUploaderKey] = useState(0);
+  const [fileAttachments, setFileAttachments] = useState<FileAttachment[]>([]);
+  const [filesUploading, setFilesUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -234,8 +239,8 @@ export default function ClubDetailPage() {
 
   async function handlePost(e: React.FormEvent) {
     e.preventDefault();
-    if (!content.trim() && !imageUrls.length && !pollDraft) return;
-    if (imagesUploading) return;
+    if (!content.trim() && !imageUrls.length && !pollDraft && !fileAttachments.length) return;
+    if (imagesUploading || filesUploading) return;
     if (pollDraft) {
       const validOptions = pollDraft.options.map((o) => o.trim()).filter(Boolean);
       if (validOptions.length < 2) {
@@ -251,6 +256,7 @@ export default function ClubDetailPage() {
         body: JSON.stringify({
           content: content.trim(),
           image_urls: imageUrls,
+          file_attachments: fileAttachments,
           poll_options: pollDraft ? pollDraft.options.map((o) => o.trim()).filter(Boolean) : [],
           poll_expires_at: pollDraft?.expiresAt ? new Date(pollDraft.expiresAt).toISOString() : null,
         }),
@@ -259,6 +265,7 @@ export default function ClubDetailPage() {
       setTotal((t) => t + 1);
       setContent("");
       setImageUrls([]);
+      setFileAttachments([]);
       setUploaderKey((k) => k + 1);
       setPollDraft(null);
       setComposerOpen(false);
@@ -668,6 +675,13 @@ export default function ClubDetailPage() {
                   </div>
                 )}
 
+                {/* File attachments */}
+                {(post.file_attachments ?? []).length > 0 && (
+                  <div className="px-4 pb-2">
+                    <FileAttachmentList attachments={post.file_attachments} />
+                  </div>
+                )}
+
                 {/* Content */}
                 {post.content && (
                   <p className="px-4 pb-3 text-sm leading-relaxed whitespace-pre-wrap text-foreground">
@@ -814,6 +828,10 @@ export default function ClubDetailPage() {
                         key={uploaderKey}
                         onUrlsChange={(urls, uploading) => { setImageUrls(urls); setImagesUploading(uploading); }}
                       />
+                      <FileUploader
+                        key={uploaderKey + 1000}
+                        onChange={(attachments, uploading) => { setFileAttachments(attachments); setFilesUploading(uploading); }}
+                      />
                       <PollComposer value={pollDraft} onChange={setPollDraft} />
                       <div className="flex items-center gap-2">
                         {postError && <p className="text-xs text-destructive">{postError}</p>}
@@ -821,9 +839,9 @@ export default function ClubDetailPage() {
                           type="submit"
                           size="sm"
                           className="ml-auto"
-                          disabled={submitting || imagesUploading || (!content.trim() && !imageUrls.length && !pollDraft)}
+                          disabled={submitting || imagesUploading || filesUploading || (!content.trim() && !imageUrls.length && !pollDraft && !fileAttachments.length)}
                         >
-                          {imagesUploading ? "Uploading…" : submitting ? "Posting…" : "Post"}
+                          {imagesUploading || filesUploading ? "Uploading…" : submitting ? "Posting…" : "Post"}
                         </Button>
                       </div>
                     </div>

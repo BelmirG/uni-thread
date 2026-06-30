@@ -52,6 +52,7 @@ def _row_to_response(row, current_vote: str | None, is_own: bool = False) -> QAP
         content="[deleted]" if post.is_deleted else post.content,
         faculty_tag=post.faculty_tag,
         image_urls=post.image_urls or [],
+        file_attachments=post.file_attachments or [],
         upvotes=upvotes or 0,
         downvotes=downvotes or 0,
         current_user_vote=current_vote,
@@ -137,6 +138,7 @@ async def create_question(
         is_anonymous=True,
         faculty_tag=body.faculty_tag,
         image_urls=body.image_urls,
+        file_attachments=[a.model_dump() for a in body.file_attachments],
     )
     db.add(post)
     await db.flush()  # generate post.id before committing
@@ -151,6 +153,7 @@ async def create_question(
         content=post.content,
         faculty_tag=post.faculty_tag,
         image_urls=post.image_urls or [],
+        file_attachments=post.file_attachments or [],
         upvotes=0,
         downvotes=0,
         current_user_vote=None,
@@ -254,6 +257,7 @@ async def create_answer(
         is_anonymous=True,
         parent_post_id=post_id,
         image_urls=body.image_urls,
+        file_attachments=[a.model_dump() for a in body.file_attachments],
     )
     db.add(answer)
     await db.flush()
@@ -266,6 +270,7 @@ async def create_answer(
         id=answer.id,
         content=answer.content,
         image_urls=answer.image_urls or [],
+        file_attachments=answer.file_attachments or [],
         upvotes=0,
         downvotes=0,
         current_user_vote=None,

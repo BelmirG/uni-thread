@@ -16,6 +16,8 @@ import { apiFetch } from "@/lib/api";
 import UserSearchInput from "@/components/UserSearchInput";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
+import { FileAttachmentList } from "@/components/FileAttachmentList";
+import type { FileAttachment } from "@/components/FileUploader";
 import MiniAvatar from "@/components/MiniAvatar";
 import { timeAgo } from "@/lib/timeAgo";
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,7 @@ interface Post {
   content: string;
   faculty_tag: string | null;
   image_urls: string[];
+  file_attachments: FileAttachment[];
   parent_post_id: string | null;
   author: Author | null;
   upvotes: number;
@@ -200,6 +203,12 @@ function CommentNode({ node, depth }: { node: TreeNode; depth: number }) {
 
             {/* Comment images */}
             <ImageGrid urls={p.image_urls ?? []} />
+            {/* Comment file attachments */}
+            {(p.file_attachments ?? []).length > 0 && (
+              <div className="px-4 pb-2">
+                <FileAttachmentList attachments={p.file_attachments} />
+              </div>
+            )}
 
             {/* Comment content */}
             {p.content && (
@@ -439,13 +448,13 @@ export default function PostDetailPage() {
     <Ctx.Provider value={ctxValue}>
       <main className="max-w-xl mx-auto px-4 pt-4 pb-24">
         {/* Back link */}
-        <Link
-          href="/feed"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors no-underline mb-4"
+        <button
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to feed
-        </Link>
+          Back
+        </button>
 
         {/* Original post */}
         <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden mb-4">
@@ -480,6 +489,13 @@ export default function PostDetailPage() {
               {(post.image_urls ?? []).length > 0 && (
                 <div className="px-4 pb-3">
                   <ImageGrid urls={post.image_urls} />
+                </div>
+              )}
+
+              {/* Post file attachments */}
+              {(post.file_attachments ?? []).length > 0 && (
+                <div className="px-4 pb-3">
+                  <FileAttachmentList attachments={post.file_attachments} />
                 </div>
               )}
 

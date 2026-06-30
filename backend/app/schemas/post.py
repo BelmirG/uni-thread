@@ -7,17 +7,25 @@ from pydantic import BaseModel, Field, model_validator
 FacultyTag = Optional[Literal['FMS', 'FENS', 'FASS', 'FBA', 'FLW', 'FEDU']]
 
 
+class FileAttachment(BaseModel):
+    url: str
+    name: str
+    size: int
+    mime_type: str
+
+
 class CreatePostRequest(BaseModel):
     content: str = Field(default="", max_length=10_000)
     faculty_tag: FacultyTag = None
     image_urls: list[str] = Field(default_factory=list, max_length=5)
+    file_attachments: list[FileAttachment] = Field(default_factory=list, max_length=5)
     poll_options: list[str] = Field(default_factory=list)
     poll_expires_at: Optional[datetime] = None
 
     @model_validator(mode='after')
     def validate_post(self) -> 'CreatePostRequest':
-        if not self.content.strip() and not self.image_urls and not self.poll_options:
-            raise ValueError('Post must have text, image, or poll.')
+        if not self.content.strip() and not self.image_urls and not self.poll_options and not self.file_attachments:
+            raise ValueError('Post must have text, image, file, or poll.')
         if self.poll_options:
             if len(self.poll_options) < 2 or len(self.poll_options) > 4:
                 raise ValueError('Poll must have 2 to 4 options.')
@@ -60,6 +68,7 @@ class PostResponse(BaseModel):
     post_type: str
     faculty_tag: Optional[str] = None
     image_urls: list[str] = []
+    file_attachments: list[FileAttachment] = []
     author: Optional[AuthorInfo]
     upvotes: int
     downvotes: int

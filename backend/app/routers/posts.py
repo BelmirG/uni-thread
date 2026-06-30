@@ -159,6 +159,7 @@ def _row_to_response(row, current_vote: str | None, poll: PollResponse | None = 
         post_type=post.post_type,
         faculty_tag=post.faculty_tag,
         image_urls=post.image_urls or [],
+        file_attachments=post.file_attachments or [],
         author=AuthorInfo(username=username, display_name=display_name, avatar_url=avatar_url) if username else None,
         upvotes=upvotes or 0,
         downvotes=downvotes or 0,
@@ -217,6 +218,7 @@ async def create_post(
         post_type="feed",
         faculty_tag=body.faculty_tag,
         image_urls=body.image_urls,
+        file_attachments=[a.model_dump() for a in body.file_attachments],
         poll_expires_at=body.poll_expires_at,
     )
     db.add(post)
@@ -238,6 +240,7 @@ async def create_post(
         post_type="feed",
         faculty_tag=post.faculty_tag,
         image_urls=post.image_urls or [],
+        file_attachments=post.file_attachments or [],
         author=AuthorInfo(
             username=current_user.username,
             display_name=current_user.display_name,
@@ -370,6 +373,7 @@ async def create_reply(
         club_id=parent.club_id,
         parent_post_id=post_id,
         image_urls=body.image_urls,
+        file_attachments=[a.model_dump() for a in body.file_attachments],
     )
     db.add(reply)
     await db.commit()
@@ -380,6 +384,7 @@ async def create_reply(
         content=reply.content,
         post_type=reply.post_type,
         image_urls=reply.image_urls or [],
+        file_attachments=reply.file_attachments or [],
         author=AuthorInfo(
             username=current_user.username,
             display_name=current_user.display_name,
