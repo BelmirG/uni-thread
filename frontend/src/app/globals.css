@@ -4,32 +4,34 @@
 
 @layer base {
   :root {
-    --background: 214 20% 97%;       /* #F4F6F9 */
-    --foreground: 220 5% 11%;        /* #1b1c1e */
+    /* Apple-minimal palette: warm-neutral canvas, white cards, near-black ink,
+       one muted blue accent for interactive states. */
+    --background: 240 9% 96%;        /* #f5f5f7 — Apple canvas grey */
+    --foreground: 240 3% 12%;        /* #1d1d1f — near-black ink */
 
     --card: 0 0% 100%;
-    --card-foreground: 220 5% 11%;
+    --card-foreground: 240 3% 12%;
 
-    --primary: 214 100% 7%;          /* #000f22 */
+    --primary: 240 3% 12%;           /* #1d1d1f — black pill buttons */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 197 100% 28%;       /* #00658d */
+    --secondary: 215 49% 43%;        /* #3865a6 — the single muted accent */
     --secondary-foreground: 0 0% 100%;
 
-    --muted: 270 6% 94%;
-    --muted-foreground: 216 7% 28%;  /* #43474d */
+    --muted: 240 6% 94%;
+    --muted-foreground: 240 2% 44%;  /* #6e6e73 — Apple secondary label */
 
-    --accent: 214 22% 94%;
-    --accent-foreground: 220 5% 11%;
+    --accent: 240 6% 94%;
+    --accent-foreground: 240 3% 12%;
 
     --destructive: 0 75% 42%;        /* #ba1a1a */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 228 9% 79%;            /* #c4c6ce */
-    --input: 228 9% 79%;
-    --ring: 214 100% 7%;
+    --border: 240 8% 92%;            /* #e8e8ed — hairline, barely there */
+    --input: 240 5% 85%;
+    --ring: 215 49% 43%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
   }
 
   * {
@@ -39,11 +41,79 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+    /* San Francisco on Apple devices, best-match neo-grotesque elsewhere */
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+      'Hanken Grotesk', Roboto, sans-serif;
     margin: 0;
+    letter-spacing: -0.011em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+}
+
+@layer base {
+  /* Tactile press feedback on every button, app-wide. Press-down is instant
+     (feedback must beat the eye); release eases back. */
+  button {
+    -webkit-tap-highlight-color: transparent;
+    transition-property: transform;
+    transition-duration: 0.18s;
+    transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  }
+  button:active {
+    transform: scale(0.96);
+  }
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    button:active { transform: none; }
+  }
+}
+
+/* Content flows in — cards rise and fade with a per-item stagger. */
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.stagger-children > * {
+  animation: cardIn 0.38s cubic-bezier(0.2, 0, 0, 1) both;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0.02s; }
+.stagger-children > *:nth-child(2) { animation-delay: 0.06s; }
+.stagger-children > *:nth-child(3) { animation-delay: 0.10s; }
+.stagger-children > *:nth-child(4) { animation-delay: 0.14s; }
+.stagger-children > *:nth-child(5) { animation-delay: 0.18s; }
+.stagger-children > *:nth-child(6) { animation-delay: 0.22s; }
+.stagger-children > *:nth-child(n + 7) { animation-delay: 0.25s; }
+
+/* Liquid-glass sheet: springs up on open, slips away on close. The keyframes
+   own the transform, so they must carry the -50% horizontal centering. */
+@keyframes sheetIn {
+  from { opacity: 0; transform: translate(-50%, 32px) scale(0.94); }
+  to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@keyframes sheetOut {
+  from { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  to   { opacity: 0; transform: translate(-50%, 24px) scale(0.96); }
+}
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes backdropOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+/* Icon pop when a vote/reaction lands. */
+@keyframes votePop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.4); }
+  100% { transform: scale(1); }
+}
+.vote-pop {
+  animation: votePop 0.35s cubic-bezier(0.2, 0, 0, 1);
 }
 
 @keyframes pageEnter {

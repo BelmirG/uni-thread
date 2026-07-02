@@ -12,9 +12,11 @@ import {
   X,
   Lock,
   ShieldCheck,
+  Search as SearchIcon,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { InlineComposer } from "@/components/InlineComposer";
+import { SearchOverlay } from "@/components/SearchOverlay";
 import { SkeletonPostList } from "@/components/Skeleton";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
@@ -131,6 +133,7 @@ export default function QAPage() {
   const [content, setContent] = useState("");
   const [facultyTag, setFacultyTag] = useState<Faculty | "">("");
   const [facultyFilter, setFacultyFilter] = useState<Faculty | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [imagesUploading, setImagesUploading] = useState(false);
   const [uploaderKey, setUploaderKey] = useState(0);
@@ -231,10 +234,10 @@ export default function QAPage() {
 
   const pillCls = (active: boolean) =>
     cn(
-      "text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap",
+      "text-xs font-medium px-3.5 py-1.5 rounded-full transition-colors whitespace-nowrap",
       active
-        ? "bg-primary/10 text-primary border-primary/20"
-        : "bg-surface border-outline-variant text-on-surface-variant hover:bg-surface-container"
+        ? "bg-primary text-primary-foreground"
+        : "bg-surface shadow-sm text-on-surface-variant hover:bg-surface-container"
     );
 
   return (
@@ -242,7 +245,17 @@ export default function QAPage() {
       <main className="max-w-xl mx-auto px-4 pt-4 pb-8">
         {/* Header */}
         <div className="mb-4">
-          <h1 className="text-xl font-bold text-on-surface mb-1">Anonymous Q&amp;A</h1>
+          <div className="flex items-center justify-between mb-1">
+            <h1 className="text-xl font-bold text-on-surface">Anonymous Q&amp;A</h1>
+            <button
+              onClick={() => setSearchOpen(true)}
+              aria-label="Search"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors"
+            >
+              <SearchIcon className="w-5 h-5" />
+            </button>
+          </div>
+          <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} mode="global" postType="anonymous_qa" />
           <div className="flex items-start gap-2 p-3 rounded-xl bg-primary/5 border border-primary/15">
             <ShieldCheck className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
             <p className="text-xs text-on-surface-variant leading-relaxed">
@@ -329,11 +342,11 @@ export default function QAPage() {
           </p>
         )}
 
-        <div className="space-y-3">
+        <div className="space-y-3 stagger-children">
           {posts.map((post) => {
             const voted = post.current_user_vote;
             return (
-              <div key={post.id} className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
+              <div key={post.id} className="bg-surface rounded-2xl shadow-sm overflow-hidden">
                 {/* Anonymous header */}
                 <div className="flex items-center gap-2 px-4 pt-4 pb-3">
                   <div className="flex-1 min-w-0">
@@ -371,7 +384,7 @@ export default function QAPage() {
                 {/* Action bar */}
                 <div className="flex items-center gap-1 px-3 py-2 border-t border-surface-variant">
                   {/* Vote pill */}
-                  <div className="flex items-center bg-surface-container-low rounded-lg border border-outline-variant overflow-hidden">
+                  <div className="flex items-center bg-surface-container-low rounded-full overflow-hidden">
                     <button
                       onClick={() => handleVote(post.id, "up")}
                       className={cn(
@@ -379,7 +392,7 @@ export default function QAPage() {
                         voted === "up" ? "text-blue-500" : "text-on-surface-variant hover:text-blue-500"
                       )}
                     >
-                      <ChevronUp className="w-3.5 h-3.5" />
+                      <ChevronUp className={cn("w-3.5 h-3.5", voted === "up" && "vote-pop")} />
                       <span className="tabular-nums">{post.upvotes}</span>
                     </button>
                     <span className="w-px h-4 bg-outline-variant flex-shrink-0" />
@@ -390,7 +403,7 @@ export default function QAPage() {
                         voted === "down" ? "text-yellow-500" : "text-on-surface-variant hover:text-yellow-500"
                       )}
                     >
-                      <ChevronDown className="w-3.5 h-3.5" />
+                      <ChevronDown className={cn("w-3.5 h-3.5", voted === "down" && "vote-pop")} />
                       <span className="tabular-nums">{post.downvotes}</span>
                     </button>
                   </div>

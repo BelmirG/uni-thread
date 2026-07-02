@@ -331,6 +331,45 @@ async def list_posts(
     )
 
 
+# Must be declared before /{post_id} so "search" isn't parsed as a post id.
+@router.get("/search", response_model=PostListResponse)
+async def search_posts(
+    q: str = "",
+    post_type: str = "feed",
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Search top-level posts by content, newest first. Club posts are excluded:
+    private club content must never surface in a global search."""
+    q = q.strip()
+    if post_type not in ("feed", "anonymous_qa"):
+        raise HTTPException(status_code=422, detail="Invalid post type.")
+    if not q:
+        return PostListResponse(posts=[], total=0)
+
+    where = and_(
+        Post.post_type == post_type,
+        Post.parent_post_id.is_(None),
+        Post.is_deleted == False,
+        Post.content.ilike(f"%{q}%"),
+    )
+    rows = (
+        await db.execute(
+            _build_post_select(where).order_by(Post.created_at.desc()).limit(min(limit, 50))
+        )
+    ).all()
+
+    post_ids = [r[0].id for r in rows]
+    votes = await _user_votes(post_ids, current_user.id, db)
+    polls = await _load_polls(post_ids, current_user.id, db)
+
+    return PostListResponse(
+        posts=[_row_to_response(r, votes.get(r[0].id), polls.get(r[0].id)) for r in rows],
+        total=len(rows),
+    )
+
+
 @router.get("/{post_id}")
 async def get_post(
     post_id: uuid.UUID,

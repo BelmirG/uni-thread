@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import UserSearchInput from "@/components/UserSearchInput";
+import { SearchOverlay } from "@/components/SearchOverlay";
 import { SkeletonRowList } from "@/components/Skeleton";
 import MiniAvatar from "@/components/MiniAvatar";
 import { timeAgo } from "@/lib/timeAgo";
@@ -63,6 +64,7 @@ export default function MessagesPage() {
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [newOpen, setNewOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [newUsername, setNewUsername] = useState("");
   const [newError, setNewError] = useState<string | null>(null);
   const [newLoading, setNewLoading] = useState(false);
@@ -97,6 +99,14 @@ export default function MessagesPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h1 className="text-xl font-bold text-on-surface">Messages</h1>
+          <div className="flex-1" />
+          <button
+            onClick={() => setSearchOpen(true)}
+            aria-label="Search chats"
+            className="w-9 h-9 mr-1 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors"
+          >
+            <Search className="w-5 h-5" />
+          </button>
           <button
             onClick={() => { setNewOpen(true); setNewError(null); setNewUsername(""); }}
             className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
@@ -105,6 +115,7 @@ export default function MessagesPage() {
             New
           </button>
         </div>
+        <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} mode="chats" />
 
         {/* List */}
         {loading && <SkeletonRowList />}
@@ -119,7 +130,7 @@ export default function MessagesPage() {
           </div>
         )}
 
-        <div className="space-y-2">
+        <div className="space-y-2 stagger-children">
           {conversations.map((c) => {
             const unread = c.unread_count > 0;
             return (
@@ -127,10 +138,10 @@ export default function MessagesPage() {
                 key={c.conversation_id}
                 href={`/messages/${c.conversation_id}`}
                 className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-2xl border no-underline transition-colors",
+                  "flex items-center gap-3 px-4 py-3 rounded-2xl shadow-sm no-underline transition-colors",
                   unread
-                    ? "bg-primary/5 border-primary/20 hover:bg-primary/8"
-                    : "bg-surface border-outline-variant hover:bg-surface-container-low"
+                    ? "bg-primary/5 hover:bg-primary/8"
+                    : "bg-surface hover:bg-surface-container-low"
                 )}
               >
                 <div className="relative flex-shrink-0">

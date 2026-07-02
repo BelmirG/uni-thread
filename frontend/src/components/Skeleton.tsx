@@ -12,7 +12,7 @@ export function SkeletonPostList({ count = 3 }: { count?: number }) {
   return (
     <div className="space-y-3" aria-hidden="true">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="bg-surface rounded-xl border border-outline-variant px-4 py-4">
+        <div key={i} className="bg-surface rounded-2xl shadow-sm px-4 py-4">
           <div className="flex items-center gap-3 mb-3">
             <Block className="w-9 h-9 rounded-full flex-shrink-0" />
             <div className="flex-1 space-y-1.5">
@@ -35,7 +35,7 @@ export function SkeletonPostList({ count = 3 }: { count?: number }) {
 export function SkeletonProfile() {
   return (
     <div aria-hidden="true">
-      <div className="bg-white border border-border rounded-xl shadow-sm p-4 mb-4">
+      <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
         <div className="flex items-start gap-4">
           <Block className="w-[72px] h-[72px] rounded-full flex-shrink-0" />
           <div className="flex-1 space-y-2 pt-1.5">
@@ -62,7 +62,7 @@ export function SkeletonRowList({ count = 4 }: { count?: number }) {
       {Array.from({ length: count }).map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-3 px-4 py-3 rounded-2xl border border-outline-variant bg-surface"
+          className="flex items-center gap-3 px-4 py-3 rounded-2xl shadow-sm bg-surface"
         >
           <Block className="w-[42px] h-[42px] rounded-full flex-shrink-0" />
           <div className="flex-1 space-y-1.5">

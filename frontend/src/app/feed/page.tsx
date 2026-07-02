@@ -11,9 +11,11 @@ import {
   Trash2,
   X,
   PenLine,
+  Search as SearchIcon,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { InlineComposer } from "@/components/InlineComposer";
+import { SearchOverlay } from "@/components/SearchOverlay";
 import { SkeletonPostList } from "@/components/Skeleton";
 import UserSearchInput from "@/components/UserSearchInput";
 import { ImageUploader } from "@/components/ImageUploader";
@@ -71,99 +73,6 @@ interface VoteResponse {
   current_user_vote: "up" | "down" | null;
 }
 
-interface SearchUser {
-  username: string;
-  display_name: string;
-  avatar_url: string | null;
-  faculty: string | null;
-  program: string | null;
-  is_following: boolean;
-}
-
-// ── People search used in Friends tab ────────────────────────────────────────
-
-function PeopleSearch({ onFollowChange }: { onFollowChange?: () => void }) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchUser[]>([]);
-  const [following, setFollowing] = useState<Record<string, boolean>>({});
-  const [loadingFollow, setLoadingFollow] = useState<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    if (!query.trim()) { setResults([]); return; }
-    timerRef.current = setTimeout(async () => {
-      try {
-        const data = await apiFetch<SearchUser[]>(`/api/users/search?q=${encodeURIComponent(query)}`);
-        setResults(data);
-        const map: Record<string, boolean> = {};
-        data.forEach((u) => { map[u.username] = u.is_following; });
-        setFollowing(map);
-      } catch { /* ignore */ }
-    }, 280);
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
-  }, [query]);
-
-  async function handleFollow(username: string) {
-    if (loadingFollow) return;
-    setLoadingFollow(username);
-    const isNowFollowing = !following[username];
-    try {
-      await apiFetch(`/api/users/${username}/follow`, {
-        method: isNowFollowing ? "POST" : "DELETE",
-      });
-      setFollowing((prev) => ({ ...prev, [username]: isNowFollowing }));
-      if (isNowFollowing) onFollowChange?.();
-    } catch { /* ignore */ }
-    finally { setLoadingFollow(null); }
-  }
-
-  return (
-    <div className="mb-5">
-      <p className="text-xs font-medium text-muted-foreground mb-2">Find people to follow</p>
-      <input
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onBlur={() => setTimeout(() => { setQuery(""); setResults([]); }, 150)}
-        placeholder="Search by name or username…"
-        className="w-full h-10 px-3 text-sm rounded-xl border border-input bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-      />
-      {results.length > 0 && (
-        <div onMouseDown={(e) => e.preventDefault()} className="mt-1.5 space-y-1.5">
-          {results.map((u) => (
-            <div key={u.username} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-white">
-              <MiniAvatar name={u.display_name} url={u.avatar_url} size={38} />
-              <Link href={`/profile/${u.username}`} className="flex-1 min-w-0 no-underline text-foreground">
-                <div className="font-medium text-sm truncate">{u.display_name}</div>
-                <div className="text-xs text-muted-foreground truncate">
-                  @{u.username}
-                  {u.faculty && (
-                    <span className="ml-1">
-                      · {u.faculty}{u.program ? ` · ${u.program}` : ""}
-                    </span>
-                  )}
-                </div>
-              </Link>
-              <button
-                onClick={() => handleFollow(u.username)}
-                disabled={loadingFollow === u.username}
-                className={cn(
-                  "flex-shrink-0 text-xs px-3 py-1.5 rounded-md font-medium transition-colors disabled:opacity-50",
-                  following[u.username]
-                    ? "border border-border bg-background text-foreground hover:bg-muted"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90"
-                )}
-              >
-                {following[u.username] ? "Following" : "Follow"}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function FeedPage() {
@@ -173,7 +82,8 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [feedTab, setFeedTab] = useState<FeedTab>("discover");
-  const [feedRefreshKey, setFeedRefreshKey] = useState(0);
+  const [feedRefreshKey] = useState(0);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [sort, setSort] = useState<"hot" | "new">("hot");
   const [facultyFilter, setFacultyFilter] = useState<Faculty | null>(null);
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
@@ -320,25 +230,38 @@ export default function FeedPage() {
 
   const pillCls = (active: boolean) =>
     cn(
-      "text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors whitespace-nowrap",
+      "text-xs font-medium px-3.5 py-1.5 rounded-full transition-colors whitespace-nowrap",
       active
-        ? "bg-primary/10 text-primary border-primary/20"
-        : "bg-surface border-outline-variant text-on-surface-variant hover:bg-surface-container"
+        ? "bg-primary text-primary-foreground"
+        : "bg-surface shadow-sm text-on-surface-variant hover:bg-surface-container"
     );
 
   return (
     <>
       <main className="max-w-xl mx-auto px-4 pt-4 pb-8">
-        {/* Tabs */}
-        <div className="flex border-b border-outline-variant mb-4">
+        {/* Brand header */}
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-2xl font-bold tracking-tight text-on-surface">IUSConnect</h1>
+          <button
+            onClick={() => setSearchOpen(true)}
+            aria-label="Search"
+            className="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors"
+          >
+            <SearchIcon className="w-5 h-5" />
+          </button>
+        </div>
+        <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} mode="global" postType="feed" />
+
+        {/* Tabs — iOS-style segmented control */}
+        <div className="flex gap-1 p-1 bg-surface-container rounded-full mb-4">
           {(["discover", "friends"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setFeedTab(tab)}
               className={cn(
-                "flex-1 py-3 text-sm font-medium transition-colors",
+                "flex-1 py-2 text-sm font-semibold rounded-full transition-all",
                 feedTab === tab
-                  ? "text-on-surface border-b-2 border-on-surface -mb-px"
+                  ? "bg-surface text-on-surface shadow-sm"
                   : "text-on-surface-variant hover:text-on-surface"
               )}
             >
@@ -423,11 +346,6 @@ export default function FeedPage() {
           </form>
         </InlineComposer>
 
-        {/* People search — Friends tab */}
-        {feedTab === "friends" && (
-          <PeopleSearch onFollowChange={() => setFeedRefreshKey((k) => k + 1)} />
-        )}
-
         {/* Post list */}
         {loading && <SkeletonPostList />}
         {!loading && posts.length === 0 && (
@@ -440,7 +358,7 @@ export default function FeedPage() {
           </p>
         )}
 
-        <div className="space-y-3 mt-1">
+        <div className="space-y-3 mt-1 stagger-children">
           {posts.map((post) => (
             <PostCard
               key={post.id}
@@ -580,7 +498,7 @@ function PostCard({
   const isOwn = currentUsername !== null && post.author?.username === currentUsername;
 
   return (
-    <div className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
+    <div className="bg-surface rounded-2xl shadow-sm overflow-hidden">
       {/* Header */}
       <div className="flex items-start gap-3 px-4 pt-4 pb-3">
         <Link href={`/profile/${post.author?.username}`} className="flex-shrink-0">
@@ -640,7 +558,7 @@ function PostCard({
       {/* Action bar */}
       <div className="flex items-center gap-1 px-3 py-2 border-t border-surface-variant">
         {/* Vote pill */}
-        <div className="flex items-center bg-surface-container-low rounded-lg border border-outline-variant overflow-hidden">
+        <div className="flex items-center bg-surface-container-low rounded-full overflow-hidden">
           <button
             onClick={() => onVote(post.id, "up")}
             className={cn(
@@ -648,7 +566,7 @@ function PostCard({
               voted === "up" ? "text-blue-500" : "text-on-surface-variant hover:text-blue-500"
             )}
           >
-            <ChevronUp className="w-3.5 h-3.5" />
+            <ChevronUp className={cn("w-3.5 h-3.5", voted === "up" && "vote-pop")} />
             <span className="tabular-nums">{post.upvotes}</span>
           </button>
           <span className="w-px h-4 bg-outline-variant flex-shrink-0" />
@@ -659,7 +577,7 @@ function PostCard({
               voted === "down" ? "text-yellow-500" : "text-on-surface-variant hover:text-yellow-500"
             )}
           >
-            <ChevronDown className="w-3.5 h-3.5" />
+            <ChevronDown className={cn("w-3.5 h-3.5", voted === "down" && "vote-pop")} />
             <span className="tabular-nums">{post.downvotes}</span>
           </button>
         </div>

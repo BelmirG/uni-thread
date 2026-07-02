@@ -432,7 +432,7 @@ export default function ClubDetailPage() {
         </div>
 
         {/* Club header card */}
-        <div className="bg-surface rounded-xl border border-outline-variant mb-4">
+        <div className="bg-surface rounded-2xl shadow-sm mb-4">
           <div className="px-4 pt-4 pb-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
@@ -718,7 +718,7 @@ export default function ClubDetailPage() {
                 {/* Action bar */}
                 <div className="flex items-center gap-1 px-3 py-2 border-t border-surface-variant">
                   {/* Vote pill */}
-                  <div className="flex items-center bg-surface-container-low rounded-lg border border-outline-variant overflow-hidden">
+                  <div className="flex items-center bg-surface-container-low rounded-full overflow-hidden">
                     <button
                       onClick={() => handleVote(post.id, "up")}
                       className={cn(
@@ -726,7 +726,7 @@ export default function ClubDetailPage() {
                         voted === "up" ? "text-blue-500" : "text-on-surface-variant hover:text-blue-500"
                       )}
                     >
-                      <ChevronUp className="w-3.5 h-3.5" />
+                      <ChevronUp className={cn("w-3.5 h-3.5", voted === "up" && "vote-pop")} />
                       <span className="tabular-nums">{post.upvotes}</span>
                     </button>
                     <span className="w-px h-4 bg-outline-variant flex-shrink-0" />
@@ -737,7 +737,7 @@ export default function ClubDetailPage() {
                         voted === "down" ? "text-yellow-500" : "text-on-surface-variant hover:text-yellow-500"
                       )}
                     >
-                      <ChevronDown className="w-3.5 h-3.5" />
+                      <ChevronDown className={cn("w-3.5 h-3.5", voted === "down" && "vote-pop")} />
                       <span className="tabular-nums">{post.downvotes}</span>
                     </button>
                   </div>

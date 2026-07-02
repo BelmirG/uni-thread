@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { SearchOverlay } from "@/components/SearchOverlay";
 import { SkeletonRowList } from "@/components/Skeleton";
 import { cn } from "@/lib/utils";
-import { Plus, X, Lock, Users, ChevronRight } from "lucide-react";
+import { Plus, X, Lock, Users, ChevronRight, Search as SearchIcon } from "lucide-react";
 
 interface Club {
   id: string;
@@ -46,7 +48,22 @@ export default function ClubsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [formClosing, setFormClosing] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [joiningSlug, setJoiningSlug] = useState<string | null>(null);
+
+  // Play the exit animation, then unmount the sheet.
+  function closeForm() {
+    setFormClosing(true);
+    setTimeout(() => { setShowForm(false); setFormClosing(false); }, 210);
+  }
+
+  useEffect(() => {
+    if (!showForm) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeForm(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showForm]);
 
   useEffect(() => {
     Promise.all([
@@ -121,6 +138,14 @@ export default function ClubsPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold text-on-surface">Clubs</h1>
+          <div className="flex-1" />
+          <button
+            onClick={() => setSearchOpen(true)}
+            aria-label="Search"
+            className="w-9 h-9 mr-1 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors"
+          >
+            <SearchIcon className="w-5 h-5" />
+          </button>
           <button
             onClick={() => setShowForm(true)}
             className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
@@ -129,6 +154,7 @@ export default function ClubsPage() {
             Create
           </button>
         </div>
+        <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} mode="clubs" />
 
         {/* Tabs */}
         <div className="flex border-b border-outline-variant mb-4">
@@ -196,9 +222,9 @@ export default function ClubsPage() {
           </p>
         )}
 
-        <div className="space-y-3">
+        <div className="space-y-3 stagger-children">
           {clubs.filter((c) => tab === "my" ? c.is_member : !c.is_member).map((club) => (
-            <div key={club.id} className="bg-surface rounded-xl border border-outline-variant overflow-hidden">
+            <div key={club.id} className="bg-surface rounded-2xl shadow-sm overflow-hidden">
               <Link href={`/clubs/${club.slug}`} className="block px-4 pt-4 pb-3 no-underline">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
@@ -266,67 +292,114 @@ export default function ClubsPage() {
         </div>
       </main>
 
-      {/* Create club sheet */}
-      {showForm && (
+      {/* Create club — liquid-glass sheet */}
+      {showForm && typeof document !== "undefined" && createPortal(
         <>
           <div
-            onClick={() => setShowForm(false)}
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100]"
+            onClick={closeForm}
+            className="fixed inset-0 z-[300]"
+            style={{
+              background: "rgba(20,20,25,0.30)",
+              backdropFilter: "blur(10px)",
+              WebkitBackdropFilter: "blur(10px)",
+              animation: formClosing ? "backdropOut 0.22s ease both" : "backdropIn 0.28s ease both",
+            }}
           />
-          <div className="fixed bottom-[4.5rem] left-1/2 -translate-x-1/2 w-[min(600px,94vw)] bg-white rounded-2xl z-[101] shadow-2xl max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
-              <span className="font-semibold text-sm">New club</span>
-              <button
-                onClick={() => setShowForm(false)}
-                className="rounded-full p-1 hover:bg-muted text-muted-foreground transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="overflow-y-auto flex-1">
-              <form onSubmit={handleCreate} className="px-4 py-3 space-y-3">
+          <div
+            className="fixed left-1/2 bottom-24 w-[min(460px,calc(100vw-1.5rem))] z-[301] rounded-[28px] overflow-hidden"
+            style={{
+              background: "linear-gradient(165deg, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.62) 100%)",
+              backdropFilter: "blur(40px) saturate(180%)",
+              WebkitBackdropFilter: "blur(40px) saturate(180%)",
+              border: "1px solid rgba(255,255,255,0.75)",
+              boxShadow:
+                "inset 0 1.5px 0 rgba(255,255,255,0.95)," +
+                "inset 0 -1px 0 rgba(0,0,0,0.04)," +
+                "0 24px 60px rgba(0,0,0,0.20)",
+              animation: formClosing
+                ? "sheetOut 0.22s cubic-bezier(0.4,0,1,1) both"
+                : "sheetIn 0.42s cubic-bezier(0.2,0.9,0.3,1.08) both",
+            }}
+          >
+            <form onSubmit={handleCreate} className="px-5 pt-5 pb-5">
+              {/* Header: live preview badge + title */}
+              <div className="flex items-center gap-3.5 mb-5">
+                <div className="w-12 h-12 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg uppercase flex-shrink-0 transition-all">
+                  {name.trim() ? name.trim().charAt(0) : <Users className="w-5 h-5" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-lg font-bold text-on-surface leading-tight">Create a club</h2>
+                  <p className="text-xs text-on-surface-variant">Start a community around what you love</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeForm}
+                  className="w-8 h-8 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center text-on-surface-variant transition-colors flex-shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Club name (e.g. Book Club)"
+                  placeholder="Club name"
                   maxLength={100}
-                  className="w-full h-9 px-3 text-sm border border-input rounded-md bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  autoFocus
+                  className="w-full h-12 px-4 text-sm font-medium rounded-2xl bg-white/70 text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-white transition-all"
                 />
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Description (optional)"
+                  placeholder="What's this club about? (optional)"
                   rows={2}
                   maxLength={500}
-                  className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                  className="w-full px-4 py-3 text-sm rounded-2xl bg-white/70 text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-white transition-all resize-none"
                 />
-                <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isPrivate}
-                    onChange={(e) => setIsPrivate(e.target.checked)}
-                    className="rounded border-input"
-                  />
-                  <Lock className="w-3.5 h-3.5 text-muted-foreground" />
-                  Private club (only members can see posts)
-                </label>
-                {formError && <p className="text-xs text-destructive">{formError}</p>}
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    type="submit"
-                    disabled={submitting || !name.trim()}
-                    className="flex-1"
+
+                {/* Privacy — iOS-style switch */}
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isPrivate}
+                  onClick={() => setIsPrivate((v) => !v)}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/50 hover:bg-white/70 transition-colors text-left"
+                >
+                  <Lock className={cn("w-4 h-4 flex-shrink-0 transition-colors", isPrivate ? "text-primary" : "text-on-surface-variant/60")} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-on-surface">Private club</div>
+                    <div className="text-xs text-on-surface-variant">Only members can see posts</div>
+                  </div>
+                  <span
+                    className={cn(
+                      "relative w-11 h-[26px] rounded-full flex-shrink-0 transition-colors duration-200",
+                      isPrivate ? "bg-primary" : "bg-black/15"
+                    )}
                   >
-                    {submitting ? "Creating…" : "Create club"}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            </div>
+                    <span
+                      className="absolute top-[3px] w-5 h-5 rounded-full bg-white shadow-sm transition-all duration-200"
+                      style={{ left: isPrivate ? 22 : 3 }}
+                    />
+                  </span>
+                </button>
+
+                {formError && (
+                  <p className="text-xs text-error px-1">{formError}</p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={submitting || !name.trim()}
+                  className="w-full h-12 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  {submitting ? "Creating…" : "Create club"}
+                </button>
+              </div>
+            </form>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </>
   );

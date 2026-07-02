@@ -226,7 +226,7 @@ function CommentNode({ node, depth }: { node: TreeNode; depth: number }) {
                   voted === "up" ? "text-orange-500" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 )}
               >
-                <ChevronUp className="w-3.5 h-3.5" />
+                <ChevronUp className={cn("w-3.5 h-3.5", voted === "up" && "vote-pop")} />
                 {p.upvotes}
               </button>
               <button
@@ -236,7 +236,7 @@ function CommentNode({ node, depth }: { node: TreeNode; depth: number }) {
                   voted === "down" ? "text-indigo-500" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 )}
               >
-                <ChevronDown className="w-3.5 h-3.5" />
+                <ChevronDown className={cn("w-3.5 h-3.5", voted === "down" && "vote-pop")} />
                 {p.downvotes}
               </button>
               <button
@@ -479,7 +479,7 @@ export default function PostDetailPage() {
         </Link>
 
         {/* Original post */}
-        <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden mb-4">
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-4">
           {post.is_deleted ? (
             <p className="px-4 py-6 text-muted-foreground italic text-sm">[deleted]</p>
           ) : (
@@ -569,7 +569,7 @@ export default function PostDetailPage() {
         </div>
 
         {/* Inline comment composer */}
-        <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden mb-4">
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden mb-4">
           <form onSubmit={handleTopReply} className="px-4 py-3 space-y-3">
             <textarea
               value={topContent}

@@ -44,7 +44,7 @@ export function InlineComposer({ open, onOpen, icon, placeholder, children, clas
 
   return (
     <div
-      className={`relative bg-surface border border-outline-variant shadow-sm overflow-hidden ${className ?? ""}`}
+      className={`relative bg-surface shadow-sm overflow-hidden ${className ?? ""}`}
       style={{
         // Pill label overlays the form — no separate always-on header row.
         // Closed: collapse to pill height. Open: exactly the form's height.

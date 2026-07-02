@@ -404,7 +404,7 @@ export default function ProfilePage() {
       <main className="max-w-xl mx-auto px-4 pt-4 pb-36">
 
         {/* Profile header card */}
-        <div className="bg-white border border-border rounded-xl shadow-sm p-4 mb-4">
+        <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
           <div className="flex items-start gap-4">
             {/* Avatar */}
             <div className="relative flex-shrink-0">
@@ -592,7 +592,7 @@ export default function ProfilePage() {
 
         {/* Edit form */}
         {editing && (
-          <div className="bg-white border border-border rounded-xl shadow-sm p-4 mb-4">
+          <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
             <form onSubmit={handleSave} className="flex flex-col gap-3">
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">
