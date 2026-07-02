@@ -9,7 +9,9 @@ from app.models.user import User
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
-FILESTORE_DIR = Path("/app/filestore")
+from app.config import settings
+
+FILESTORE_DIR = Path(settings.data_dir) / "filestore"
 
 # ── MIME map for document types ───────────────────────────────────────────────
 

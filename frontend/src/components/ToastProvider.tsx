@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import MiniAvatar from "@/components/MiniAvatar";
+import { wsUrl } from "@/lib/ws";
 import { X, ImageIcon, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -187,8 +188,7 @@ export default function ToastProvider({ children }: { children: React.ReactNode 
 
     function connect() {
       if (destroyed) return;
-      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${proto}//${window.location.host}/api/notifications/ws`);
+      const ws = new WebSocket(wsUrl("/api/notifications/ws"));
       wsRef.current = ws;
 
       ws.onopen = () => { retryDelay = 2000; };

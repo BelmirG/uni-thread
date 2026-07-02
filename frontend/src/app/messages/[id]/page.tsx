@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
+import { wsUrl } from "@/lib/ws";
 import { ArrowLeft, Send, MoreVertical, Trash2, X, CornerUpLeft, Plus, ImageIcon, FileText, Download, ExternalLink, GalleryHorizontalEnd, ChevronLeft, ChevronRight, Bell } from "lucide-react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
@@ -420,8 +421,7 @@ export default function ConversationPage() {
         return;
       }
       if (cancelled) return;
-      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${proto}//${window.location.host}/api/messages/${id}/ws`);
+      const ws = new WebSocket(wsUrl(`/api/messages/${id}/ws`));
       wsRef.current = ws;
       ws.onopen = () => setStatus("connected");
       ws.onmessage = (event) => {

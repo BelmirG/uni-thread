@@ -9,8 +9,10 @@ from app.models.user import User
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
-UPLOAD_DIR = Path("/app/uploads")
-FILESTORE_DIR = Path("/app/filestore")
+from app.config import settings
+
+UPLOAD_DIR = Path(settings.data_dir) / "uploads"
+FILESTORE_DIR = Path(settings.data_dir) / "filestore"
 
 # ── images ────────────────────────────────────────────────────────────────────
 

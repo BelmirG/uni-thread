@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
+import { wsUrl } from "@/lib/ws";
 import {
   ArrowLeft, Send, X, CornerUpLeft, Plus, ImageIcon, FileText,
   Download, ExternalLink, MoreVertical, GalleryHorizontalEnd,
@@ -396,8 +397,7 @@ export default function ClubChatPage() {
         else if (err instanceof ApiError && err.status === 403) router.replace(`/clubs/${slug}`);
         return;
       }
-      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${proto}//${window.location.host}/api/clubs/${slug}/chat/ws`);
+      const ws = new WebSocket(wsUrl(`/api/clubs/${slug}/chat/ws`));
       wsRef.current = ws;
       ws.onopen = () => setStatus("connected");
       ws.onmessage = (event) => {

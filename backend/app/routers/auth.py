@@ -1,12 +1,13 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.email import send_reset_email, send_verification_email
+from app.core.rate_limit import rate_limit
 from app.core.security import create_access_token, hash_password, verify_password
 from app.database import get_db
 from app.dependencies import get_current_user
@@ -27,7 +28,8 @@ def _enforce_university_email(email: str) -> None:
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(body: RegisterRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    await rate_limit(request, key="register", limit=5, window_seconds=3600)
     _enforce_university_email(body.email)
 
     # Reject duplicates with separate messages so the user knows which field conflicts.
@@ -93,8 +95,9 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login")
 async def login(
-    body: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)
+    body: LoginRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)
 ):
+    await rate_limit(request, key="login", limit=10, window_seconds=300)
     result = await db.execute(select(User).where(User.email == body.email.lower()))
     user = result.scalar_one_or_none()
 
@@ -119,10 +122,11 @@ async def login(
     response.set_cookie(
         key="access_token",
         value=token,
-        httponly=True,       # JS cannot read this — prevents XSS token theft
-        samesite="lax",      # safe against CSRF for same-site navigations
+        httponly=True,                     # JS cannot read this — prevents XSS token theft
+        samesite="lax",                    # safe against CSRF for same-site navigations
         max_age=settings.access_token_expire_minutes * 60,
-        secure=False,        # must be True in production (HTTPS only)
+        secure=settings.cookie_secure,     # HTTPS-only in production; plain HTTP in dev
+        domain=settings.cookie_domain or None,  # shared across app/api subdomains in prod
     )
 
     return UserResponse.model_validate(user)
@@ -130,7 +134,14 @@ async def login(
 
 @router.post("/logout")
 async def logout(response: Response):
-    response.delete_cookie(key="access_token")
+    # Match the attributes the cookie was set with so the browser reliably clears it.
+    response.delete_cookie(
+        key="access_token",
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+        domain=settings.cookie_domain or None,
+    )
     return {"message": "Logged out."}
 
 
@@ -140,7 +151,8 @@ async def me(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/forgot-password")
-async def forgot_password(body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+async def forgot_password(body: ForgotPasswordRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    await rate_limit(request, key="forgot", limit=5, window_seconds=3600)
     user = (await db.execute(
         select(User).where(User.email == body.email.lower())
     )).scalar_one_or_none()

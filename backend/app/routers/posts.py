@@ -8,6 +8,8 @@ from sqlalchemy.orm import aliased
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.club import Club
+from app.models.club_member import ClubMember
 from app.models.direct_message import DirectMessage
 from app.models.follow import Follow
 from app.models.poll import PollOption, PollVote
@@ -84,6 +86,29 @@ def _build_post_select(extra_where=None, hot_score: bool = False):
     if extra_where is not None:
         stmt = stmt.where(extra_where)
     return stmt
+
+
+async def _guard_private_club_post(post: Post, user_id: uuid.UUID, db: AsyncSession) -> None:
+    """Block access to a post that lives in a private club the user hasn't joined.
+
+    The club-scoped endpoints already enforce this, but the generic /api/posts/{id}
+    read, reply, and vote routes are reachable by post id alone. Without this check a
+    non-member who learns a private club post's id could read it, its replies, reply
+    to it, or vote on it — a private-content leak. Returns 404 (not 403) so we don't
+    even confirm the post exists to outsiders.
+    """
+    if post.post_type != "club" or post.club_id is None:
+        return
+    club = (await db.execute(select(Club).where(Club.id == post.club_id))).scalar_one_or_none()
+    if club is None or not club.is_private:
+        return
+    member = (await db.execute(
+        select(ClubMember.user_id).where(
+            ClubMember.club_id == post.club_id, ClubMember.user_id == user_id
+        )
+    )).scalar_one_or_none()
+    if member is None:
+        raise HTTPException(status_code=404, detail="Post not found.")
 
 
 async def _user_votes(
@@ -382,6 +407,8 @@ async def get_post(
     if not row:
         raise HTTPException(status_code=404, detail="Post not found.")
 
+    await _guard_private_club_post(row[0], current_user.id, db)
+
     vote_map = await _user_votes([post_id], current_user.id, db)
     poll_map = await _load_polls([post_id], current_user.id, db)
     post_response = _row_to_response(row, vote_map.get(post_id), poll_map.get(post_id))
@@ -425,6 +452,8 @@ async def create_reply(
     ).scalar_one_or_none()
     if not parent:
         raise HTTPException(status_code=404, detail="Post not found.")
+
+    await _guard_private_club_post(parent, current_user.id, db)
 
     reply = Post(
         author_id=current_user.id,
@@ -470,12 +499,14 @@ async def vote_post(
     if body.vote_type not in ("up", "down"):
         raise HTTPException(status_code=422, detail="vote_type must be 'up' or 'down'.")
 
-    if not (
+    post = (
         await db.execute(
-            select(Post.id).where(Post.id == post_id, Post.is_deleted == False)
+            select(Post).where(Post.id == post_id, Post.is_deleted == False)
         )
-    ).scalar_one_or_none():
+    ).scalar_one_or_none()
+    if not post:
         raise HTTPException(status_code=404, detail="Post not found.")
+    await _guard_private_club_post(post, current_user.id, db)
 
     existing = (
         await db.execute(
@@ -507,6 +538,7 @@ async def poll_vote(
     )).scalar_one_or_none()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found.")
+    await _guard_private_club_post(post, current_user.id, db)
 
     now = datetime.now(timezone.utc)
     if post.poll_expires_at:
