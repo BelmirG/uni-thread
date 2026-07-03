@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { isImmersiveRoute } from "@/lib/immersive";
 
-const HIDDEN_ON = ["/", "/login", "/register", "/verify-email", "/forgot-password", "/reset-password"];
+const HIDDEN_ON = ["/", "/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/admin"];
 
 const IUS_BLUE   = "#3865a6";
 const IUS_YELLOW = "#fae66b";

@@ -34,3 +34,6 @@ backend/filestore/
 
 # TypeScript build cache
 frontend/tsconfig.tsbuildinfo
+
+# Local-only deployment notes (contains setup steps, keep private)
+DEPLOY.md

@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     # In production set this to your real domain, e.g. "https://iusconnect.ba".
     cors_origins: str = "http://localhost:3000"
 
+    # Comma-separated list of email domains allowed to register, WITHOUT the "@".
+    # Defaults to the thesis's real constraint. Widen temporarily for a friend/beta
+    # test (e.g. "student.ius.edu.ba,gmail.com") and narrow it back afterward —
+    # this is the only place that gate lives, so flipping it back fully restores
+    # the campus-only rule with no code change.
+    allowed_email_domains: str = "student.ius.edu.ba"
+
     # Public base URL used to build links in emails (verification, reset).
     # Must be the address students' browsers reach, e.g. "https://iusconnect.ba".
     public_base_url: str = "http://localhost:3000"
@@ -67,6 +74,10 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def allowed_email_domain_list(self) -> list[str]:
+        return [d.strip().lower() for d in self.allowed_email_domains.split(",") if d.strip()]
 
     @property
     def cookie_secure(self) -> bool:

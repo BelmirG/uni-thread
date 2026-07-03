@@ -16,14 +16,14 @@ from app.schemas.auth import ForgotPasswordRequest, LoginRequest, RegisterReques
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-ALLOWED_DOMAIN = "student.ius.edu.ba"
-
 
 def _enforce_university_email(email: str) -> None:
-    if not email.lower().endswith(f"@{ALLOWED_DOMAIN}"):
+    domains = settings.allowed_email_domain_list
+    if not any(email.lower().endswith(f"@{d}") for d in domains):
+        allowed = ", ".join(f"@{d}" for d in domains)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Only @{ALLOWED_DOMAIN} email addresses are accepted.",
+            detail=f"Only {allowed} email addresses are accepted.",
         )
 
 
