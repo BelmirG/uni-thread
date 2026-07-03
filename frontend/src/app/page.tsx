@@ -72,13 +72,13 @@ export default function Home() {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-1">
               <GraduationCap className="w-9 h-9 text-primary-foreground" />
             </div>
-            <h1 className="font-headline text-headline-xl text-foreground">
+            <h1 className="font-headline text-[2rem] leading-tight tracking-tight sm:text-headline-xl text-foreground">
               Your campus,
               <br />
               connected.
             </h1>
             <p className="text-muted-foreground text-body-md max-w-sm mx-auto">
-              IUSConnect is the private social network for International
+              UniConnect is the private social network for International
               University of Sarajevo students. No outsiders, no noise — just
               your campus.
             </p>

@@ -111,7 +111,7 @@ function AdminGate({ onUnlock }: { onUnlock: (key: string) => void }) {
             <ShieldCheck className="w-7 h-7 text-primary-foreground" />
           </div>
           <h1 className="text-xl font-bold text-on-surface">Admin access</h1>
-          <p className="text-sm text-on-surface-variant mt-1">Enter the admin key to manage IUSConnect.</p>
+          <p className="text-sm text-on-surface-variant mt-1">Enter the admin key to manage UniConnect.</p>
         </div>
         <form onSubmit={submit} className="bg-surface rounded-2xl shadow-sm p-5 space-y-3">
           <input

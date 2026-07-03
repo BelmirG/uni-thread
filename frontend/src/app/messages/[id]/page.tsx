@@ -9,8 +9,11 @@ import { ArrowLeft, Send, MoreVertical, Trash2, X, CornerUpLeft, Plus, ImageIcon
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import MiniAvatar from "@/components/MiniAvatar";
+import { Linkify } from "@/lib/linkify";
 
 const IUS_BLUE = "#3865a6";
+// Own-message bubble: a soft vertical gradient reads richer than a flat fill.
+const OWN_BUBBLE_BG = "linear-gradient(135deg, #4a7cc0 0%, #3865a6 100%)";
 
 interface Author {
   username: string | null;
@@ -228,13 +231,13 @@ function SwipeableMessage({
 
       <div
         className={cn(
-          "max-w-[72%] px-3.5 py-2.5 text-sm leading-snug flex flex-col shadow-sm",
+          "max-w-[80%] sm:max-w-[72%] px-3.5 py-2.5 text-sm leading-snug flex flex-col",
           isOwn
-            ? "text-white rounded-2xl rounded-br-sm"
-            : "bg-surface border border-outline-variant text-on-surface rounded-2xl rounded-bl-sm"
+            ? "text-white rounded-2xl rounded-br-md shadow-sm"
+            : "bg-surface-container text-on-surface rounded-2xl rounded-bl-md"
         )}
         style={{
-          backgroundColor: isOwn ? IUS_BLUE : undefined,
+          background: isOwn ? OWN_BUBBLE_BG : undefined,
           transform: `translateX(${offset}px)`,
           transition: offset === 0 ? "transform 0.22s cubic-bezier(0.34,1.56,0.64,1)" : "none",
         }}
@@ -252,7 +255,7 @@ function SwipeableMessage({
             <span className="line-clamp-2 break-words">{quote}</span>
           </button>
         )}
-        {body && <span className="whitespace-pre-wrap break-words">{body}</span>}
+        {body && <Linkify text={body} isOwn={isOwn} />}
         {(msg.attachments ?? []).length > 0 && (
           <MsgAttachments attachments={msg.attachments} isOwn={isOwn} onPreview={onPreviewImage} />
         )}
@@ -544,7 +547,13 @@ export default function ConversationPage() {
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
-          {otherUser && <MiniAvatar name={otherUser.display_name} url={otherUser.avatar_url ?? null} size={34} />}
+          {otherUser && (otherUser.username ? (
+            <Link href={`/profile/${otherUser.username}`} className="no-underline flex-shrink-0" aria-label={`${otherUser.display_name}'s profile`}>
+              <MiniAvatar name={otherUser.display_name} url={otherUser.avatar_url ?? null} size={34} />
+            </Link>
+          ) : (
+            <MiniAvatar name={otherUser.display_name} url={otherUser.avatar_url ?? null} size={34} />
+          ))}
           <div className="min-w-0">
             <p className="font-semibold text-sm text-on-surface truncate leading-tight">{otherUser?.display_name ?? "Conversation"}</p>
             <p className="text-[11px] text-on-surface-variant flex items-center gap-1 leading-tight">

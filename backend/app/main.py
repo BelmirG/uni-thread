@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.routers import admin, auth, chat, clubs, files, health, messages, notifications, posts, qa, upload, users
 
-app = FastAPI(title="IUSConnect API", version="0.1.0")
+app = FastAPI(title="UniConnect API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,

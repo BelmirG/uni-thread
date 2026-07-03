@@ -13,8 +13,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import MiniAvatar from "@/components/MiniAvatar";
+import { Linkify } from "@/lib/linkify";
 
 const IUS_BLUE = "#3865a6";
+// Own-message bubble: a soft vertical gradient reads richer than a flat fill.
+const OWN_BUBBLE_BG = "linear-gradient(135deg, #4a7cc0 0%, #3865a6 100%)";
 
 interface FileAttachment {
   url: string;
@@ -287,28 +290,30 @@ function SwipeableBubble({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Avatar — only for others, only on last in group */}
+      {/* Avatar — only for others, only on last in group. Tapping it opens their profile. */}
       <div className="flex-shrink-0 w-7 mb-0.5">
         {!isOwn && isLast && (
-          <MiniAvatar name={msg.author.display_name} url={msg.author.avatar_url ?? null} size={28} />
+          <Link href={`/profile/${msg.author.username}`} className="no-underline block" aria-label={`${msg.author.display_name}'s profile`}>
+            <MiniAvatar name={msg.author.display_name} url={msg.author.avatar_url ?? null} size={28} />
+          </Link>
         )}
       </div>
 
       <div className="flex flex-col max-w-[72%]">
         {showName && !isOwn && (
-          <Link href={`/profile/${msg.author.username}`} className="text-[11px] font-semibold mb-0.5 px-1 hover:underline no-underline" style={{ color: nameColor }}>
+          <span className="text-[11px] font-semibold mb-0.5 px-1" style={{ color: nameColor }}>
             {msg.author.display_name}
-          </Link>
+          </span>
         )}
         <div
           className={cn(
-            "px-3.5 py-2.5 text-sm leading-snug flex flex-col shadow-sm",
+            "px-3.5 py-2.5 text-sm leading-snug flex flex-col",
             isOwn
-              ? cn("text-white", isLast ? "rounded-2xl rounded-br-sm" : "rounded-xl")
-              : cn("bg-surface border border-outline-variant text-on-surface", isLast ? "rounded-2xl rounded-bl-sm" : "rounded-xl")
+              ? cn("text-white shadow-sm", isLast ? "rounded-2xl rounded-br-md" : "rounded-2xl rounded-br-md")
+              : cn("bg-surface-container text-on-surface", isLast ? "rounded-2xl rounded-bl-md" : "rounded-2xl rounded-bl-md")
           )}
           style={{
-            backgroundColor: isOwn ? IUS_BLUE : undefined,
+            background: isOwn ? OWN_BUBBLE_BG : undefined,
             transform: `translateX(${offset}px)`,
             transition: offset === 0 ? "transform 0.22s cubic-bezier(0.34,1.56,0.64,1)" : "none",
           }}
@@ -326,7 +331,7 @@ function SwipeableBubble({
               <span className="line-clamp-2 break-words">{quote}</span>
             </button>
           )}
-          {body && <span className="whitespace-pre-wrap break-words">{body}</span>}
+          {body && <Linkify text={body} isOwn={isOwn} />}
           <BubbleAttachments attachments={msg.attachments ?? []} isOwn={isOwn} onPreview={onPreviewImage} />
           {isLast && (
             <span className={cn("text-[10px] self-end mt-1.5 ml-2 flex-shrink-0", isOwn ? "text-white/45" : "text-on-surface-variant")}>

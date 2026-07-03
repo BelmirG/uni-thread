@@ -119,7 +119,7 @@
 @keyframes pageEnter {
   from {
     opacity: 0;
-    transform: translateY(7px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
@@ -128,7 +128,12 @@
 }
 
 .page-enter {
-  animation: pageEnter 0.24s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  /* easeOutQuint — a soft, decelerating settle so pages ease in rather than snap. */
+  animation: pageEnter 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter { animation: none; }
 }
 
 @layer utilities {

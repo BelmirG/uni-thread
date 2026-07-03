@@ -21,6 +21,7 @@ import { FileAttachmentList } from "@/components/FileAttachmentList";
 import type { FileAttachment } from "@/components/FileUploader";
 import MiniAvatar from "@/components/MiniAvatar";
 import { timeAgo } from "@/lib/timeAgo";
+import { lastVisitedPath } from "@/lib/navHistory";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -320,6 +321,13 @@ export default function PostDetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
 
+  // "Back" returns to the profile you came from, otherwise the feed list.
+  // Captured at first render, before this page is pushed onto the nav stack.
+  const [backHref] = useState(() => {
+    const ref = lastVisitedPath();
+    return ref && ref.startsWith("/profile/") ? ref : "/feed";
+  });
+
   const [post, setPost] = useState<Post | null>(null);
   const [allReplies, setAllReplies] = useState<Post[]>([]);
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
@@ -467,11 +475,9 @@ export default function PostDetailPage() {
   return (
     <Ctx.Provider value={ctxValue}>
       <main className="max-w-xl mx-auto px-4 pt-4 pb-24">
-        {/* Back link */}
-        {/* Always exits to the feed list — browser history may point at another
-            section when the nav bar restored us into this thread. */}
+        {/* Back link — returns to where you came from (profile) or the feed list. */}
         <Link
-          href="/feed"
+          href={backHref}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4 no-underline"
         >
           <ArrowLeft className="w-4 h-4" />

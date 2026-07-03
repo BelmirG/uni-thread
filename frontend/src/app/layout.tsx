@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import NavBar from "@/components/NavBar";
 import BodyChrome from "@/components/BodyChrome";
+import NavTracker from "@/components/NavTracker";
 import ToastProvider from "@/components/ToastProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "IUSConnect",
+  title: "UniConnect",
   description: "Campus social network for IUS students",
 };
 
@@ -27,6 +28,7 @@ export default function RootLayout({
       <body className="pb-24">
         <ToastProvider>
           <BodyChrome />
+          <NavTracker />
           {children}
           <NavBar />
         </ToastProvider>

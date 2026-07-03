@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
-    smtp_from: str = "IUSConnect <no-reply@iusconnect.local>"
+    smtp_from: str = "UniConnect <no-reply@iusconnect.local>"
     smtp_starttls: bool = True
 
     model_config = {"env_file": ".env"}

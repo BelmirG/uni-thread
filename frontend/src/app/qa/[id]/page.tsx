@@ -21,6 +21,7 @@ import { FileAttachmentList } from "@/components/FileAttachmentList";
 import type { FileAttachment } from "@/components/FileUploader";
 import UserSearchInput from "@/components/UserSearchInput";
 import { timeAgo } from "@/lib/timeAgo";
+import { lastVisitedPath } from "@/lib/navHistory";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -300,6 +301,12 @@ export default function QADetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
 
+  // "Back" returns to the profile you came from, otherwise the Q&A list.
+  const [backHref] = useState(() => {
+    const ref = lastVisitedPath();
+    return ref && ref.startsWith("/profile/") ? ref : "/qa";
+  });
+
   const [question, setQuestion] = useState<QAPost | null>(null);
   const [allAnswers, setAllAnswers] = useState<QAPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -436,11 +443,9 @@ export default function QADetailPage() {
   return (
     <Ctx.Provider value={ctxValue}>
       <main className="max-w-xl mx-auto px-4 pt-4 pb-8">
-        {/* Back link */}
-        {/* Always exits to the Q&A list — browser history may point at another
-            section when the nav bar restored us into this thread. */}
+        {/* Back link — returns to where you came from (profile) or the Q&A list. */}
         <Link
-          href="/qa"
+          href={backHref}
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4 no-underline"
         >
           <ArrowLeft className="w-4 h-4" />

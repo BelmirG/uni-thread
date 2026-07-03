@@ -53,7 +53,7 @@ export default function LoginPage() {
         <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
           <GraduationCap className="w-6 h-6 text-primary-foreground" />
         </div>
-        <span className="text-2xl font-bold tracking-tight text-foreground">IUSConnect</span>
+        <span className="text-2xl font-bold tracking-tight text-foreground">UniConnect</span>
       </div>
 
       <Card className="w-full max-w-sm shadow-md">
@@ -130,7 +130,7 @@ export default function LoginPage() {
       </Card>
 
       <p className="mt-6 text-xs text-muted-foreground text-center max-w-xs">
-        IUSConnect is exclusively for International University of Sarajevo students.
+        UniConnect is exclusively for International University of Sarajevo students.
       </p>
     </div>
   );
