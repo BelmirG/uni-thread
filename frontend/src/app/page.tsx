@@ -119,20 +119,27 @@ export default function Home() {
       </div>
 
       {/* System status */}
-      <footer className="pb-6 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-        {!checkedHealth ? (
-          <span>&nbsp;</span>
-        ) : healthy ? (
-          <>
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
-            <span>All systems operational</span>
-          </>
-        ) : (
-          <>
-            <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 inline-block" />
-            <span>Service degraded — some features may be unavailable</span>
-          </>
-        )}
+      <footer className="pb-6 flex flex-col items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center justify-center gap-1.5">
+          {!checkedHealth ? (
+            <span>&nbsp;</span>
+          ) : healthy ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+              <span>All systems operational</span>
+            </>
+          ) : (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 inline-block" />
+              <span>Service degraded — some features may be unavailable</span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <Link href="/terms" className="hover:text-foreground hover:underline">Terms of Use</Link>
+          <span className="text-outline-variant">·</span>
+          <Link href="/privacy" className="hover:text-foreground hover:underline">Privacy Policy</Link>
+        </div>
       </footer>
     </main>
   );

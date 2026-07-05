@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { isImmersiveRoute } from "@/lib/immersive";
 import { useToast } from "@/components/ToastProvider";
 
-const HIDDEN_ON = ["/", "/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/admin"];
+const HIDDEN_ON = ["/", "/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/admin", "/terms", "/privacy"];
 
 const IUS_BLUE   = "#3865a6";
 const IUS_YELLOW = "#fae66b";

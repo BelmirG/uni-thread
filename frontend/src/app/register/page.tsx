@@ -26,6 +26,7 @@ export default function RegisterPage() {
     password: "",
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -179,13 +180,35 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            <div className="flex items-start gap-2">
+              <input
+                id="agree"
+                type="checkbox"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-input"
+                required
+              />
+              <Label htmlFor="agree" className="text-xs font-normal text-muted-foreground leading-snug">
+                I agree to the{" "}
+                <Link href="/terms" target="_blank" className="text-primary underline">
+                  Terms of Use
+                </Link>{" "}
+                and{" "}
+                <Link href="/privacy" target="_blank" className="text-primary underline">
+                  Privacy Policy
+                </Link>
+                .
+              </Label>
+            </div>
+
             {error && (
               <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2">
                 <p className="text-sm text-destructive">{error}</p>
               </div>
             )}
 
-            <Button type="submit" disabled={loading} className="w-full">
+            <Button type="submit" disabled={loading || !agreed} className="w-full">
               {loading ? "Creating account…" : "Create account"}
             </Button>
           </form>
