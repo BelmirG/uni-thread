@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import NavBar from "@/components/NavBar";
 import BodyChrome from "@/components/BodyChrome";
 import NavTracker from "@/components/NavTracker";
@@ -8,6 +8,15 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "UniConnect",
   description: "Campus social network for IUS students",
+};
+
+// viewportFit: "cover" lets the page use the full screen on notched phones and
+// makes env(safe-area-inset-*) report real values, which the nav bar and chat
+// composers use to stay clear of the iPhone home indicator.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -25,7 +34,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="pb-24">
+      <body className="pb-[calc(6rem+env(safe-area-inset-bottom))]">
         <ToastProvider>
           <BodyChrome />
           <NavTracker />

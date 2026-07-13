@@ -153,8 +153,11 @@ export default function NavBar() {
 
   return (
     <nav
-      className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[min(420px,calc(100%-2rem))] z-50 rounded-full"
+      className="fixed left-1/2 -translate-x-1/2 w-[min(420px,calc(100%-2rem))] z-50 rounded-full"
       style={{
+        // 1rem normally; on notched iPhones the safe-area inset wins so the
+        // pill floats above the home indicator instead of colliding with it.
+        bottom: "max(1rem, env(safe-area-inset-bottom))",
         background: "linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.18) 100%)",
         backdropFilter: "blur(32px) saturate(180%) brightness(1.05)",
         WebkitBackdropFilter: "blur(32px) saturate(180%) brightness(1.05)",

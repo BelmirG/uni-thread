@@ -347,7 +347,7 @@ function MediaSheet({ photos, docs, isPdf, isText, onPreview }: {
         {tab === "media" && (
           photos.length === 0
             ? <p className="text-sm text-on-surface-variant text-center py-10">No photos yet.</p>
-            : <div className="grid grid-cols-7 gap-0.5">
+            : <div className="grid grid-cols-4 sm:grid-cols-6 gap-0.5">
                 {photos.map((a, i) => (
                   <img key={i} src={a.url} alt={a.name} loading="lazy" decoding="async" onClick={() => onPreview(photos.map(p => p.url), i)} className="aspect-square object-cover rounded-sm cursor-zoom-in w-full" />
                 ))}
@@ -711,7 +711,7 @@ export default function ConversationPage() {
       {/* Input bar — glass */}
       <form
         onSubmit={handleSubmit}
-        className="flex items-end gap-2.5 px-3 py-3 border-t border-outline-variant/50 flex-shrink-0"
+        className="flex items-end gap-2.5 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-outline-variant/50 flex-shrink-0"
         style={{ background: "rgba(255,255,255,0.92)", backdropFilter: "blur(20px) saturate(160%)", WebkitBackdropFilter: "blur(20px) saturate(160%)" }}
       >
         <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple className="hidden" onChange={(e) => handleMediaSelect(e, "/api/upload")} />

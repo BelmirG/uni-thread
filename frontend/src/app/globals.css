@@ -52,6 +52,12 @@
 }
 
 @layer base {
+  /* One unbroken string (a long URL, a token, "hahaha…" × 200) must never
+     force the page to scroll sideways on a phone. overflow-wrap inherits,
+     so setting it once on body protects every post, bio, and chat bubble. */
+  body {
+    overflow-wrap: break-word;
+  }
   /* Tactile press feedback on every button, app-wide. Press-down is instant
      (feedback must beat the eye); release eases back. */
   button {
