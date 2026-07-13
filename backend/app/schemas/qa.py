@@ -37,6 +37,7 @@ class QAPostResponse(BaseModel):
     is_deleted: bool
     parent_post_id: Optional[uuid.UUID]
     is_own: bool = False
+    is_bookmarked: bool = False
 
 
 class QAListResponse(BaseModel):

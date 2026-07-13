@@ -20,6 +20,8 @@ export default function MiniAvatar({
       <img
         src={url}
         alt=""
+        loading="lazy"
+        decoding="async"
         className={cn("rounded-full object-cover flex-shrink-0", className)}
         style={{ width: dim, height: dim }}
       />

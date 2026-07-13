@@ -37,3 +37,4 @@ frontend/tsconfig.tsbuildinfo
 
 # Local-only deployment notes (contains setup steps, keep private)
 DEPLOY.md
+MULTI_UNIVERSITY_PLAN.md

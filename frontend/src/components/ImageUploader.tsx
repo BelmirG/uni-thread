@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { Camera } from "lucide-react";
 
 interface Preview {
   localUrl: string;
@@ -113,9 +114,12 @@ export function ImageUploader({ onUrlsChange, maxImages = 5 }: Props) {
               background: "#fafafa",
               cursor: "pointer",
               color: "#555",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.35rem",
             }}
           >
-            📷 Add photos
+            <Camera size={15} /> Add photos
           </button>
         </>
       )}

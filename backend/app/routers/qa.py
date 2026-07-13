@@ -9,6 +9,7 @@ from app.core.notify import notify
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.anonymous_post_author import AnonymousPostAuthor
+from app.models.bookmark import Bookmark
 from app.models.post import Post
 from app.models.user import User
 from app.models.vote import Vote
@@ -57,7 +58,9 @@ def _build_qa_select(extra_where=None):
     return stmt
 
 
-def _row_to_response(row, current_vote: str | None, is_own: bool = False) -> QAPostResponse:
+def _row_to_response(
+    row, current_vote: str | None, is_own: bool = False, is_bookmarked: bool = False
+) -> QAPostResponse:
     post, upvotes, downvotes, reply_count = row
     return QAPostResponse(
         id=post.id,
@@ -73,6 +76,7 @@ def _row_to_response(row, current_vote: str | None, is_own: bool = False) -> QAP
         is_deleted=post.is_deleted,
         parent_post_id=post.parent_post_id,
         is_own=is_own,
+        is_bookmarked=is_bookmarked,
     )
 
 
@@ -88,6 +92,21 @@ async def _user_owns(
         )
     )
     return {row.post_id for row in result}
+
+
+async def _user_bookmarks(
+    post_ids: list[uuid.UUID], user_id: uuid.UUID, db: AsyncSession
+) -> set[uuid.UUID]:
+    # A bookmark is "this user saved this post" — it says nothing about who
+    # wrote the post, so reading it here doesn't touch the privacy compartment.
+    if not post_ids:
+        return set()
+    result = await db.execute(
+        select(Bookmark.post_id).where(
+            Bookmark.post_id.in_(post_ids), Bookmark.user_id == user_id
+        )
+    )
+    return {row[0] for row in result}
 
 
 async def _user_votes_for(
@@ -205,9 +224,13 @@ async def list_questions(
     post_ids = [r[0].id for r in rows]
     votes = await _user_votes_for(post_ids, current_user.id, db)
     owned = await _user_owns(post_ids, current_user.id, db)
+    saved = await _user_bookmarks(post_ids, current_user.id, db)
 
     return QAListResponse(
-        posts=[_row_to_response(r, votes.get(r[0].id), is_own=r[0].id in owned) for r in rows],
+        posts=[
+            _row_to_response(r, votes.get(r[0].id), is_own=r[0].id in owned, is_bookmarked=r[0].id in saved)
+            for r in rows
+        ],
         total=total,
     )
 
@@ -224,7 +247,10 @@ async def get_question(
 
     vote_map = await _user_votes_for([post_id], current_user.id, db)
     owned_q = await _user_owns([post_id], current_user.id, db)
-    question = _row_to_response(row, vote_map.get(post_id), is_own=post_id in owned_q)
+    saved_q = await _user_bookmarks([post_id], current_user.id, db)
+    question = _row_to_response(
+        row, vote_map.get(post_id), is_own=post_id in owned_q, is_bookmarked=post_id in saved_q
+    )
 
     MAX_DEPTH = 6
     seed = select(Post.id.label("id"), literal(0).label("depth")).where(Post.parent_post_id == post_id)

@@ -91,6 +91,8 @@ function MsgAttachments({ attachments, isOwn, onPreview }: {
               key={i}
               src={a.url}
               alt={a.name}
+              loading="lazy"
+              decoding="async"
               onClick={() => onPreview(imageUrls, i)}
               className="rounded-xl object-cover cursor-zoom-in w-full"
               style={{ maxHeight: 220 }}
@@ -347,7 +349,7 @@ function MediaSheet({ photos, docs, isPdf, isText, onPreview }: {
             ? <p className="text-sm text-on-surface-variant text-center py-10">No photos yet.</p>
             : <div className="grid grid-cols-7 gap-0.5">
                 {photos.map((a, i) => (
-                  <img key={i} src={a.url} alt={a.name} onClick={() => onPreview(photos.map(p => p.url), i)} className="aspect-square object-cover rounded-sm cursor-zoom-in w-full" />
+                  <img key={i} src={a.url} alt={a.name} loading="lazy" decoding="async" onClick={() => onPreview(photos.map(p => p.url), i)} className="aspect-square object-cover rounded-sm cursor-zoom-in w-full" />
                 ))}
               </div>
         )}

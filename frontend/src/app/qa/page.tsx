@@ -16,6 +16,7 @@ import {
   Search as SearchIcon,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import BookmarkButton from "@/components/BookmarkButton";
 import { InlineComposer } from "@/components/InlineComposer";
 import { SearchOverlay } from "@/components/SearchOverlay";
 import { SkeletonPostList } from "@/components/Skeleton";
@@ -42,6 +43,7 @@ interface QAPost {
   reply_count: number;
   created_at: string;
   is_own: boolean;
+  is_bookmarked: boolean;
 }
 
 interface QAListResponse {
@@ -477,6 +479,16 @@ export default function QAPage() {
 
                   {/* Share */}
                   <SharePanel postId={post.id} />
+
+                  {/* Save — written back into state so the back-navigation
+                      cache (qaCache) restores the correct bookmark state. */}
+                  <BookmarkButton
+                    postId={post.id}
+                    initialBookmarked={post.is_bookmarked}
+                    onToggled={(b) =>
+                      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, is_bookmarked: b } : p)))
+                    }
+                  />
 
                   {/* Delete (own posts) */}
                   {post.is_own && (

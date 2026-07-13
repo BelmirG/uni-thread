@@ -59,7 +59,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm shadow-md">
         <CardHeader className="space-y-1 pb-4">
           <CardTitle className="text-2xl">Welcome back</CardTitle>
-          <CardDescription>Sign in to your IUS student account</CardDescription>
+          <CardDescription>Sign in to your UniConnect account</CardDescription>
         </CardHeader>
 
         <CardContent>
@@ -130,7 +130,7 @@ export default function LoginPage() {
       </Card>
 
       <p className="mt-6 text-xs text-muted-foreground text-center max-w-xs">
-        UniConnect is exclusively for International University of Sarajevo students.
+        UniConnect is currently exclusive to International University of Sarajevo students — expanding to more universities soon.
       </p>
     </div>
   );

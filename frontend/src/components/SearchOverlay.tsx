@@ -216,7 +216,7 @@ export function SearchOverlay({ open, onClose, mode, postType = "feed" }: Props)
               >
                 <div className="w-10 h-10 rounded-xl overflow-hidden bg-primary/10 text-primary flex items-center justify-center font-bold flex-shrink-0 uppercase">
                   {c.banner_url ? (
-                    <img src={c.banner_url} alt="" className="w-full h-full object-cover" />
+                    <img src={c.banner_url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   ) : (
                     c.name.charAt(0)
                   )}

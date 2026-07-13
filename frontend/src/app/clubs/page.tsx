@@ -233,7 +233,7 @@ export default function ClubsPage() {
                         just cropped to a square here so the row height never changes. */}
                     <div className="w-12 h-12 rounded-2xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-secondary/25 to-secondary/5 flex items-center justify-center">
                       {club.banner_url ? (
-                        <img src={club.banner_url} alt="" className="w-full h-full object-cover" />
+                        <img src={club.banner_url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-sm font-bold text-secondary uppercase">
                           {club.name.charAt(0)}

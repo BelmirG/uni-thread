@@ -82,25 +82,37 @@ export function ImageGrid({ urls }: { urls: string[] }) {
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  // A referenced file can be gone from disk; hiding it beats rendering the
+  // browser's broken-image placeholder in the middle of a post.
+  const [failed, setFailed] = useState<string[]>([]);
 
-  if (!urls.length) return null;
+  const live = urls.filter((u) => !failed.includes(u));
+  const idx = Math.min(carouselIndex, Math.max(0, live.length - 1));
+
+  if (!live.length) return null;
+
+  const markFailed = (u: string) =>
+    setFailed((prev) => (prev.includes(u) ? prev : [...prev, u]));
 
   function prevCarousel() { setCarouselIndex((i) => Math.max(0, i - 1)); }
-  function nextCarousel() { setCarouselIndex((i) => Math.min(urls.length - 1, i + 1)); }
+  function nextCarousel() { setCarouselIndex((i) => Math.min(live.length - 1, i + 1)); }
 
-  if (urls.length === 1) {
+  if (live.length === 1) {
     return (
       <>
         <div style={{ marginBottom: "0.65rem", borderRadius: 8, overflow: "hidden", cursor: "zoom-in" }}>
           <img
-            src={urls[0]}
+            src={live[0]}
             alt=""
+            loading="lazy"
+            decoding="async"
             onClick={() => setLightboxIndex(0)}
+            onError={() => markFailed(live[0])}
             style={{ width: "100%", maxHeight: 500, objectFit: "cover", display: "block" }}
           />
         </div>
         {lightboxIndex !== null && createPortal(
-          <Lightbox urls={urls} startIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />,
+          <Lightbox urls={live} startIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />,
           document.body
         )}
       </>
@@ -122,20 +134,23 @@ export function ImageGrid({ urls }: { urls: string[] }) {
           }}
         >
           <img
-            src={urls[carouselIndex]}
-            alt={`Image ${carouselIndex + 1} of ${urls.length}`}
-            onClick={() => setLightboxIndex(carouselIndex)}
+            src={live[idx]}
+            alt={`Image ${idx + 1} of ${live.length}`}
+            loading="lazy"
+            decoding="async"
+            onClick={() => setLightboxIndex(idx)}
+            onError={() => markFailed(live[idx])}
             style={{ width: "100%", maxHeight: 420, objectFit: "cover", display: "block" }}
           />
 
-          {carouselIndex > 0 && (
+          {idx > 0 && (
             <button
               onClick={(e) => { e.stopPropagation(); prevCarousel(); }}
               style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.5)", color: "#fff", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", fontSize: "1.2rem", display: "flex", alignItems: "center", justifyContent: "center" }}
             >‹</button>
           )}
 
-          {carouselIndex < urls.length - 1 && (
+          {idx < live.length - 1 && (
             <button
               onClick={(e) => { e.stopPropagation(); nextCarousel(); }}
               style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "rgba(0,0,0,0.5)", color: "#fff", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", fontSize: "1.2rem", display: "flex", alignItems: "center", justifyContent: "center" }}
@@ -143,23 +158,23 @@ export function ImageGrid({ urls }: { urls: string[] }) {
           )}
 
           <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.55)", color: "#fff", fontSize: "0.75rem", padding: "0.15rem 0.45rem", borderRadius: 10 }}>
-            {carouselIndex + 1} / {urls.length}
+            {idx + 1} / {live.length}
           </div>
         </div>
 
         <div style={{ display: "flex", justifyContent: "center", gap: 5, marginTop: "0.4rem" }}>
-          {urls.map((_, i) => (
+          {live.map((_, i) => (
             <button
               key={i}
               onClick={() => setCarouselIndex(i)}
-              style={{ width: i === carouselIndex ? 18 : 6, height: 6, borderRadius: 3, border: "none", padding: 0, cursor: "pointer", background: i === carouselIndex ? "#333" : "#bbb", transition: "width 0.15s ease" }}
+              style={{ width: i === idx ? 18 : 6, height: 6, borderRadius: 3, border: "none", padding: 0, cursor: "pointer", background: i === idx ? "#333" : "#bbb", transition: "width 0.15s ease" }}
             />
           ))}
         </div>
       </div>
 
       {lightboxIndex !== null && createPortal(
-        <Lightbox urls={urls} startIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />,
+        <Lightbox urls={live} startIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />,
         document.body
       )}
     </>

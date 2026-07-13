@@ -1018,7 +1018,7 @@ export default function ProfilePage() {
                 >
                   <div className="w-11 h-11 rounded-xl overflow-hidden bg-primary/10 text-primary flex items-center justify-center font-bold text-base flex-shrink-0 uppercase">
                     {club.banner_url ? (
-                      <img src={club.banner_url} alt="" className="w-full h-full object-cover" />
+                      <img src={club.banner_url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     ) : (
                       club.name.charAt(0)
                     )}

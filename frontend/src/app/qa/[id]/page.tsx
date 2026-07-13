@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { AttachBar } from "@/components/AttachBar";
+import BookmarkButton from "@/components/BookmarkButton";
 import { ImageGrid } from "@/components/ImageGrid";
 import { FileAttachmentList } from "@/components/FileAttachmentList";
 import type { FileAttachment } from "@/components/FileUploader";
@@ -42,6 +43,7 @@ interface QAPost {
   created_at: string;
   is_deleted: boolean;
   is_own: boolean;
+  is_bookmarked: boolean;
 }
 
 interface VoteResponse {
@@ -516,6 +518,11 @@ export default function QADetailPage() {
               {question.reply_count} {question.reply_count === 1 ? "answer" : "answers"}
             </span>
             <SharePanel postId={question.id} />
+            <BookmarkButton
+              key={question.id}
+              postId={question.id}
+              initialBookmarked={question.is_bookmarked}
+            />
             {question.is_own && (
               <button
                 onClick={() => handleDelete(question.id)}
