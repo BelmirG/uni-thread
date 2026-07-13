@@ -15,5 +15,14 @@ export default function BodyChrome() {
     return () => { document.body.style.paddingBottom = ""; };
   }, [immersive]);
 
+  // Register the service worker on load (not only when push is enabled) so the
+  // app is installable as a PWA. Registration is idempotent — if push already
+  // registered it, this is a no-op.
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
+
   return null;
 }

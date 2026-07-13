@@ -8,6 +8,18 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "UniConnect",
   description: "Campus social network for IUS students",
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "UniConnect",
+    // "default" keeps the iOS status bar opaque so page headers never end up
+    // underneath the clock when the app runs from the home screen.
+    statusBarStyle: "default",
+  },
 };
 
 // viewportFit: "cover" lets the page use the full screen on notched phones and
@@ -17,6 +29,7 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
