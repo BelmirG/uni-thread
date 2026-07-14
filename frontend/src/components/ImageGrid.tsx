@@ -1,13 +1,35 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+
+// The viewport is locked to scale 1 (to stop iOS's input auto-zoom), so the
+// viewer implements its own photo zoom: pinch to zoom, one-finger pan while
+// zoomed, double-tap to toggle — like a native gallery. At base scale the
+// familiar swipes still work: horizontal for prev/next, vertical to close.
+const ZOOM_MAX = 5;
+const DOUBLE_TAP_ZOOM = 2.5;
+
+interface Gesture {
+  mode: "swipe" | "pan" | "pinch";
+  startX: number; startY: number;
+  lastX: number; lastY: number;
+  lastDist: number;
+  lastMidX: number; lastMidY: number;
+}
 
 function Lightbox({ urls, startIndex, onClose }: { urls: string[]; startIndex: number; onClose: () => void }) {
   const [idx, setIdx] = useState(startIndex);
-  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+  const [t, setT] = useState({ s: 1, tx: 0, ty: 0 });
+  const [gesturing, setGesturing] = useState(false);
+  const tRef = useRef(t);
+  tRef.current = t;
+  const gRef = useRef<Gesture | null>(null);
+  const lastTapRef = useRef(0);
 
   function prev() { setIdx((i) => Math.max(0, i - 1)); }
   function next() { setIdx((i) => Math.min(urls.length - 1, i + 1)); }
+
+  useEffect(() => { setT({ s: 1, tx: 0, ty: 0 }); }, [idx]);
 
   useEffect(() => {
     const prev_ = document.body.style.overflow;
@@ -25,22 +47,120 @@ function Lightbox({ urls, startIndex, onClose }: { urls: string[]; startIndex: n
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, urls.length]);
 
-  return (
-    <div
-      onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1001, display: "flex", alignItems: "center", justifyContent: "center" }}
-      onTouchStart={(e) => setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY })}
-      onTouchEnd={(e) => {
-        if (touchStart === null) return;
-        const dx = touchStart.x - e.changedTouches[0].clientX;
-        const dy = e.changedTouches[0].clientY - touchStart.y;
-        setTouchStart(null);
+  // Keep the image from being panned entirely off screen; a little slack past
+  // the true edge feels natural and the release snap tidies it up.
+  function clampT(s: number, tx: number, ty: number) {
+    const maxX = ((s - 1) * window.innerWidth) / 2 + 40;
+    const maxY = ((s - 1) * window.innerHeight) / 2 + 40;
+    return { s, tx: Math.min(maxX, Math.max(-maxX, tx)), ty: Math.min(maxY, Math.max(-maxY, ty)) };
+  }
+
+  function onTouchStart(e: React.TouchEvent) {
+    if (e.touches.length >= 2) {
+      const [a, b] = [e.touches[0], e.touches[1]];
+      gRef.current = {
+        mode: "pinch", startX: 0, startY: 0, lastX: 0, lastY: 0,
+        lastDist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+        lastMidX: (a.clientX + b.clientX) / 2,
+        lastMidY: (a.clientY + b.clientY) / 2,
+      };
+      setGesturing(true);
+    } else {
+      const touch = e.touches[0];
+      const zoomed = tRef.current.s > 1;
+      gRef.current = {
+        mode: zoomed ? "pan" : "swipe",
+        startX: touch.clientX, startY: touch.clientY,
+        lastX: touch.clientX, lastY: touch.clientY,
+        lastDist: 0, lastMidX: 0, lastMidY: 0,
+      };
+      if (zoomed) setGesturing(true);
+    }
+  }
+
+  function onTouchMove(e: React.TouchEvent) {
+    const g = gRef.current;
+    if (!g) return;
+    if (g.mode === "pinch" && e.touches.length >= 2) {
+      const [a, b] = [e.touches[0], e.touches[1]];
+      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      const midX = (a.clientX + b.clientX) / 2;
+      const midY = (a.clientY + b.clientY) / 2;
+      const { s, tx, ty } = tRef.current;
+      const sNew = Math.min(ZOOM_MAX, Math.max(1, s * (g.lastDist > 0 ? dist / g.lastDist : 1)));
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+      // Keep the point between the fingers anchored while the scale changes.
+      const txNew = midX - cx - (sNew / s) * (g.lastMidX - cx - tx);
+      const tyNew = midY - cy - (sNew / s) * (g.lastMidY - cy - ty);
+      g.lastDist = dist; g.lastMidX = midX; g.lastMidY = midY;
+      setT(clampT(sNew, txNew, tyNew));
+    } else if (g.mode === "pan" && e.touches.length === 1) {
+      const touch = e.touches[0];
+      const { s, tx, ty } = tRef.current;
+      setT(clampT(s, tx + touch.clientX - g.lastX, ty + touch.clientY - g.lastY));
+      g.lastX = touch.clientX; g.lastY = touch.clientY;
+    } else if (g.mode === "swipe" && e.touches.length === 1) {
+      g.lastX = e.touches[0].clientX; g.lastY = e.touches[0].clientY;
+    }
+  }
+
+  function onTouchEnd(e: React.TouchEvent) {
+    const g = gRef.current;
+    if (!g) return;
+    if (e.touches.length >= 1) {
+      // A pinch finger lifted — carry on as pan (zoomed) or swipe (base scale).
+      const touch = e.touches[0];
+      const zoomed = tRef.current.s > 1;
+      gRef.current = {
+        mode: zoomed ? "pan" : "swipe",
+        startX: touch.clientX, startY: touch.clientY,
+        lastX: touch.clientX, lastY: touch.clientY,
+        lastDist: 0, lastMidX: 0, lastMidY: 0,
+      };
+      return;
+    }
+    gRef.current = null;
+    setGesturing(false);
+    if (tRef.current.s <= 1.05) {
+      if (tRef.current.s !== 1) setT({ s: 1, tx: 0, ty: 0 });
+      if (g.mode === "swipe") {
+        const dx = g.startX - g.lastX;
+        const dy = g.lastY - g.startY;
         // Vertical swipe (either direction) dismisses — the gesture every
         // native photo viewer supports; essential in the home-screen app.
         if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx)) { onClose(); return; }
         if (dx > 40) next();
         else if (dx < -40) prev();
-      }}
+      }
+    }
+  }
+
+  function onImageTap(e: React.MouseEvent) {
+    e.stopPropagation();
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      lastTapRef.current = 0;
+      if (tRef.current.s > 1) {
+        setT({ s: 1, tx: 0, ty: 0 });
+      } else {
+        const cx = window.innerWidth / 2;
+        const cy = window.innerHeight / 2;
+        setT(clampT(DOUBLE_TAP_ZOOM, (1 - DOUBLE_TAP_ZOOM) * (e.clientX - cx), (1 - DOUBLE_TAP_ZOOM) * (e.clientY - cy)));
+      }
+    } else {
+      lastTapRef.current = now;
+    }
+  }
+
+  return (
+    <div
+      onClick={() => { if (tRef.current.s === 1) onClose(); }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 1001, display: "flex", alignItems: "center", justifyContent: "center", touchAction: "none", overflow: "hidden" }}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchEnd}
     >
       {/* Close — kept below the iPhone notch/status bar via safe-area inset */}
       <button
@@ -55,12 +175,23 @@ function Lightbox({ urls, startIndex, onClose }: { urls: string[]; startIndex: n
         </div>
       )}
 
-      {/* Image — stop propagation so clicking image itself doesn't close */}
+      {/* Image — tap stops propagation so it doesn't close; double-tap zooms */}
       <img
         src={urls[idx]}
         alt=""
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: "92vw", maxHeight: "88vh", objectFit: "contain", borderRadius: 6, display: "block", userSelect: "none" }}
+        onClick={onImageTap}
+        draggable={false}
+        style={{
+          maxWidth: "92vw",
+          maxHeight: "88vh",
+          objectFit: "contain",
+          borderRadius: 6,
+          display: "block",
+          userSelect: "none",
+          transform: `translate(${t.tx}px, ${t.ty}px) scale(${t.s})`,
+          transition: gesturing ? "none" : "transform 0.2s ease",
+          willChange: "transform",
+        }}
       />
 
       {/* Prev */}
