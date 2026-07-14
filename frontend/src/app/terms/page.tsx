@@ -3,8 +3,8 @@ import Link from "next/link";
 import { GraduationCap } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Terms of Use — UniConnect",
-  description: "Terms of Use for UniConnect",
+  title: "Terms of Use — UniThread",
+  description: "Terms of Use for UniThread",
 };
 
 const EFFECTIVE_DATE = "July 5, 2026";
@@ -18,7 +18,7 @@ export default function TermsPage() {
           <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
             <GraduationCap className="w-5 h-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold tracking-tight text-foreground">UniConnect</span>
+          <span className="text-xl font-bold tracking-tight text-foreground">UniThread</span>
         </Link>
 
         <div className="bg-surface rounded-2xl shadow-sm px-6 py-8 sm:px-10 sm:py-10 space-y-8 text-sm leading-relaxed text-foreground">
@@ -28,7 +28,7 @@ export default function TermsPage() {
           </div>
 
           <p>
-            These Terms of Use ("Terms") govern your access to and use of UniConnect (the
+            These Terms of Use ("Terms") govern your access to and use of UniThread (the
             "Service"), operated by Belmir Grahic ("we," "us," "the operator"). By creating an
             account or otherwise using the Service, you agree to these Terms. If you do not
             agree, do not use the Service.
@@ -36,10 +36,10 @@ export default function TermsPage() {
 
           <Section title="1. Not an official IUS service">
             <p>
-              UniConnect is an independent student project. It is <strong>not owned, operated,
+              UniThread is an independent student project. It is <strong>not owned, operated,
               endorsed, or officially affiliated with International University of Sarajevo
               (IUS)</strong>. We use an IUS student email address only as an eligibility check to
-              keep the community campus-only. UniConnect is not a channel for official university
+              keep the community campus-only. UniThread is not a channel for official university
               communications, grades, enrollment, or administrative matters, and the university is
               not responsible for the Service or its content.
             </p>

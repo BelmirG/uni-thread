@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     environment: str = "development"
 
     # Comma-separated list of origins allowed to make credentialed requests.
-    # In production set this to your real domain, e.g. "https://iusconnect.ba".
+    # In production set this to your real domain, e.g. "https://unithread.app".
     cors_origins: str = "http://localhost:3000"
 
     # Comma-separated list of email domains allowed to register, WITHOUT the "@".
@@ -38,11 +38,11 @@ class Settings(BaseSettings):
     allowed_email_domains: str = "student.ius.edu.ba"
 
     # Public base URL used to build links in emails (verification, reset).
-    # Must be the address students' browsers reach, e.g. "https://iusconnect.ba".
+    # Must be the address students' browsers reach, e.g. "https://unithread.app".
     public_base_url: str = "http://localhost:3000"
 
     # Cookie domain. Empty = host-only (correct for localhost). In production set to
-    # the shared parent domain with a leading dot, e.g. ".iusconnect.ba", so the
+    # the shared parent domain with a leading dot, e.g. ".unithread.app", so the
     # session cookie is sent to both the app and the api subdomain — this is what
     # lets WebSockets (which connect straight to the api subdomain) stay authenticated.
     cookie_domain: str = ""
@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
-    smtp_from: str = "UniConnect <no-reply@iusconnect.local>"
+    smtp_from: str = "UniThread <no-reply@unithread.app>"
     smtp_starttls: bool = True
 
     model_config = {"env_file": ".env"}

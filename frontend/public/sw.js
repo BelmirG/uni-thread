@@ -1,4 +1,4 @@
-/* UniConnect service worker — receives Web Push messages and shows system
+/* UniThread service worker — receives Web Push messages and shows system
  * notifications. Payloads are the same JSON the in-app toasts use, so the
  * text/link logic below mirrors ToastProvider.tsx. */
 
@@ -28,7 +28,7 @@ function describe(p) {
     case "club_role":
       return { title: name, body: "Made you a " + (p.role || "moderator") + " of " + (p.club_name || "the club") };
     default:
-      return { title: "UniConnect", body: "You have a new notification" };
+      return { title: "UniThread", body: "You have a new notification" };
   }
 }
 

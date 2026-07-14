@@ -6,7 +6,7 @@
  *
  * Production: Next.js's rewrite proxy does NOT forward WebSocket upgrades, so we
  * connect straight to the backend's public origin. Set NEXT_PUBLIC_WS_ORIGIN to the
- * backend URL (e.g. https://api.iusconnect.ba); the session cookie rides along
+ * backend URL (e.g. https://api.unithread.app); the session cookie rides along
  * because it's issued for the shared parent domain.
  */
 export function wsUrl(path: string): string {

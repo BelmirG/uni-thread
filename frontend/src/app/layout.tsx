@@ -6,7 +6,7 @@ import ToastProvider from "@/components/ToastProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "UniConnect",
+  title: "UniThread",
   description: "Campus social network for IUS students",
   manifest: "/manifest.json",
   icons: {
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "UniConnect",
+    title: "UniThread",
     // "default" keeps the iOS status bar opaque so page headers never end up
     // underneath the clock when the app runs from the home screen.
     statusBarStyle: "default",

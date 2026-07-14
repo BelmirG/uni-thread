@@ -78,7 +78,7 @@ export default function Home() {
               connected.
             </h1>
             <p className="text-muted-foreground text-body-md max-w-sm mx-auto">
-              UniConnect is the private social network for International
+              UniThread is the private social network for International
               University of Sarajevo students. No outsiders, no noise — just
               your campus.
             </p>

@@ -53,13 +53,13 @@ export default function LoginPage() {
         <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
           <GraduationCap className="w-6 h-6 text-primary-foreground" />
         </div>
-        <span className="text-2xl font-bold tracking-tight text-foreground">UniConnect</span>
+        <span className="text-2xl font-bold tracking-tight text-foreground">UniThread</span>
       </div>
 
       <Card className="w-full max-w-sm shadow-md">
         <CardHeader className="space-y-1 pb-4">
           <CardTitle className="text-2xl">Welcome back</CardTitle>
-          <CardDescription>Sign in to your UniConnect account</CardDescription>
+          <CardDescription>Sign in to your UniThread account</CardDescription>
         </CardHeader>
 
         <CardContent>
@@ -130,7 +130,7 @@ export default function LoginPage() {
       </Card>
 
       <p className="mt-6 text-xs text-muted-foreground text-center max-w-xs">
-        UniConnect is currently exclusive to International University of Sarajevo students — expanding to more universities soon.
+        UniThread is currently exclusive to International University of Sarajevo students — expanding to more universities soon.
       </p>
     </div>
   );

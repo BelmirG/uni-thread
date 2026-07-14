@@ -39,7 +39,7 @@ def _send(to_email: str, subject: str, heading: str, body_line: str, button_text
 def _html(heading: str, body_line: str, button_text: str, link: str) -> str:
     return f"""\
 <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;color:#1d1d1f">
-  <div style="font-size:22px;font-weight:700;margin-bottom:8px">UniConnect</div>
+  <div style="font-size:22px;font-weight:700;margin-bottom:8px">UniThread</div>
   <h1 style="font-size:20px;font-weight:600;margin:16px 0 8px">{heading}</h1>
   <p style="font-size:15px;line-height:1.5;color:#6e6e73;margin:0 0 24px">{body_line}</p>
   <a href="{link}" style="display:inline-block;background:#1d1d1f;color:#fff;text-decoration:none;font-weight:600;font-size:15px;padding:12px 24px;border-radius:9999px">{button_text}</a>
@@ -61,9 +61,9 @@ def send_verification_email(to_email: str, token: str) -> None:
     link = f"{settings.public_base_url}/verify-email?token={token}"
     _send(
         to_email,
-        subject="Verify your UniConnect account",
+        subject="Verify your UniThread account",
         heading="Confirm your email",
-        body_line="Welcome to UniConnect — the private network for IUS students. Confirm this address to finish setting up your account.",
+        body_line="Welcome to UniThread — the private network for IUS students. Confirm this address to finish setting up your account.",
         button_text="Verify email",
         link=link,
     )
@@ -73,7 +73,7 @@ def send_reset_email(to_email: str, token: str) -> None:
     link = f"{settings.public_base_url}/reset-password?token={token}"
     _send(
         to_email,
-        subject="Reset your UniConnect password",
+        subject="Reset your UniThread password",
         heading="Reset your password",
         body_line="We received a request to reset your password. This link expires in one hour. If you didn't ask for this, you can ignore this email.",
         button_text="Reset password",

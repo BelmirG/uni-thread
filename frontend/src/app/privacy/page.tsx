@@ -3,8 +3,8 @@ import Link from "next/link";
 import { GraduationCap } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — UniConnect",
-  description: "Privacy Policy for UniConnect",
+  title: "Privacy Policy — UniThread",
+  description: "Privacy Policy for UniThread",
 };
 
 const EFFECTIVE_DATE = "July 5, 2026";
@@ -18,7 +18,7 @@ export default function PrivacyPage() {
           <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
             <GraduationCap className="w-5 h-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold tracking-tight text-foreground">UniConnect</span>
+          <span className="text-xl font-bold tracking-tight text-foreground">UniThread</span>
         </Link>
 
         <div className="bg-surface rounded-2xl shadow-sm px-6 py-8 sm:px-10 sm:py-10 space-y-8 text-sm leading-relaxed text-foreground">
@@ -28,8 +28,8 @@ export default function PrivacyPage() {
           </div>
 
           <p>
-            This Privacy Policy explains what data UniConnect ("we," "us") collects, why, and how
-            it's protected. UniConnect is an independent student project built for International
+            This Privacy Policy explains what data UniThread ("we," "us") collects, why, and how
+            it's protected. UniThread is an independent student project built for International
             University of Sarajevo (IUS) students and is not operated by the university.
           </p>
 

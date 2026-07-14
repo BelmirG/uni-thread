@@ -67,7 +67,7 @@ export default function RegisterPage() {
           <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
             <GraduationCap className="w-6 h-6 text-primary-foreground" />
           </div>
-          <span className="text-2xl font-bold tracking-tight text-foreground">UniConnect</span>
+          <span className="text-2xl font-bold tracking-tight text-foreground">UniThread</span>
         </div>
 
         <Card className="w-full max-w-sm shadow-md text-center">
@@ -104,7 +104,7 @@ export default function RegisterPage() {
         <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
           <GraduationCap className="w-6 h-6 text-primary-foreground" />
         </div>
-        <span className="text-2xl font-bold tracking-tight text-foreground">UniConnect</span>
+        <span className="text-2xl font-bold tracking-tight text-foreground">UniThread</span>
       </div>
 
       <Card className="w-full max-w-sm shadow-md">

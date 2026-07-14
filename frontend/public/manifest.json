@@ -1,6 +1,6 @@
 {
-  "name": "UniConnect",
-  "short_name": "UniConnect",
+  "name": "UniThread",
+  "short_name": "UniThread",
   "description": "Campus social network for university students",
   "start_url": "/",
   "display": "standalone",
