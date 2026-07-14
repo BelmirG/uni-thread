@@ -25,3 +25,9 @@ export function getQACache<T>(): QACacheEntry<T> | null {
   }
   return cache as QACacheEntry<T>;
 }
+
+// Same rationale as clearFeedCache: mutations made from a question's detail
+// view must not be resurrected by the board's cached snapshot.
+export function clearQACache(): void {
+  cache = null;
+}

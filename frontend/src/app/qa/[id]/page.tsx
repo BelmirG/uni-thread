@@ -16,6 +16,7 @@ import {
   CornerDownRight,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { clearQACache } from "@/lib/qaCache";
 import { AttachBar } from "@/components/AttachBar";
 import BookmarkButton from "@/components/BookmarkButton";
 import { ImageGrid } from "@/components/ImageGrid";
@@ -353,6 +354,8 @@ export default function QADetailPage() {
     if (!window.confirm("Delete this post? This cannot be undone.")) return;
     try {
       await apiFetch(`/api/qa/${targetId}`, { method: "DELETE" });
+      // Drop the board's cached snapshot so going back doesn't resurrect it.
+      clearQACache();
       setAllAnswers((prev) =>
         prev.map((p) => (p.id === targetId ? { ...p, is_deleted: true, content: "[deleted]" } : p))
       );

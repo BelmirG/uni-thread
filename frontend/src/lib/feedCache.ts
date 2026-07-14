@@ -32,3 +32,10 @@ export function getFeedCache<T>(): FeedCacheEntry<T> | null {
   }
   return cache as FeedCacheEntry<T>;
 }
+
+// Call after any mutation made outside the feed page (e.g. deleting a post
+// from its detail view) — otherwise navigating back would restore a snapshot
+// that still contains the stale post.
+export function clearFeedCache(): void {
+  cache = null;
+}

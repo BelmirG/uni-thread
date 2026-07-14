@@ -16,6 +16,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { clearFeedCache } from "@/lib/feedCache";
 import UserSearchInput from "@/components/UserSearchInput";
 import { AttachBar } from "@/components/AttachBar";
 import { ImageGrid } from "@/components/ImageGrid";
@@ -459,6 +460,9 @@ export default function PostDetailPage() {
     if (!window.confirm("Delete this post? This cannot be undone.")) return;
     try {
       await apiFetch(`/api/posts/${targetId}`, { method: "DELETE" });
+      // The feed page's cached snapshot still contains this post — drop it so
+      // navigating back shows a fresh feed instead of resurrecting the post.
+      clearFeedCache();
       setPost((prev) => (prev?.id === targetId ? { ...prev, is_deleted: true, content: "[deleted]" } : prev));
       setAllReplies((prev) =>
         prev.map((p) => (p.id === targetId ? { ...p, is_deleted: true, content: "[deleted]" } : p))

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import NavBar from "@/components/NavBar";
 import BodyChrome from "@/components/BodyChrome";
+import PullToRefresh from "@/components/PullToRefresh";
 import NavTracker from "@/components/NavTracker";
 import ToastProvider from "@/components/ToastProvider";
 import "./globals.css";
@@ -28,6 +29,13 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // maximumScale + userScalable stop iOS's automatic zoom-in when focusing a
+  // text input (font-size < 16px triggers it). Without this the home-screen
+  // app ends up permanently zoomed in after composing a post, forcing users
+  // to pinch out to see the whole page. iOS still honors pinch-zoom for
+  // accessibility regardless of these flags.
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
   themeColor: "#ffffff",
 };
@@ -50,6 +58,7 @@ export default function RootLayout({
       <body className="pb-[calc(6rem+env(safe-area-inset-bottom))]">
         <ToastProvider>
           <BodyChrome />
+          <PullToRefresh />
           <NavTracker />
           {children}
           <NavBar />
