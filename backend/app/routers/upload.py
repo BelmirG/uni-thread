@@ -1,8 +1,11 @@
 import re
 import uuid
+from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from PIL import Image, ImageOps
+from starlette.concurrency import run_in_threadpool
 
 from app.core.rate_limit import rate_limit
 from app.dependencies import get_current_user
@@ -94,6 +97,38 @@ def _is_text(data: bytes) -> bool:
     return b"\x00" not in data[:8192]
 
 
+IMAGE_MAX_DIMENSION = 2560  # px, longest side — plenty for any phone/laptop screen
+JPEG_QUALITY = 88
+
+
+def _normalize_jpeg(data: bytes) -> bytes:
+    """Re-encode an uploaded JPEG through Pillow.
+
+    This strips everything that shouldn't survive publication:
+    - iPhone HDR gain maps, which make the photo render ultra-bright while the
+      OS dims the rest of the UI around it (the "Instagram HDR" effect);
+    - EXIF metadata, including GPS coordinates nobody should leak by accident.
+
+    Orientation is applied before EXIF is dropped, the ICC color profile is
+    kept so wide-gamut photos don't shift hue, and oversized photos are scaled
+    down — a 48 MP upload otherwise wastes storage and mobile bandwidth.
+    """
+    with Image.open(BytesIO(data)) as img:
+        img = ImageOps.exif_transpose(img)
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        img.thumbnail((IMAGE_MAX_DIMENSION, IMAGE_MAX_DIMENSION))
+        out = BytesIO()
+        img.save(
+            out,
+            format="JPEG",
+            quality=JPEG_QUALITY,
+            optimize=True,
+            icc_profile=img.info.get("icc_profile"),
+        )
+        return out.getvalue()
+
+
 def _sanitize_filename(raw: str, expected_ext: str) -> str:
     """Return a safe display name, always ending with expected_ext.
 
@@ -133,6 +168,16 @@ async def upload_image(
             status_code=422,
             detail="File content does not match the declared image type.",
         )
+
+    # Re-encoding is CPU-bound, so it runs in a worker thread to keep the
+    # event loop free. Only JPEGs need it — they're what phones produce and
+    # the only format arriving here with HDR gain maps; GIF/WebP/PNG pass
+    # through untouched so animations and transparency survive.
+    if file.content_type == "image/jpeg":
+        try:
+            data = await run_in_threadpool(_normalize_jpeg, data)
+        except Exception:
+            raise HTTPException(status_code=422, detail="Could not process image.")
 
     ext = IMAGE_EXTENSIONS[file.content_type]
     filename = f"{uuid.uuid4()}{ext}"

@@ -12,6 +12,7 @@ redis[asyncio]==5.2.1
 python-multipart==0.0.20
 pywebpush==2.0.3
 httpx==0.28.1
+Pillow==11.3.0
 
 # Test dependencies (kept in the image so `docker compose exec backend pytest` always works)
 pytest==8.3.4
