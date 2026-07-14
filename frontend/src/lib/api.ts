@@ -14,14 +14,30 @@ export async function apiFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
-  const res = await fetch(path, {
-    ...options,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      ...options,
+      credentials: "include",
+      // Abort after 20s instead of hanging forever. Without this, a request
+      // cut off mid-flight (e.g. iOS suspending the home-screen app) never
+      // settles, leaving buttons stuck on "Posting…" until a force-quit.
+      signal:
+        options?.signal ??
+        (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal
+          ? AbortSignal.timeout(20_000)
+          : undefined),
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    });
+  } catch (err) {
+    if (err instanceof DOMException && (err.name === "TimeoutError" || err.name === "AbortError")) {
+      throw new ApiError("Request timed out — check your connection and try again.", 0);
+    }
+    throw new ApiError("Network error — check your connection and try again.", 0);
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { detail?: unknown };

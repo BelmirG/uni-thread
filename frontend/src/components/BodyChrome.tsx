@@ -24,5 +24,28 @@ export default function BodyChrome() {
     }
   }, []);
 
+  // iOS home-screen apps have a long-standing WebKit bug: after the software
+  // keyboard closes, touch hit-testing can stay offset from what's rendered,
+  // so every tap lands in the wrong place and the app appears frozen until
+  // it's force-quit. A 1px scroll round-trip right after an input loses focus
+  // forces WebKit to re-sync the viewport, which clears the offset. Only
+  // needed (and only run) in standalone display mode.
+  useEffect(() => {
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (!standalone) return;
+
+    const resync = () => {
+      requestAnimationFrame(() => {
+        const y = window.scrollY;
+        window.scrollTo(0, y + 1);
+        window.scrollTo(0, y);
+      });
+    };
+    document.addEventListener("focusout", resync);
+    return () => document.removeEventListener("focusout", resync);
+  }, []);
+
   return null;
 }
