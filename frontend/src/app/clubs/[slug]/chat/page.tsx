@@ -397,6 +397,7 @@ export default function ClubChatPage() {
   const [caret, setCaret] = useState<number | null>(null);
   // Who's typing right now: username → display_name. Entries expire after 3s.
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
+  const [queuedSend, setQueuedSend] = useState(false);
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastTypingSentRef = useRef(0);
 
@@ -534,17 +535,16 @@ export default function ClubChatPage() {
       }
     }
 
-    async function init() {
-      const ok = await fetchRoom();
-      if (!ok || cancelled) return;
-      wsRef.current = openChatSocket(`/api/clubs/${slug}/chat/ws`, {
-        onStatus: (s) => { if (!cancelled) setStatus(s); },
-        onMessage: (data) => { if (!cancelled) handleIncomingRef.current(data); },
-        // The socket was down for a while — refetch to fill in anything missed.
-        onReconnect: () => { fetchRoom(); },
-      });
-    }
-    init();
+    // Socket and history load in parallel — the handshake shouldn't wait for
+    // the REST fetch. If access is denied, both fail consistently (the socket
+    // gets a 4xxx close, the fetch redirects away).
+    wsRef.current = openChatSocket(`/api/clubs/${slug}/chat/ws`, {
+      onStatus: (s) => { if (!cancelled) setStatus(s); },
+      onMessage: (data) => { if (!cancelled) handleIncomingRef.current(data); },
+      // The socket was down for a while — refetch to fill in anything missed.
+      onReconnect: () => { fetchRoom(); },
+    });
+    fetchRoom();
     return () => { cancelled = true; wsRef.current?.close(); wsRef.current = null; };
   }, [slug, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -655,7 +655,23 @@ export default function ClubChatPage() {
     inputRef.current?.focus();
   }
 
-  function handleSubmit(e: React.FormEvent) { e.preventDefault(); send(); }
+  function handleSubmit(e: React.FormEvent) { e.preventDefault(); trySend(); }
+
+  // Tapping send while an attachment is still uploading must never be a
+  // silent no-op: arm an auto-send that fires the moment uploads settle.
+  function trySend() {
+    if (pendingAttachments.some((p) => p.uploading)) {
+      setQueuedSend(true);
+      return;
+    }
+    send();
+  }
+  useEffect(() => {
+    if (!queuedSend) return;
+    if (pendingAttachments.some((p) => p.uploading)) return;
+    setQueuedSend(false);
+    if (input.trim() || pendingAttachments.some((p) => p.attachment !== null)) send();
+  }, [queuedSend, pendingAttachments]); // eslint-disable-line react-hooks/exhaustive-deps
   // Enter inserts a newline (like every mobile messenger); sending is the
   // send button's job. No onKeyDown handler needed for that — it's the
   // textarea's default behavior.
@@ -703,11 +719,11 @@ export default function ClubChatPage() {
     return acc;
   }, []);
 
-  // Sending works even while reconnecting — the socket outbox delivers the
-  // moment the connection is back, and the bubble shows "Sending…" meanwhile.
+  // Sending works even while reconnecting (the socket outbox delivers on
+  // reconnect) and even mid-upload (trySend queues until uploads settle).
   const canSend =
     input.trim().length > 0 ||
-    (pendingAttachments.some((p) => p.attachment !== null) && !pendingAttachments.some((p) => p.uploading));
+    pendingAttachments.some((p) => p.uploading || p.attachment !== null);
 
   const allAttachments = messages.flatMap((m) => m.attachments ?? []);
   const mediaPhotos = allAttachments.filter((a) => a.mime_type.startsWith("image/"));
@@ -729,8 +745,8 @@ export default function ClubChatPage() {
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm text-on-surface truncate leading-tight">{clubName || "Chat"}</p>
           <p className="text-[11px] text-on-surface-variant flex items-center gap-1 leading-tight">
-            <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", status === "connected" ? "bg-green-500" : status === "connecting" ? "bg-yellow-400" : "bg-destructive")} />
-            {status === "connected" ? "Live" : status === "connecting" ? "Connecting…" : "Disconnected"}
+            <span className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", status === "connected" ? "bg-green-500" : "bg-yellow-400")} />
+            {status === "connected" ? "Live" : status === "connecting" ? "Connecting…" : "Reconnecting…"}
           </p>
         </div>
         <div className="relative flex-shrink-0">
@@ -829,6 +845,11 @@ export default function ClubChatPage() {
       )}
 
       {/* Pending attachments */}
+      {pendingAttachments.some((p) => p.error) && (
+        <p className="px-4 pt-2 text-xs text-destructive border-t border-outline-variant/60 bg-surface flex-shrink-0">
+          Some attachments failed to upload — remove them (×) and try again.
+        </p>
+      )}
       {pendingAttachments.length > 0 && (
         <div className="flex items-center gap-2 px-4 py-2.5 border-t border-outline-variant/60 bg-surface flex-shrink-0 overflow-x-auto">
           {pendingAttachments.map((p) => (
@@ -908,7 +929,10 @@ export default function ClubChatPage() {
         <button
           type="submit"
           disabled={!canSend}
-          className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5 transition-all duration-200 disabled:opacity-35"
+          className={cn(
+            "w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mb-0.5 transition-all duration-200 disabled:opacity-35",
+            queuedSend && "animate-pulse"
+          )}
           style={{ backgroundColor: canSend ? IUS_BLUE : "#9ca3af" }}
         >
           <Send className="w-4 h-4 text-white" />
