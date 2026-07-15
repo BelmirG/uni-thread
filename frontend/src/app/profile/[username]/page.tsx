@@ -206,6 +206,10 @@ export default function ProfilePage() {
   const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean> | null>(null);
   const [pushState, setPushState] = useState<PushState | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
+  // iOS Safari only exposes Web Push inside a Home Screen app, so when push is
+  // "unsupported" on an iPhone the real fix is installing the app first.
+  const isIOS =
+    typeof navigator !== "undefined" && /iPhone|iPad|iPod/.test(navigator.userAgent);
 
   function loadNotifPrefs() {
     apiFetch<Record<string, boolean>>("/api/users/me/notification-prefs")
@@ -629,7 +633,19 @@ export default function ProfilePage() {
                       </div>
                       {prefsOpen ? (
                         <div className="overflow-y-auto flex-1 py-1">
-                          {pushState !== "unsupported" && (
+                          {pushState === "unsupported" && isIOS && (
+                            <>
+                              <div className="px-4 py-2.5 text-sm">
+                                <span className="text-foreground block">Notifications on iPhone</span>
+                                <span className="text-[11px] text-muted-foreground leading-snug">
+                                  Open UniThread in Safari, tap Share → Add to Home Screen, then turn
+                                  notifications on from the app.
+                                </span>
+                              </div>
+                              <div className="h-px bg-border mx-4 my-1" />
+                            </>
+                          )}
+                          {pushState !== "unsupported" && pushState !== null && (
                             <>
                               <label className="flex items-center justify-between px-4 py-2.5 text-sm cursor-pointer hover:bg-muted/50 transition-colors">
                                 <span>
@@ -637,18 +653,20 @@ export default function ProfilePage() {
                                   <span className="text-[11px] text-muted-foreground leading-snug">
                                     {pushState === "denied"
                                       ? "Blocked in your browser settings"
+                                      : pushState === "unavailable"
+                                      ? "Not available right now"
                                       : "Get notified even when the site is closed"}
                                   </span>
                                 </span>
                                 <button
                                   role="switch"
                                   aria-checked={pushState === "on"}
-                                  disabled={pushState === "denied" || pushBusy}
+                                  disabled={pushState === "denied" || pushState === "unavailable" || pushBusy}
                                   onClick={togglePush}
                                   className={cn(
                                     "w-9 h-5 rounded-full transition-colors relative flex-shrink-0",
                                     pushState === "on" ? "bg-secondary" : "bg-muted-foreground/30",
-                                    (pushState === "denied" || pushBusy) && "opacity-50"
+                                    (pushState === "denied" || pushState === "unavailable" || pushBusy) && "opacity-50"
                                   )}
                                 >
                                   <span
