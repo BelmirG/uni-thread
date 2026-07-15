@@ -21,6 +21,8 @@ class CreatePostRequest(BaseModel):
     file_attachments: list[FileAttachment] = Field(default_factory=list, max_length=5)
     poll_options: list[str] = Field(default_factory=list)
     poll_expires_at: Optional[datetime] = None
+    # Honored only by the club post endpoint — feed polls are always anonymous.
+    poll_public_votes: bool = False
 
     @model_validator(mode='after')
     def validate_post(self) -> 'CreatePostRequest':
@@ -70,6 +72,7 @@ class PollResponse(BaseModel):
     user_vote_option_id: Optional[uuid.UUID]
     expires_at: Optional[datetime]
     is_expired: bool
+    public_votes: bool = False
 
 
 class PostResponse(BaseModel):

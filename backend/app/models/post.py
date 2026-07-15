@@ -35,6 +35,9 @@ class Post(Base):
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default=text("false"))
     poll_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set at creation, never mutated: a poll must not flip from anonymous to
+    # public after votes exist. Only club posts ever set this.
+    poll_public_votes: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default=text("false"))
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

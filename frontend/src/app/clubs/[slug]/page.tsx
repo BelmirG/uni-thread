@@ -328,6 +328,7 @@ export default function ClubDetailPage() {
           file_attachments: fileAttachments,
           poll_options: pollDraft ? pollDraft.options.map((o) => o.trim()).filter(Boolean) : [],
           poll_expires_at: pollDraft?.expiresAt ? new Date(pollDraft.expiresAt).toISOString() : null,
+          poll_public_votes: pollDraft?.publicVotes ?? false,
         }),
       });
       setPosts((prev) => [newPost, ...prev]);
@@ -685,7 +686,7 @@ export default function ClubDetailPage() {
                   key={uploaderKey + 1000}
                   onChange={(attachments, uploading) => { setFileAttachments(attachments); setFilesUploading(uploading); }}
                 />
-                <PollComposer value={pollDraft} onChange={setPollDraft} />
+                <PollComposer value={pollDraft} onChange={setPollDraft} allowPublicVotes />
                 <div className="flex items-center gap-2">
                   {postError && <p className="text-xs text-destructive">{postError}</p>}
                   <div className="ml-auto flex items-center gap-2">

@@ -6,21 +6,25 @@ import { cn } from "@/lib/utils";
 export interface PollDraft {
   options: string[];
   expiresAt: string;
+  publicVotes: boolean;
 }
 
 interface Props {
   value: PollDraft | null;
   onChange: (draft: PollDraft | null) => void;
+  // Club composers offer public voting; feed polls are always anonymous,
+  // so the toggle simply doesn't exist there.
+  allowPublicVotes?: boolean;
 }
 
-export default function PollComposer({ value, onChange }: Props) {
+export default function PollComposer({ value, onChange, allowPublicVotes = false }: Props) {
   const open = value !== null;
 
   function toggle() {
     if (open) {
       onChange(null);
     } else {
-      onChange({ options: ["", ""], expiresAt: "" });
+      onChange({ options: ["", ""], expiresAt: "", publicVotes: false });
     }
   }
 
@@ -102,6 +106,22 @@ export default function PollComposer({ value, onChange }: Props) {
               className="text-xs border border-input rounded-md px-2.5 py-1.5 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
+
+          {allowPublicVotes && (
+            <label className="flex items-start gap-2 pt-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={value.publicVotes}
+                onChange={(e) => onChange({ ...value, publicVotes: e.target.checked })}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-input"
+              />
+              <span className="text-xs text-muted-foreground leading-snug">
+                <span className="font-medium text-foreground block">Show who voted</span>
+                Everyone who can see this poll will see each member&apos;s choice.
+                This can&apos;t be changed after posting.
+              </span>
+            </label>
+          )}
         </div>
       )}
     </div>

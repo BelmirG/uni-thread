@@ -487,6 +487,9 @@ async def create_club_post(
         image_urls=body.image_urls,
         file_attachments=[a.model_dump() for a in body.file_attachments],
         poll_expires_at=body.poll_expires_at,
+        # Club-only feature: the flag is deliberately not honored by the feed
+        # post endpoint, so feed polls are always anonymous.
+        poll_public_votes=bool(body.poll_options) and body.poll_public_votes,
     )
     db.add(post)
     await db.flush()

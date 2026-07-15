@@ -184,11 +184,12 @@ async def _load_polls(
     for o in options:
         by_post[o.post_id].append(o)
 
-    # Load expiry info from Post
-    expiry_map = {
-        row.id: row.poll_expires_at
+    # Load expiry + vote-visibility info from Post
+    post_meta = {
+        row.id: (row.poll_expires_at, row.poll_public_votes)
         for row in (await db.execute(
-            select(Post.id, Post.poll_expires_at).where(Post.id.in_(list(by_post.keys())))
+            select(Post.id, Post.poll_expires_at, Post.poll_public_votes)
+            .where(Post.id.in_(list(by_post.keys())))
         )).all()
     }
 
@@ -196,7 +197,7 @@ async def _load_polls(
     result: dict[uuid.UUID, PollResponse] = {}
     for post_id, opts in by_post.items():
         total = sum(vote_counts.get(o.id, 0) for o in opts)
-        expires_at = expiry_map.get(post_id)
+        expires_at, public_votes = post_meta.get(post_id, (None, False))
         if expires_at and expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         result[post_id] = PollResponse(
@@ -205,6 +206,7 @@ async def _load_polls(
             user_vote_option_id=user_votes.get(post_id),
             expires_at=expires_at,
             is_expired=bool(expires_at and now > expires_at),
+            public_votes=public_votes,
         )
     return result
 
@@ -704,6 +706,52 @@ async def poll_vote(
 
     polls = await _load_polls([post_id], current_user.id, db)
     return polls.get(post_id)
+
+
+@router.get("/{post_id}/poll-voters")
+async def poll_voters(
+    post_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Who voted for what — ONLY for polls created with public_votes, where
+    every voter saw the 'votes visible' label before voting. Anonymous polls
+    (the default, and every poll that predates this feature) refuse here:
+    vote identities for them must never leave the database."""
+    post = (await db.execute(
+        select(Post).where(Post.id == post_id, Post.is_deleted == False)
+    )).scalar_one_or_none()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+    if not post.poll_public_votes:
+        raise HTTPException(status_code=403, detail="Votes on this poll are anonymous.")
+    await _guard_private_club_post(post, current_user.id, db)
+
+    options = (await db.execute(
+        select(PollOption)
+        .where(PollOption.post_id == post_id)
+        .order_by(PollOption.position)
+    )).scalars().all()
+
+    voter_rows = (await db.execute(
+        select(PollVote.poll_option_id, User.username, User.display_name, User.avatar_url)
+        .join(User, User.id == PollVote.user_id)
+        .where(PollVote.post_id == post_id)
+        .order_by(User.display_name.asc())
+    )).all()
+
+    by_option: dict[uuid.UUID, list[dict]] = {}
+    for option_id, username, display_name, avatar_url in voter_rows:
+        by_option.setdefault(option_id, []).append({
+            "username": username,
+            "display_name": display_name,
+            "avatar_url": avatar_url,
+        })
+
+    return [
+        {"option_id": str(o.id), "text": o.text, "voters": by_option.get(o.id, [])}
+        for o in options
+    ]
 
 
 @router.patch("/{post_id}")
