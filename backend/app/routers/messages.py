@@ -443,9 +443,12 @@ async def get_messages(
         .outerjoin(SharedPost, SharedPost.id == DirectMessage.shared_post_id)
         .outerjoin(PostAuthor, PostAuthor.id == SharedPost.author_id)
         .where(DirectMessage.conversation_id == conv_id)
-        .order_by(DirectMessage.created_at.asc())
+        # Newest 50, then reversed for display — ascending+limit would return
+        # the OLDEST 50 and silently cut off recent messages in long chats.
+        .order_by(DirectMessage.created_at.desc())
         .limit(50)
     )).all()
+    rows = list(reversed(rows))
 
     # Mark all unread messages from the other person as read
     await db.execute(

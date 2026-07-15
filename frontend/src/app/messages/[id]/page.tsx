@@ -541,10 +541,19 @@ export default function ConversationPage() {
     else if (nearBottomRef.current) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, otherTyping]);
 
-  // Merge fresh server history with local bubbles still in flight. A pending
-  // bubble whose content already shows up in the history was delivered (the
-  // socket just died before the echo) — drop it instead of duplicating.
+  // Merge fresh server history with what's already on screen. Two things must
+  // survive the merge:
+  //  1. Pending/failed bubbles still in flight (unless the history proves they
+  //     were delivered — then drop them instead of duplicating).
+  //  2. Confirmed messages that arrived over the socket while the fetch was
+  //     running — they're newer than the fetched history, and replacing state
+  //     with the bare server list would make them vanish from the screen.
   function mergeWithPending(server: DmMessage[], prev: DmMessage[]): DmMessage[] {
+    const serverIds = new Set(server.map((s) => s.id));
+    const newestServer = server.length ? server[server.length - 1].created_at : "";
+    const liveExtras = prev.filter((m) =>
+      !m.pending && !m.failed && !serverIds.has(m.id) && m.created_at > newestServer
+    );
     const inFlight = prev.filter((m) => m.pending || m.failed);
     const survivors = inFlight.filter((p) =>
       !server.some((s) =>
@@ -553,7 +562,7 @@ export default function ConversationPage() {
         (s.attachments?.length ?? 0) === (p.attachments?.length ?? 0)
       )
     );
-    return [...server, ...survivors];
+    return [...server, ...liveExtras, ...survivors];
   }
 
   function handleIncoming(data: unknown) {

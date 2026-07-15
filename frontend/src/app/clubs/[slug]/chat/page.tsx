@@ -11,7 +11,7 @@ import { compressImage } from "@/lib/imageCompress";
 import {
   ArrowLeft, Send, X, CornerUpLeft, Plus, ImageIcon, FileText,
   Download, ExternalLink, MoreVertical, GalleryHorizontalEnd,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import MiniAvatar from "@/components/MiniAvatar";
@@ -399,6 +399,7 @@ export default function ClubChatPage() {
   // Who's typing right now: username → display_name. Entries expire after 3s.
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
   const [queuedSend, setQueuedSend] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastTypingSentRef = useRef(0);
 
@@ -439,10 +440,19 @@ export default function ClubChatPage() {
     else if (nearBottomRef.current) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  // Merge fresh server history with local bubbles still in flight. A pending
-  // bubble whose content already shows up in the history was delivered (the
-  // socket just died before the echo) — drop it instead of duplicating.
+  // Merge fresh server history with what's already on screen. Two things must
+  // survive the merge:
+  //  1. Pending/failed bubbles still in flight (unless the history proves they
+  //     were delivered — then drop them instead of duplicating).
+  //  2. Confirmed messages that arrived over the socket while the fetch was
+  //     running — they're newer than the fetched history, and replacing state
+  //     with the bare server list would make them vanish from the screen.
   function mergeWithPending(server: ChatMessage[], prev: ChatMessage[]): ChatMessage[] {
+    const serverIds = new Set(server.map((s) => s.id));
+    const newestServer = server.length ? server[server.length - 1].created_at : "";
+    const liveExtras = prev.filter((m) =>
+      !m.pending && !m.failed && !serverIds.has(m.id) && m.created_at > newestServer
+    );
     const inFlight = prev.filter((m) => m.pending || m.failed);
     const survivors = inFlight.filter((p) =>
       !server.some((s) =>
@@ -451,7 +461,7 @@ export default function ClubChatPage() {
         (s.attachments?.length ?? 0) === (p.attachments?.length ?? 0)
       )
     );
-    return [...server, ...survivors];
+    return [...server, ...liveExtras, ...survivors];
   }
 
   function handleIncoming(data: unknown) {
@@ -521,13 +531,14 @@ export default function ClubChatPage() {
         const [history, me, club] = await Promise.all([
           apiFetch<ChatMessage[]>(`/api/clubs/${slug}/chat`),
           apiFetch<Author>("/api/auth/me"),
-          apiFetch<{ name: string }>(`/api/clubs/${slug}`),
+          apiFetch<{ name: string; chat_muted?: boolean }>(`/api/clubs/${slug}`),
         ]);
         if (cancelled) return false;
         meRef.current = { username: me.username, display_name: me.display_name, avatar_url: me.avatar_url ?? null };
         setMessages((prev) => mergeWithPending(history, prev));
         setCurrentUsername(me.username);
         setClubName(club.name);
+        setIsMuted(club.chat_muted ?? false);
         return true;
       } catch (err: unknown) {
         if (err instanceof ApiError && err.status === 401) router.replace("/login");
@@ -733,6 +744,13 @@ export default function ClubChatPage() {
   const mediaPhotos = allAttachments.filter((a) => a.mime_type.startsWith("image/"));
   const mediaDocs = allAttachments.filter((a) => !a.mime_type.startsWith("image/"));
 
+  // Mute silences this club's chat pushes only — @mentions still come through.
+  function handleToggleMute() {
+    const newMuted = !isMuted;
+    setIsMuted(newMuted);
+    apiFetch(`/api/clubs/${slug}/chat/mute`, { method: newMuted ? "POST" : "DELETE" }).catch(() => setIsMuted(!newMuted));
+  }
+
   return (
     // dvh (not svh): tracks the live viewport, so when the on-screen keyboard
     // resizes it (interactive-widget=resizes-content) the composer stays visible.
@@ -774,6 +792,18 @@ export default function ClubChatPage() {
                   <GalleryHorizontalEnd style={{ width: 14, height: 14, color: "#6b7280", flexShrink: 0 }} />
                   Media &amp; Files
                 </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", fontSize: "0.875rem", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+                  <Bell style={{ width: 14, height: 14, color: "#6b7280", flexShrink: 0 }} />
+                  <span style={{ flex: 1, userSelect: "none" }}>Notifications</span>
+                  <div
+                    onClick={handleToggleMute}
+                    role="switch"
+                    aria-checked={!isMuted}
+                    style={{ position: "relative", cursor: "pointer", display: "inline-flex", width: 36, height: 20, flexShrink: 0, alignItems: "center", borderRadius: 9999, background: isMuted ? "#fb923c" : "#22c55e", transition: "background 0.3s" }}
+                  >
+                    <span style={{ display: "inline-block", width: 14, height: 14, borderRadius: "50%", background: "white", boxShadow: "0 1px 2px rgba(0,0,0,0.2)", transition: "transform 0.3s", transform: isMuted ? "translateX(3px)" : "translateX(19px)" }} />
+                  </div>
+                </div>
               </div>
             </>,
             document.body

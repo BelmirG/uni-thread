@@ -22,6 +22,7 @@ class ClubResponse(BaseModel):
     is_member: bool
     role: Optional[str]           # 'member' | 'moderator' | 'owner' | None
     has_pending_request: bool     # current user has a pending join request
+    chat_muted: bool = False      # current user muted this club's chat pushes
     created_at: datetime
 
 

@@ -51,7 +51,7 @@ async def _broadcast_chat_push(
         async with AsyncSessionLocal() as db:
             mentioned = set(extract_mention_usernames(content or ""))
             rows = (await db.execute(
-                select(User.id, User.username, User.muted_notifications)
+                select(User.id, User.username, User.muted_notifications, ClubMember.chat_muted)
                 .join(ClubMember, ClubMember.user_id == User.id)
                 .where(ClubMember.club_id == club_id, User.id != sender["id"])
             )).all()
@@ -69,7 +69,9 @@ async def _broadcast_chat_push(
                 "has_photo": has_photo,
                 "has_file": has_file,
             }
-            for user_id, username, muted in rows:
+            for user_id, username, muted, chat_muted in rows:
+                if chat_muted:
+                    continue
                 if muted and "clubs" in muted:
                     continue
                 if username.lower() in mentioned:
@@ -165,6 +167,44 @@ async def get_chat_history(
     )).all()
 
     return list(reversed([_build_chat_payload(row[0], row[1]) for row in rows]))
+
+
+# ── Per-club chat mute ─────────────────────────────────────────────────────────
+
+async def _require_membership(slug: str, user_id: uuid.UUID, db: AsyncSession) -> ClubMember:
+    club = (await db.execute(select(Club).where(Club.slug == slug))).scalar_one_or_none()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club not found.")
+    membership = (await db.execute(
+        select(ClubMember).where(
+            ClubMember.club_id == club.id, ClubMember.user_id == user_id
+        )
+    )).scalar_one_or_none()
+    if not membership:
+        raise HTTPException(status_code=403, detail="You must be a member of this club.")
+    return membership
+
+
+@router.post("/{slug}/chat/mute", status_code=204)
+async def mute_club_chat(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = await _require_membership(slug, current_user.id, db)
+    membership.chat_muted = True
+    await db.commit()
+
+
+@router.delete("/{slug}/chat/mute", status_code=204)
+async def unmute_club_chat(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = await _require_membership(slug, current_user.id, db)
+    membership.chat_muted = False
+    await db.commit()
 
 
 # ── WebSocket: real-time chat ──────────────────────────────────────────────────

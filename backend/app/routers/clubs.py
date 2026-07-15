@@ -142,7 +142,7 @@ async def _vote_counts(
 
 def _build_club_select(user_id: uuid.UUID, extra_where=None):
     """
-    Returns rows of (Club, member_count, user_role, pending_request_id).
+    Returns rows of (Club, member_count, user_role, pending_request_id, chat_muted).
     pending_request_id is non-NULL when the current user has a pending join request.
     """
     AllMembers = aliased(ClubMember)
@@ -154,6 +154,7 @@ def _build_club_select(user_id: uuid.UUID, extra_where=None):
             func.count(AllMembers.user_id).label("member_count"),
             UserMember.role.label("user_role"),
             UserRequest.id.label("pending_request_id"),
+            UserMember.chat_muted.label("chat_muted"),
         )
         .outerjoin(AllMembers, AllMembers.club_id == Club.id)
         .outerjoin(
@@ -164,7 +165,7 @@ def _build_club_select(user_id: uuid.UUID, extra_where=None):
             UserRequest,
             and_(UserRequest.club_id == Club.id, UserRequest.user_id == user_id),
         )
-        .group_by(Club.id, UserMember.role, UserRequest.id)
+        .group_by(Club.id, UserMember.role, UserRequest.id, UserMember.chat_muted)
     )
     if extra_where is not None:
         stmt = stmt.where(extra_where)
@@ -172,7 +173,7 @@ def _build_club_select(user_id: uuid.UUID, extra_where=None):
 
 
 def _row_to_club(row) -> ClubResponse:
-    club, member_count, user_role, pending_request_id = row
+    club, member_count, user_role, pending_request_id, chat_muted = row
     return ClubResponse(
         id=club.id,
         name=club.name,
@@ -184,6 +185,7 @@ def _row_to_club(row) -> ClubResponse:
         is_member=user_role is not None,
         role=user_role,
         has_pending_request=pending_request_id is not None,
+        chat_muted=bool(chat_muted),
         created_at=club.created_at,
     )
 
