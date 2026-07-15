@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
-import { wsUrl } from "@/lib/ws";
+import { openChatSocket, type ChatSocket } from "@/lib/chatSocket";
+import { getClubChatCache, saveClubChatCache } from "@/lib/chatCache";
 import {
   ArrowLeft, Send, X, CornerUpLeft, Plus, ImageIcon, FileText,
   Download, ExternalLink, MoreVertical, GalleryHorizontalEnd,
@@ -49,6 +50,17 @@ interface ChatMessage {
   attachments: FileAttachment[];
   author: Author;
   created_at: string;
+  // Optimistic-send bookkeeping (client-side only; client_id also arrives on
+  // the server echo so the pending bubble can be swapped for the real message).
+  client_id?: string;
+  pending?: boolean;
+  failed?: boolean;
+}
+
+interface ChatSnapshot {
+  messages: ChatMessage[];
+  clubName: string;
+  me: Author;
 }
 
 function timeLabel(iso: string) {
@@ -218,7 +230,7 @@ function BubbleAttachments({ attachments, isOwn, onPreview }: {
 // ── Swipeable bubble ──────────────────────────────────────────────────────────
 
 function SwipeableBubble({
-  msg, isOwn, showName, isLast, onSwipe, onScrollToQuote, onPreviewImage, msgRef,
+  msg, isOwn, showName, isLast, onSwipe, onScrollToQuote, onPreviewImage, onRetry, msgRef,
 }: {
   msg: ChatMessage;
   isOwn: boolean;
@@ -227,6 +239,7 @@ function SwipeableBubble({
   onSwipe: (msg: ChatMessage) => void;
   onScrollToQuote: (quote: string) => void;
   onPreviewImage: (urls: string[], index: number) => void;
+  onRetry: () => void;
   msgRef: (el: HTMLDivElement | null) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -315,6 +328,7 @@ function SwipeableBubble({
           )}
           style={{
             background: isOwn ? OWN_BUBBLE_BG : undefined,
+            opacity: msg.pending ? 0.7 : 1,
             transform: `translateX(${offset}px)`,
             transition: offset === 0 ? "transform 0.22s cubic-bezier(0.34,1.56,0.64,1)" : "none",
           }}
@@ -334,9 +348,16 @@ function SwipeableBubble({
           )}
           {body && <Linkify text={body} isOwn={isOwn} />}
           <BubbleAttachments attachments={msg.attachments ?? []} isOwn={isOwn} onPreview={onPreviewImage} />
-          {isLast && (
+          {msg.failed ? (
+            <button
+              onClick={onRetry}
+              className="text-[10px] self-end mt-1.5 ml-2 flex-shrink-0 font-semibold underline text-red-200"
+            >
+              Not sent — tap to retry
+            </button>
+          ) : isLast && (
             <span className={cn("text-[10px] self-end mt-1.5 ml-2 flex-shrink-0", isOwn ? "text-white/45" : "text-on-surface-variant")}>
-              {timeLabel(msg.created_at)}
+              {msg.pending ? "Sending…" : timeLabel(msg.created_at)}
             </span>
           )}
         </div>
@@ -379,7 +400,7 @@ export default function ClubChatPage() {
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastTypingSentRef = useRef(0);
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsRef = useRef<ChatSocket | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -387,73 +408,156 @@ export default function ClubChatPage() {
   const messagesRef = useRef<ChatMessage[]>([]);
   const photoInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const meRef = useRef<Author | null>(null);
+  const pendingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pendingPayloadsRef = useRef<Map<string, Record<string, unknown>>>(new Map());
+  const nearBottomRef = useRef(true);
+  const didInitialScrollRef = useRef(false);
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   // Scroll ONLY the message list, never the window: scrollIntoView also
   // scrolls every scrollable ancestor, and with the iOS keyboard open that
   // pans the whole page, leaving the composer stranded off-screen after send.
-  useEffect(() => {
+  //
+  // Layout effect + instant jump on open: the chat must *appear* already at
+  // the bottom, not visibly slide there. After that, own sends snap down;
+  // incoming messages only pull the list if the reader is already near the
+  // bottom — never yank someone out of scrolled-up history.
+  useLayoutEffect(() => {
     const el = listRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    if (!el || messages.length === 0) return;
+    if (!didInitialScrollRef.current) {
+      el.scrollTop = el.scrollHeight;
+      didInitialScrollRef.current = true;
+      return;
+    }
+    const last = messages[messages.length - 1];
+    const ownJustSent = !!(last && meRef.current && last.author.username === meRef.current.username);
+    if (ownJustSent) el.scrollTop = el.scrollHeight;
+    else if (nearBottomRef.current) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages]);
+
+  // Merge fresh server history with local bubbles still in flight. A pending
+  // bubble whose content already shows up in the history was delivered (the
+  // socket just died before the echo) — drop it instead of duplicating.
+  function mergeWithPending(server: ChatMessage[], prev: ChatMessage[]): ChatMessage[] {
+    const inFlight = prev.filter((m) => m.pending || m.failed);
+    const survivors = inFlight.filter((p) =>
+      !server.some((s) =>
+        s.author.username === p.author.username &&
+        (s.content ?? "") === (p.content ?? "") &&
+        (s.attachments?.length ?? 0) === (p.attachments?.length ?? 0)
+      )
+    );
+    return [...server, ...survivors];
+  }
+
+  function handleIncoming(data: unknown) {
+    const evt = data as { event?: string; username?: string; display_name?: string };
+    // Ephemeral typing signal — light up that member's name for 3s.
+    if (evt.event === "typing") {
+      const username = evt.username;
+      if (username && username !== meRef.current?.username) {
+        setTypingUsers((prev) => ({ ...prev, [username]: evt.display_name ?? username }));
+        const timers = typingTimersRef.current;
+        const existing = timers.get(username);
+        if (existing) clearTimeout(existing);
+        timers.set(username, setTimeout(() => {
+          setTypingUsers((prev) => {
+            const { [username]: _, ...rest } = prev;
+            return rest;
+          });
+          timers.delete(username);
+        }, 3000));
+      }
+      return;
+    }
+    const msg = data as ChatMessage;
+    // Their message replaces the "typing…" hint immediately.
+    setTypingUsers((prev) => {
+      if (!(msg.author.username in prev)) return prev;
+      const { [msg.author.username]: _, ...rest } = prev;
+      return rest;
+    });
+    if (msg.client_id) {
+      const timer = pendingTimersRef.current.get(msg.client_id);
+      if (timer) clearTimeout(timer);
+      pendingTimersRef.current.delete(msg.client_id);
+      pendingPayloadsRef.current.delete(msg.client_id);
+    }
+    setMessages((prev) => {
+      // Our own echo: swap the optimistic bubble for the confirmed message.
+      if (msg.client_id) {
+        const idx = prev.findIndex((m) => m.client_id === msg.client_id && (m.pending || m.failed));
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = msg;
+          return next;
+        }
+      }
+      return prev.some((m) => m.id === msg.id) ? prev : [...prev, msg];
+    });
+  }
+  const handleIncomingRef = useRef(handleIncoming);
+  useEffect(() => { handleIncomingRef.current = handleIncoming; });
 
   useEffect(() => {
     let cancelled = false;
-    async function init() {
-      let myUsername: string | null = null;
+
+    // Cached snapshot paints the room instantly; the fetch below still runs
+    // and silently brings it up to date.
+    const cached = getClubChatCache<ChatSnapshot>(slug);
+    if (cached) {
+      setMessages(cached.messages);
+      setClubName(cached.clubName);
+      setCurrentUsername(cached.me.username);
+      meRef.current = cached.me;
+    }
+
+    async function fetchRoom(): Promise<boolean> {
       try {
         const [history, me, club] = await Promise.all([
           apiFetch<ChatMessage[]>(`/api/clubs/${slug}/chat`),
-          apiFetch<{ username: string }>("/api/auth/me"),
+          apiFetch<Author>("/api/auth/me"),
           apiFetch<{ name: string }>(`/api/clubs/${slug}`),
         ]);
-        if (cancelled) return;
-        setMessages(history);
+        if (cancelled) return false;
+        meRef.current = { username: me.username, display_name: me.display_name, avatar_url: me.avatar_url ?? null };
+        setMessages((prev) => mergeWithPending(history, prev));
         setCurrentUsername(me.username);
         setClubName(club.name);
-        myUsername = me.username;
+        return true;
       } catch (err: unknown) {
         if (err instanceof ApiError && err.status === 401) router.replace("/login");
         else if (err instanceof ApiError && err.status === 403) router.replace(`/clubs/${slug}`);
-        return;
+        return false;
       }
-      const ws = new WebSocket(wsUrl(`/api/clubs/${slug}/chat/ws`));
-      wsRef.current = ws;
-      ws.onopen = () => setStatus("connected");
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        // Ephemeral typing signal — light up that member's name for 3s.
-        if (data.event === "typing") {
-          if (data.username !== myUsername) {
-            setTypingUsers((prev) => ({ ...prev, [data.username]: data.display_name }));
-            const timers = typingTimersRef.current;
-            const existing = timers.get(data.username);
-            if (existing) clearTimeout(existing);
-            timers.set(data.username, setTimeout(() => {
-              setTypingUsers((prev) => {
-                const { [data.username]: _, ...rest } = prev;
-                return rest;
-              });
-              timers.delete(data.username);
-            }, 3000));
-          }
-          return;
-        }
-        const msg = data as ChatMessage;
-        // Their message replaces the "typing…" hint immediately.
-        setTypingUsers((prev) => {
-          if (!(msg.author.username in prev)) return prev;
-          const { [msg.author.username]: _, ...rest } = prev;
-          return rest;
-        });
-        setMessages((prev) => [...prev, msg]);
-      };
-      ws.onclose = () => setStatus("disconnected");
-      ws.onerror = () => setStatus("disconnected");
+    }
+
+    async function init() {
+      const ok = await fetchRoom();
+      if (!ok || cancelled) return;
+      wsRef.current = openChatSocket(`/api/clubs/${slug}/chat/ws`, {
+        onStatus: (s) => { if (!cancelled) setStatus(s); },
+        onMessage: (data) => { if (!cancelled) handleIncomingRef.current(data); },
+        // The socket was down for a while — refetch to fill in anything missed.
+        onReconnect: () => { fetchRoom(); },
+      });
     }
     init();
     return () => { cancelled = true; wsRef.current?.close(); wsRef.current = null; };
-  }, [slug, router]);
+  }, [slug, router]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep the snapshot cache fresh so coming back to this room is instant.
+  // In-flight bubbles are excluded — only server-confirmed messages belong.
+  useEffect(() => {
+    if (!clubName || !meRef.current || messages.length === 0) return;
+    saveClubChatCache(slug, {
+      messages: messages.filter((m) => !m.pending && !m.failed),
+      clubName,
+      me: meRef.current,
+    } satisfies ChatSnapshot);
+  }, [slug, messages, clubName]);
 
   async function uploadFile(file: File): Promise<{ attachment: FileAttachment | null; localUrl?: string }> {
     const isImage = file.type.startsWith("image/");
@@ -492,14 +596,59 @@ export default function ClubChatPage() {
     }));
   }
 
+  // If the echo hasn't come back after this long, surface a retry instead of
+  // an eternal "Sending…". The outbox usually beats this comfortably.
+  function startFailTimer(clientId: string) {
+    const timers = pendingTimersRef.current;
+    const old = timers.get(clientId);
+    if (old) clearTimeout(old);
+    timers.set(clientId, setTimeout(() => {
+      timers.delete(clientId);
+      setMessages((prev) => prev.map((m) =>
+        m.client_id === clientId && m.pending ? { ...m, pending: false, failed: true } : m
+      ));
+    }, 15000));
+  }
+
+  function retrySend(clientId: string) {
+    const payload = pendingPayloadsRef.current.get(clientId);
+    const socket = wsRef.current;
+    if (!payload || !socket) return;
+    setMessages((prev) => prev.map((m) =>
+      m.client_id === clientId ? { ...m, pending: true, failed: false } : m
+    ));
+    startFailTimer(clientId);
+    socket.send(payload);
+  }
+
   function send() {
-    if (status !== "connected" || !wsRef.current) return;
     const text = input.trim();
     const readyAttachments = pendingAttachments.filter((p) => p.attachment !== null).map((p) => p.attachment!);
+    const me = meRef.current;
     if (!text && !readyAttachments.length) return;
     if (pendingAttachments.some((p) => p.uploading)) return;
+    if (!wsRef.current || !me) return;
+
+    const clientId = crypto.randomUUID();
     const contentWithQuote = replyTo && text ? `> ${(replyTo.content ?? "").slice(0, 80)}\n\n${text}` : text;
-    wsRef.current.send(JSON.stringify({ content: contentWithQuote || undefined, attachments: readyAttachments }));
+    const wsPayload: Record<string, unknown> = { client_id: clientId, attachments: readyAttachments };
+    if (contentWithQuote) wsPayload.content = contentWithQuote;
+
+    // The bubble appears instantly; the server echo (matched by client_id)
+    // replaces it. If the socket is down, the outbox delivers on reconnect.
+    setMessages((prev) => [...prev, {
+      id: clientId,
+      client_id: clientId,
+      content: contentWithQuote || null,
+      attachments: readyAttachments,
+      author: me,
+      created_at: new Date().toISOString(),
+      pending: true,
+    }]);
+    pendingPayloadsRef.current.set(clientId, wsPayload);
+    startFailTimer(clientId);
+    wsRef.current.send(wsPayload);
+
     setInput("");
     setReplyTo(null);
     setPendingAttachments([]);
@@ -517,7 +666,8 @@ export default function ClubChatPage() {
     if (now - lastTypingSentRef.current < 2000) return;
     if (status !== "connected" || !wsRef.current) return;
     lastTypingSentRef.current = now;
-    wsRef.current.send(JSON.stringify({ event: "typing" }));
+    // Never queue typing signals — a stale "typing…" after reconnect is noise.
+    wsRef.current.send({ event: "typing" }, false);
   }
 
   function scrollToQuote(quote: string) {
@@ -553,10 +703,11 @@ export default function ClubChatPage() {
     return acc;
   }, []);
 
-  const canSend = status === "connected" && (
+  // Sending works even while reconnecting — the socket outbox delivers the
+  // moment the connection is back, and the bubble shows "Sending…" meanwhile.
+  const canSend =
     input.trim().length > 0 ||
-    (pendingAttachments.some((p) => p.attachment !== null) && !pendingAttachments.some((p) => p.uploading))
-  );
+    (pendingAttachments.some((p) => p.attachment !== null) && !pendingAttachments.some((p) => p.uploading));
 
   const allAttachments = messages.flatMap((m) => m.attachments ?? []);
   const mediaPhotos = allAttachments.filter((a) => a.mime_type.startsWith("image/"));
@@ -611,7 +762,14 @@ export default function ClubChatPage() {
       </div>
 
       {/* Messages */}
-      <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-1">
+      <div
+        ref={listRef}
+        className="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-1"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        }}
+      >
         {messages.length === 0 && status === "connected" && (
           <p className="text-on-surface-variant text-sm text-center m-auto">No messages yet. Say hello!</p>
         )}
@@ -629,6 +787,7 @@ export default function ClubChatPage() {
                   onSwipe={(m) => { setReplyTo(m); setTimeout(() => inputRef.current?.focus(), 50); }}
                   onScrollToQuote={scrollToQuote}
                   onPreviewImage={(urls, idx) => setLightbox({ urls, index: idx })}
+                  onRetry={() => { if (msg.client_id) retrySend(msg.client_id); }}
                   msgRef={(el) => { if (el) msgRefs.current.set(msg.id, el); else msgRefs.current.delete(msg.id); }}
                 />
               ))}
@@ -701,7 +860,7 @@ export default function ClubChatPage() {
         <input ref={fileInputRef} type="file" accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.py,.js,.ts,.jsx,.tsx,.java,.c,.cpp,.h,.cs,.go,.rs,.rb,.php,.json,.yaml,.yml,.toml,.xml,.sh,.sql" multiple className="hidden" onChange={(e) => handleMediaSelect(e.target.files)} />
 
         <div className="relative flex-shrink-0 self-end mb-0.5">
-          <button type="button" onClick={() => setAttachMenuOpen((o) => !o)} disabled={status !== "connected"} className="w-9 h-9 rounded-full bg-surface border border-outline-variant flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-40">
+          <button type="button" onClick={() => setAttachMenuOpen((o) => !o)} disabled={pendingAttachments.length >= 5} className="w-9 h-9 rounded-full bg-surface border border-outline-variant flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-40">
             <Plus className="w-4 h-4" />
           </button>
           {attachMenuOpen && (
@@ -726,8 +885,7 @@ export default function ClubChatPage() {
             onChange={(e) => { setInput(e.target.value); setCaret(e.target.selectionStart); signalTyping(); }}
             onKeyUp={(e) => setCaret(e.currentTarget.selectionStart)}
             onClick={(e) => setCaret(e.currentTarget.selectionStart)}
-            placeholder={status === "connected" ? "Type a message…" : "Disconnected"}
-            disabled={status !== "connected"}
+            placeholder="Type a message…"
             maxLength={2000}
             rows={1}
             className="w-full px-4 py-2.5 text-sm rounded-full border border-outline-variant bg-surface-container-low placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50 resize-none max-h-32 overflow-y-auto text-on-surface"

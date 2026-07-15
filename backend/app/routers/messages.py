@@ -584,6 +584,11 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
                 if not content and not shared_post_id_str and not attachments:
                     continue
 
+                # WS input bypasses Pydantic, so cap length here (UI caps at 2000;
+                # the margin covers the reply-quote prefix).
+                if len(content) > 4000:
+                    content = content[:4000]
+
                 shared_post = None
                 post_author = None
                 shared_post_uuid = None
@@ -614,8 +619,14 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
                 await db.commit()
                 await db.refresh(dm)
 
-                payload = json.dumps(_build_msg_payload(dm, user, shared_post, post_author))
-                await redis.publish(channel, payload)
+                payload_dict = _build_msg_payload(dm, user, shared_post, post_author)
+                # Echo the sender's client-generated ID so their optimistic
+                # "sending…" bubble can be swapped for this confirmed message.
+                # Never persisted; other clients ignore it.
+                client_id = data.get("client_id")
+                if isinstance(client_id, str) and 0 < len(client_id) <= 64:
+                    payload_dict["client_id"] = client_id
+                await redis.publish(channel, json.dumps(payload_dict))
 
                 # Push notification to the recipient — re-query mute status so
                 # toggling mute mid-session takes effect immediately

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
-import { wsUrl } from "@/lib/ws";
+import { openChatSocket, type ChatSocket } from "@/lib/chatSocket";
+import { getDmCache, saveDmCache } from "@/lib/chatCache";
 import { ArrowLeft, Send, MoreVertical, Trash2, X, CornerUpLeft, Plus, ImageIcon, FileText, Download, ExternalLink, GalleryHorizontalEnd, ChevronLeft, ChevronRight, Bell } from "lucide-react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
@@ -53,6 +54,18 @@ interface DmMessage {
   shared_post: SharedPost | null;
   sender: Author;
   created_at: string;
+  // Optimistic-send bookkeeping (client-side only; client_id also arrives on
+  // the server echo so the pending bubble can be swapped for the real message).
+  client_id?: string;
+  pending?: boolean;
+  failed?: boolean;
+}
+
+interface DmSnapshot {
+  messages: DmMessage[];
+  otherUser: Author;
+  isMuted: boolean;
+  me: Author;
 }
 
 interface ConvResponse {
@@ -153,7 +166,7 @@ function SharedPostCard({ post, isOwn }: { post: SharedPost; isOwn: boolean }) {
 }
 
 function SwipeableMessage({
-  msg, isOwn, isHovered, onSwipe, onScrollToQuote, onHoverEnter, onHoverLeave, onPreviewImage, msgRef,
+  msg, isOwn, isHovered, onSwipe, onScrollToQuote, onHoverEnter, onHoverLeave, onPreviewImage, onRetry, msgRef,
 }: {
   msg: DmMessage;
   isOwn: boolean;
@@ -163,6 +176,7 @@ function SwipeableMessage({
   onHoverEnter: () => void;
   onHoverLeave: () => void;
   onPreviewImage: (urls: string[], index: number) => void;
+  onRetry: () => void;
   msgRef: (el: HTMLDivElement | null) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -240,6 +254,7 @@ function SwipeableMessage({
         )}
         style={{
           background: isOwn ? OWN_BUBBLE_BG : undefined,
+          opacity: msg.pending ? 0.7 : 1,
           transform: `translateX(${offset}px)`,
           transition: offset === 0 ? "transform 0.22s cubic-bezier(0.34,1.56,0.64,1)" : "none",
         }}
@@ -262,12 +277,21 @@ function SwipeableMessage({
           <MsgAttachments attachments={msg.attachments} isOwn={isOwn} onPreview={onPreviewImage} />
         )}
         {msg.shared_post && <SharedPostCard post={msg.shared_post} isOwn={isOwn} />}
-        <span className={cn(
-          "text-[10px] self-end mt-1.5 ml-2 flex-shrink-0",
-          isOwn ? "text-white/45" : "text-on-surface-variant"
-        )}>
-          {timeLabel(msg.created_at)}
-        </span>
+        {msg.failed ? (
+          <button
+            onClick={onRetry}
+            className="text-[10px] self-end mt-1.5 ml-2 flex-shrink-0 font-semibold underline text-red-200"
+          >
+            Not sent — tap to retry
+          </button>
+        ) : (
+          <span className={cn(
+            "text-[10px] self-end mt-1.5 ml-2 flex-shrink-0",
+            isOwn ? "text-white/45" : "text-on-surface-variant"
+          )}>
+            {msg.pending ? "Sending…" : timeLabel(msg.created_at)}
+          </span>
+        )}
       </div>
 
       <button
@@ -399,7 +423,7 @@ export default function ConversationPage() {
   const typingClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTypingSentRef = useRef(0);
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const wsRef = useRef<ChatSocket | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -407,71 +431,154 @@ export default function ConversationPage() {
   const messagesRef = useRef<DmMessage[]>([]);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const meRef = useRef<Author | null>(null);
+  const otherUsernameRef = useRef<string | null>(null);
+  const pendingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pendingPayloadsRef = useRef<Map<string, Record<string, unknown>>>(new Map());
+  const nearBottomRef = useRef(true);
+  const didInitialScrollRef = useRef(false);
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   // Scroll ONLY the message list, never the window: scrollIntoView also
   // scrolls every scrollable ancestor, and with the iOS keyboard open that
   // pans the whole page, leaving the composer stranded off-screen after send.
-  useEffect(() => {
+  //
+  // Layout effect + instant jump on open: the chat must *appear* already at
+  // the bottom, not visibly slide there. After that, own sends snap down;
+  // incoming messages only pull the list if the reader is already near the
+  // bottom — never yank someone out of scrolled-up history.
+  useLayoutEffect(() => {
     const el = listRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    if (!el || messages.length === 0) return;
+    if (!didInitialScrollRef.current) {
+      el.scrollTop = el.scrollHeight;
+      didInitialScrollRef.current = true;
+      return;
+    }
+    const last = messages[messages.length - 1];
+    const ownJustSent = !!(last && meRef.current && last.sender.username === meRef.current.username);
+    if (ownJustSent) el.scrollTop = el.scrollHeight;
+    else if (nearBottomRef.current) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, otherTyping]);
+
+  // Merge fresh server history with local bubbles still in flight. A pending
+  // bubble whose content already shows up in the history was delivered (the
+  // socket just died before the echo) — drop it instead of duplicating.
+  function mergeWithPending(server: DmMessage[], prev: DmMessage[]): DmMessage[] {
+    const inFlight = prev.filter((m) => m.pending || m.failed);
+    const survivors = inFlight.filter((p) =>
+      !server.some((s) =>
+        s.sender.username === p.sender.username &&
+        (s.content ?? "") === (p.content ?? "") &&
+        (s.attachments?.length ?? 0) === (p.attachments?.length ?? 0)
+      )
+    );
+    return [...server, ...survivors];
+  }
+
+  function handleIncoming(data: unknown) {
+    const evt = data as { event?: string; username?: string };
+    // Ephemeral typing signal — show the indicator briefly, don't store anything.
+    if (evt.event === "typing") {
+      if (evt.username === otherUsernameRef.current) {
+        setOtherTyping(true);
+        if (typingClearRef.current) clearTimeout(typingClearRef.current);
+        typingClearRef.current = setTimeout(() => setOtherTyping(false), 3000);
+      }
+      return;
+    }
+    const msg = data as DmMessage;
+    // A real message replaces the "typing…" bubble instantly.
+    if (msg.sender.username === otherUsernameRef.current) {
+      setOtherTyping(false);
+      if (typingClearRef.current) clearTimeout(typingClearRef.current);
+    }
+    if (msg.client_id) {
+      const timer = pendingTimersRef.current.get(msg.client_id);
+      if (timer) clearTimeout(timer);
+      pendingTimersRef.current.delete(msg.client_id);
+      pendingPayloadsRef.current.delete(msg.client_id);
+    }
+    setMessages((prev) => {
+      // Our own echo: swap the optimistic bubble for the confirmed message.
+      if (msg.client_id) {
+        const idx = prev.findIndex((m) => m.client_id === msg.client_id && (m.pending || m.failed));
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = msg;
+          return next;
+        }
+      }
+      return prev.some((m) => m.id === msg.id) ? prev : [...prev, msg];
+    });
+    if (meRef.current && msg.sender.username !== meRef.current.username) {
+      apiFetch(`/api/messages/${id}/read`, { method: "POST" }).catch(() => {});
+    }
+  }
+  const handleIncomingRef = useRef(handleIncoming);
+  useEffect(() => { handleIncomingRef.current = handleIncoming; });
 
   useEffect(() => {
     let cancelled = false;
-    async function init() {
-      let otherUsername: string | null = null;
+
+    // Cached snapshot paints the conversation instantly; the fetch below still
+    // runs and silently brings it up to date.
+    const cached = getDmCache<DmSnapshot>(id);
+    if (cached) {
+      setMessages(cached.messages);
+      setOtherUser(cached.otherUser);
+      setIsMuted(cached.isMuted);
+      setCurrentUsername(cached.me.username);
+      meRef.current = cached.me;
+      otherUsernameRef.current = cached.otherUser.username;
+    }
+
+    async function fetchConversation(): Promise<boolean> {
       try {
         const [conv, me] = await Promise.all([
           apiFetch<ConvResponse>(`/api/messages/${id}`),
-          apiFetch<{ username: string }>("/api/auth/me"),
+          apiFetch<Author>("/api/auth/me"),
         ]);
-        if (cancelled) return;
-        setMessages(conv.messages);
+        if (cancelled) return false;
+        meRef.current = { username: me.username, display_name: me.display_name, avatar_url: me.avatar_url ?? null };
+        otherUsernameRef.current = conv.other_user.username;
         setOtherUser(conv.other_user);
         setCurrentUsername(me.username);
         setIsMuted(conv.is_muted);
-        otherUsername = conv.other_user.username;
+        setMessages((prev) => mergeWithPending(conv.messages, prev));
+        return true;
       } catch (err: unknown) {
         if (err instanceof ApiError && err.status === 401) router.replace("/login");
         else if (err instanceof ApiError && err.status === 403) router.replace("/messages");
-        return;
+        return false;
       }
-      if (cancelled) return;
-      const ws = new WebSocket(wsUrl(`/api/messages/${id}/ws`));
-      wsRef.current = ws;
-      ws.onopen = () => setStatus("connected");
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        // Ephemeral typing signal — show the indicator briefly, don't store anything.
-        if (data.event === "typing") {
-          if (data.username === otherUsername) {
-            setOtherTyping(true);
-            if (typingClearRef.current) clearTimeout(typingClearRef.current);
-            typingClearRef.current = setTimeout(() => setOtherTyping(false), 3000);
-          }
-          return;
-        }
-        const msg = data as DmMessage;
-        // A real message replaces the "typing…" bubble instantly.
-        if (msg.sender.username === otherUsername) {
-          setOtherTyping(false);
-          if (typingClearRef.current) clearTimeout(typingClearRef.current);
-        }
-        setMessages((prev) => [...prev, msg]);
-        setCurrentUsername((cu) => {
-          if (cu && msg.sender.username !== cu) {
-            apiFetch(`/api/messages/${id}/read`, { method: "POST" }).catch(() => {});
-          }
-          return cu;
-        });
-      };
-      ws.onclose = () => setStatus("disconnected");
-      ws.onerror = () => setStatus("disconnected");
+    }
+
+    async function init() {
+      const ok = await fetchConversation();
+      if (!ok || cancelled) return;
+      wsRef.current = openChatSocket(`/api/messages/${id}/ws`, {
+        onStatus: (s) => { if (!cancelled) setStatus(s); },
+        onMessage: (data) => { if (!cancelled) handleIncomingRef.current(data); },
+        // The socket was down for a while — refetch to fill in anything missed.
+        onReconnect: () => { fetchConversation(); },
+      });
     }
     init();
     return () => { cancelled = true; wsRef.current?.close(); wsRef.current = null; };
-  }, [id, router]);
+  }, [id, router]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep the snapshot cache fresh so coming back to this chat is instant.
+  // In-flight bubbles are excluded — only server-confirmed messages belong.
+  useEffect(() => {
+    if (!otherUser || !meRef.current || messages.length === 0) return;
+    saveDmCache(id, {
+      messages: messages.filter((m) => !m.pending && !m.failed),
+      otherUser,
+      isMuted,
+      me: meRef.current,
+    } satisfies DmSnapshot);
+  }, [id, messages, otherUser, isMuted]);
 
   function scrollToQuote(quote: string) {
     const target = messagesRef.current.find((m) => m.content === quote || (m.content ?? "").startsWith(quote));
@@ -536,15 +643,60 @@ export default function ConversationPage() {
 
   function removePending(uid: string) { setPendingAttachments((prev) => prev.filter((a) => a.uid !== uid)); }
 
+  // If the echo hasn't come back after this long, surface a retry instead of
+  // an eternal "Sending…". The outbox usually beats this comfortably.
+  function startFailTimer(clientId: string) {
+    const timers = pendingTimersRef.current;
+    const old = timers.get(clientId);
+    if (old) clearTimeout(old);
+    timers.set(clientId, setTimeout(() => {
+      timers.delete(clientId);
+      setMessages((prev) => prev.map((m) =>
+        m.client_id === clientId && m.pending ? { ...m, pending: false, failed: true } : m
+      ));
+    }, 15000));
+  }
+
+  function retrySend(clientId: string) {
+    const payload = pendingPayloadsRef.current.get(clientId);
+    const socket = wsRef.current;
+    if (!payload || !socket) return;
+    setMessages((prev) => prev.map((m) =>
+      m.client_id === clientId ? { ...m, pending: true, failed: false } : m
+    ));
+    startFailTimer(clientId);
+    socket.send(payload);
+  }
+
   function send() {
     const text = input.trim();
     const readyAttachments = pendingAttachments.filter((a) => a.attachment !== null).map((a) => a.attachment!);
     const stillUploading = pendingAttachments.some((a) => a.uploading);
-    if ((!text && readyAttachments.length === 0) || stillUploading || status !== "connected" || !wsRef.current) return;
-    const wsPayload: Record<string, unknown> = {};
-    if (text) wsPayload.content = replyTo ? `> ${(replyTo.content ?? "[post]").slice(0, 80)}\n\n${text}` : text;
+    const me = meRef.current;
+    if ((!text && readyAttachments.length === 0) || stillUploading || !wsRef.current || !me) return;
+
+    const clientId = crypto.randomUUID();
+    const content = text ? (replyTo ? `> ${(replyTo.content ?? "[post]").slice(0, 80)}\n\n${text}` : text) : null;
+    const wsPayload: Record<string, unknown> = { client_id: clientId };
+    if (content) wsPayload.content = content;
     if (readyAttachments.length > 0) wsPayload.attachments = readyAttachments;
-    wsRef.current.send(JSON.stringify(wsPayload));
+
+    // The bubble appears instantly; the server echo (matched by client_id)
+    // replaces it. If the socket is down, the outbox delivers on reconnect.
+    setMessages((prev) => [...prev, {
+      id: clientId,
+      client_id: clientId,
+      content,
+      attachments: readyAttachments,
+      shared_post: null,
+      sender: me,
+      created_at: new Date().toISOString(),
+      pending: true,
+    }]);
+    pendingPayloadsRef.current.set(clientId, wsPayload);
+    startFailTimer(clientId);
+    wsRef.current.send(wsPayload);
+
     setInput("");
     setReplyTo(null);
     setPendingAttachments([]);
@@ -563,7 +715,8 @@ export default function ConversationPage() {
     if (now - lastTypingSentRef.current < 2000) return;
     if (status !== "connected" || !wsRef.current) return;
     lastTypingSentRef.current = now;
-    wsRef.current.send(JSON.stringify({ event: "typing" }));
+    // Never queue typing signals — a stale "typing…" after reconnect is noise.
+    wsRef.current.send({ event: "typing" }, false);
   }
 
   function handleToggleMute() {
@@ -583,7 +736,9 @@ export default function ConversationPage() {
     }
   }
 
-  const canSend = status === "connected" && (input.trim().length > 0 || (pendingAttachments.some((a) => a.attachment !== null) && !pendingAttachments.some((a) => a.uploading)));
+  // Sending works even while reconnecting — the socket outbox delivers the
+  // moment the connection is back, and the bubble shows "Sending…" meanwhile.
+  const canSend = input.trim().length > 0 || (pendingAttachments.some((a) => a.attachment !== null) && !pendingAttachments.some((a) => a.uploading));
 
   return (
     // dvh (not svh): tracks the live viewport, so when the on-screen keyboard
@@ -659,7 +814,15 @@ export default function ConversationPage() {
       </div>
 
       {/* Messages */}
-      <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-2" onScroll={() => setHoveredMsgId(null)}>
+      <div
+        ref={listRef}
+        className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-2"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+          setHoveredMsgId(null);
+        }}
+      >
         {messages.length === 0 && status === "connected" && (
           <p className="text-on-surface-variant text-sm text-center m-auto">No messages yet. Say hello!</p>
         )}
@@ -674,6 +837,7 @@ export default function ConversationPage() {
             onSwipe={(m) => { setHoveredMsgId(null); setReplyTo(m); setTimeout(() => inputRef.current?.focus(), 50); }}
             onScrollToQuote={scrollToQuote}
             onPreviewImage={(urls, idx) => setLightbox({ urls, index: idx })}
+            onRetry={() => { if (msg.client_id) retrySend(msg.client_id); }}
             msgRef={(el) => { if (el) msgRefs.current.set(msg.id, el); else msgRefs.current.delete(msg.id); }}
           />
         ))}
@@ -742,7 +906,7 @@ export default function ConversationPage() {
           <button
             type="button"
             onClick={() => setAttachMenuOpen((o) => !o)}
-            disabled={status !== "connected" || pendingAttachments.length >= 5}
+            disabled={pendingAttachments.length >= 5}
             className="w-9 h-9 rounded-full bg-surface border border-outline-variant flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-40"
           >
             <Plus className="w-4 h-4" />
@@ -768,8 +932,7 @@ export default function ConversationPage() {
           ref={inputRef}
           value={input}
           onChange={(e) => { setInput(e.target.value); signalTyping(); }}
-          placeholder={status === "connected" ? "Type a message…" : "Disconnected"}
-          disabled={status !== "connected"}
+          placeholder="Type a message…"
           maxLength={2000}
           rows={1}
           className="flex-1 px-4 py-2.5 text-sm rounded-full border border-outline-variant bg-surface-container-low placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50 resize-none max-h-32 overflow-y-auto text-on-surface"

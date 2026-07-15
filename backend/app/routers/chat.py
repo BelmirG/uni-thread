@@ -209,8 +209,14 @@ async def chat_websocket(websocket: WebSocket, slug: str):
                 await db.commit()
                 await db.refresh(chat_msg)
 
-                payload = json.dumps(_build_chat_payload(chat_msg, user))
-                await redis.publish(channel, payload)
+                payload_dict = _build_chat_payload(chat_msg, user)
+                # Echo the sender's client-generated ID so their optimistic
+                # "sending…" bubble can be swapped for this confirmed message.
+                # Never persisted; other clients ignore it.
+                client_id = data.get("client_id")
+                if isinstance(client_id, str) and 0 < len(client_id) <= 64:
+                    payload_dict["client_id"] = client_id
+                await redis.publish(channel, json.dumps(payload_dict))
 
                 # @mentions — notify tagged users, but only fellow club members:
                 # chat in a (possibly private) club must never ping outsiders.
