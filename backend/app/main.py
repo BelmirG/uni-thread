@@ -9,6 +9,16 @@ from app.routers import admin, auth, chat, clubs, files, health, messages, notif
 
 app = FastAPI(title="UniThread API", version="0.1.0")
 
+# Announce the active email delivery mode at boot so a misconfigured container
+# (e.g. a variable added after the last deploy) is visible in the deploy logs.
+if settings.resend_api_key:
+    _email_mode = f"Resend API (key ending ...{settings.resend_api_key[-4:]})"
+elif settings.email_configured:
+    _email_mode = f"SMTP via {settings.smtp_host}:{settings.smtp_port}"
+else:
+    _email_mode = "dev stub (links printed to logs, no real email)"
+print(f"[EMAIL] Delivery mode: {_email_mode}", flush=True)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
