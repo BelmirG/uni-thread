@@ -84,10 +84,9 @@ export default function RegisterPage() {
                 <span className="font-medium text-foreground">{form.email}</span>
               </p>
             </div>
-            <div className="rounded-md bg-muted px-4 py-3 text-left">
-              <p className="text-xs text-muted-foreground mb-1 font-medium">Running locally?</p>
-              <code className="text-xs text-foreground">docker compose logs backend</code>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Didn&apos;t get it? Check your spam folder.
+            </p>
             <Link href="/login">
               <Button variant="outline" className="w-full mt-2">Back to login</Button>
             </Link>
