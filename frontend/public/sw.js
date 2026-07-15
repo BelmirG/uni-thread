@@ -15,6 +15,8 @@ function describe(p) {
       return { title: name, body: "Replied to your post" };
     case "chat_mention":
       return { title: name, body: "Mentioned you in " + (p.club_name || "a club") + " chat" };
+    case "club_chat":
+      return { title: p.club_name || "Club chat", body: name + ": " + (p.preview || (p.has_photo ? "Photo" : p.has_file ? "File" : "Sent a message")) };
     case "milestone":
       return { title: "Your post is taking off", body: "It just reached " + p.count + " upvotes" };
     case "qa_answer":
@@ -36,7 +38,7 @@ function targetUrl(p) {
   if (p.type === "dm" && p.conversation_id) return "/messages/" + p.conversation_id;
   if ((p.type === "mention" || p.type === "reply" || p.type === "milestone") && p.post_id) return "/feed/" + p.post_id;
   if (p.type === "qa_answer" && p.post_id) return "/qa/" + p.post_id;
-  if (p.type === "chat_mention" && p.club_slug) return "/clubs/" + p.club_slug + "/chat";
+  if ((p.type === "chat_mention" || p.type === "club_chat") && p.club_slug) return "/clubs/" + p.club_slug + "/chat";
   if ((p.type === "club_join_request" || p.type === "club_approved" || p.type === "club_role") && p.club_slug) return "/clubs/" + p.club_slug;
   if (p.type === "club_invite") return "/profile";
   if (p.actor_username) return "/profile/" + p.actor_username;
@@ -62,7 +64,9 @@ self.addEventListener("push", (event) => {
       body,
       data: { url: targetUrl(p) },
       // Collapse repeated pushes from the same conversation into one banner.
-      tag: p.type === "dm" && p.conversation_id ? "dm-" + p.conversation_id : undefined,
+      tag: p.type === "dm" && p.conversation_id ? "dm-" + p.conversation_id
+        : p.type === "club_chat" && p.club_slug ? "club-chat-" + p.club_slug
+        : undefined,
     });
   })());
 });

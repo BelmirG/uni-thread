@@ -1,15 +1,18 @@
 import asyncio
 import json
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.mentions import extract_mention_usernames
 from app.core.notify import push_live
 from app.core.redis import redis
 from app.core.security import decode_access_token
+from app.core.webpush import send_web_push
 from app.database import AsyncSessionLocal, get_db
 from app.dependencies import get_current_user
 from app.models.chat_message import ChatMessage
@@ -18,7 +21,62 @@ from app.models.club_member import ClubMember
 from app.models.notification import Notification
 from app.models.user import User
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/clubs", tags=["chat"])
+
+# Fire-and-forget push tasks — kept referenced so the event loop can't GC them
+# mid-flight.
+_push_tasks: set[asyncio.Task] = set()
+
+
+async def _broadcast_chat_push(
+    club_id: uuid.UUID,
+    club_name: str,
+    club_slug: str,
+    sender: dict,
+    content: str,
+    attachments: list[dict],
+) -> None:
+    """Browser-push a club chat message to every member except the sender.
+
+    Push-only on purpose: no bell row and no in-app toast — chat is too
+    high-frequency for those, and anyone with a visible tab sees the message
+    live anyway (the service worker also suppresses banners for visible tabs).
+    Members tagged with @mention are skipped here — they already get the more
+    specific chat_mention notification. Runs in its own session because the
+    caller's WS loop must not block on N push deliveries.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            mentioned = set(extract_mention_usernames(content or ""))
+            rows = (await db.execute(
+                select(User.id, User.username, User.muted_notifications)
+                .join(ClubMember, ClubMember.user_id == User.id)
+                .where(ClubMember.club_id == club_id, User.id != sender["id"])
+            )).all()
+
+            has_photo = any(a.get("mime_type", "").startswith("image/") for a in attachments)
+            has_file = any(not a.get("mime_type", "").startswith("image/") for a in attachments)
+            payload = {
+                "type": "club_chat",
+                "actor_username": sender["username"],
+                "actor_display_name": sender["display_name"],
+                "actor_avatar_url": sender["avatar_url"],
+                "club_name": club_name,
+                "club_slug": club_slug,
+                "preview": (content or "").strip()[:60],
+                "has_photo": has_photo,
+                "has_file": has_file,
+            }
+            for user_id, username, muted in rows:
+                if muted and "clubs" in muted:
+                    continue
+                if username.lower() in mentioned:
+                    continue
+                await send_web_push(db, user_id, payload)
+    except Exception as exc:
+        logger.warning("club chat push broadcast failed: %s", exc)
 
 
 async def _notify_chat_mentions(content: str, club: Club, actor: User, db) -> None:
@@ -221,6 +279,22 @@ async def chat_websocket(websocket: WebSocket, slug: str):
                 # @mentions — notify tagged users, but only fellow club members:
                 # chat in a (possibly private) club must never ping outsiders.
                 await _notify_chat_mentions(content, club, user, db)
+
+                # Browser push to everyone else, off this loop so a big club
+                # never slows the sender's next message.
+                if settings.push_configured:
+                    task = asyncio.create_task(_broadcast_chat_push(
+                        club.id, club.name, club.slug,
+                        {
+                            "id": user.id,
+                            "username": user.username,
+                            "display_name": user.display_name,
+                            "avatar_url": user.avatar_url,
+                        },
+                        content, attachments,
+                    ))
+                    _push_tasks.add(task)
+                    task.add_done_callback(_push_tasks.discard)
 
         redis_task = asyncio.create_task(redis_to_ws())
         ws_task = asyncio.create_task(ws_to_redis())
