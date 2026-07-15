@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Camera } from "lucide-react";
+import { compressImage } from "@/lib/imageCompress";
 
 interface Preview {
   localUrl: string;
@@ -56,7 +57,7 @@ export function ImageUploader({ onUrlsChange, maxImages = 5 }: Props) {
       files.map(async (file, i) => {
         const idx = startIndex + i;
         const fd = new FormData();
-        fd.append("file", file);
+        fd.append("file", await compressImage(file));
         try {
           const res = await fetch("/api/upload", {
             method: "POST",

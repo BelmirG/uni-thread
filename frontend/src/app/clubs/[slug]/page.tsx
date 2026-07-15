@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import { applyVote } from "@/lib/vote";
+import { compressImage } from "@/lib/imageCompress";
 import { InlineComposer } from "@/components/InlineComposer";
 import { ImageUploader } from "@/components/ImageUploader";
 import { ImageGrid } from "@/components/ImageGrid";
@@ -256,7 +257,7 @@ export default function ClubDetailPage() {
     setBannerError(null);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", await compressImage(file));
       const res = await fetch("/api/upload", { method: "POST", credentials: "include", body: fd });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { detail?: string };

@@ -7,6 +7,7 @@ import { useRouter, useParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import { openChatSocket, type ChatSocket } from "@/lib/chatSocket";
 import { getClubChatCache, saveClubChatCache } from "@/lib/chatCache";
+import { compressImage } from "@/lib/imageCompress";
 import {
   ArrowLeft, Send, X, CornerUpLeft, Plus, ImageIcon, FileText,
   Download, ExternalLink, MoreVertical, GalleryHorizontalEnd,
@@ -562,8 +563,11 @@ export default function ClubChatPage() {
   async function uploadFile(file: File): Promise<{ attachment: FileAttachment | null; localUrl?: string }> {
     const isImage = file.type.startsWith("image/");
     const localUrl = isImage ? URL.createObjectURL(file) : undefined;
+    // Photos are downscaled on-device first — uploading a full 5 MB camera
+    // shot just for the server to shrink it makes sending feel slow.
+    const toSend = isImage ? await compressImage(file) : file;
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", toSend);
     try {
       const res = await fetch(isImage ? "/api/upload" : "/api/upload/file", { method: "POST", credentials: "include", body: fd });
       if (!res.ok) {

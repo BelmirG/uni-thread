@@ -6,6 +6,7 @@ import { useRouter, useParams } from "next/navigation";
 import { apiFetch, ApiError } from "@/lib/api";
 import { openChatSocket, type ChatSocket } from "@/lib/chatSocket";
 import { getDmCache, saveDmCache } from "@/lib/chatCache";
+import { compressImage } from "@/lib/imageCompress";
 import { ArrowLeft, Send, MoreVertical, Trash2, X, CornerUpLeft, Plus, ImageIcon, FileText, Download, ExternalLink, GalleryHorizontalEnd, ChevronLeft, ChevronRight, Bell, Check, ListChecks } from "lucide-react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
@@ -697,8 +698,11 @@ export default function ConversationPage() {
   }
 
   async function uploadFile(file: File, endpoint: string): Promise<FileAttachment> {
+    // Photos are downscaled on-device first — uploading a full 5 MB camera
+    // shot just for the server to shrink it makes sending feel slow.
+    const toSend = endpoint === "/api/upload" ? await compressImage(file) : file;
     const fd = new FormData();
-    fd.append("file", file);
+    fd.append("file", toSend);
     const res = await fetch(endpoint, { method: "POST", credentials: "include", body: fd });
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { detail?: string };
