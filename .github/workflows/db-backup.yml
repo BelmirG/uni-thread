@@ -9,18 +9,16 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      # The server runs PostgreSQL 18; pg_dump must be same or newer.
-      - name: Install PostgreSQL 18 client
-        run: |
-          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client-18
-
+      # The server runs PostgreSQL 18 and pg_dump must be same or newer, but the
+      # runner's preinstalled client is 16 — so run pg_dump from the postgres:18
+      # image instead of fighting apt.
       - name: Dump database
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_PUBLIC_URL }}
-        run: pg_dump "$DATABASE_URL" -Fc -f "unithread-$(date -u +%F).dump"
+        run: |
+          docker run --rm -e DATABASE_URL postgres:18 \
+            sh -c 'pg_dump "$DATABASE_URL" -Fc' > "unithread-$(date -u +%F).dump"
+          ls -lh unithread-*.dump
 
       - name: Upload to R2
         env:
