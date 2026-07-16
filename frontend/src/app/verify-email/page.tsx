@@ -25,7 +25,7 @@ function VerifyEmailContent() {
 
   return (
     <main className="min-h-screen flex items-center justify-center px-4 bg-muted/30">
-      <div className="w-full max-w-sm bg-white rounded-2xl border border-border shadow-sm p-8 text-center">
+      <div className="w-full max-w-sm bg-surface rounded-2xl border border-border shadow-sm p-8 text-center">
         {status === "loading" && (
           <>
             <Loader2 className="w-10 h-10 text-muted-foreground animate-spin mx-auto mb-4" />

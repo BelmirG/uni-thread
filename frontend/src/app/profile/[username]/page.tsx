@@ -12,6 +12,7 @@ import { clearAllPageCaches } from "@/lib/pageCaches";
 import { ImageGrid } from "@/components/ImageGrid";
 import MiniAvatar from "@/components/MiniAvatar";
 import { SkeletonProfile } from "@/components/Skeleton";
+import ThemeToggle from "@/components/ThemeToggle";
 import { FACULTIES, FACULTY_NAMES, FACULTY_PROGRAMS, Faculty } from "@/lib/faculties";
 import { timeAgo } from "@/lib/timeAgo";
 import { Button } from "@/components/ui/button";
@@ -559,7 +560,7 @@ export default function ProfilePage() {
       <main className="max-w-xl mx-auto px-4 pt-4 pb-36">
 
         {/* Profile header card */}
-        <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
+        <div className="bg-surface rounded-2xl shadow-sm p-4 mb-4">
           <div className="flex items-start gap-4">
             {/* Avatar */}
             <div className="relative flex-shrink-0">
@@ -599,16 +600,17 @@ export default function ProfilePage() {
               <p className="text-[11px] text-muted-foreground">Joined {memberSince(profile.member_since)}</p>
             </div>
 
-            {/* Notification bell — own profile only */}
+            {/* Notification bell + theme switch — own profile only */}
             {profile.is_own_profile && (
-              <div className="relative flex-shrink-0">
+              <div className="flex flex-col items-center gap-1 flex-shrink-0">
+              <div className="relative">
                 <button
                   onClick={() => notifOpen ? setNotifOpen(false) : openBell()}
                   className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors relative"
                 >
                   <Bell className="w-5 h-5" />
                   {totalUnread > 0 && (
-                    <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-destructive text-white text-[10px] font-bold flex items-center justify-center border border-white">
+                    <span className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-destructive text-white text-[10px] font-bold flex items-center justify-center border border-surface">
                       {totalUnread > 9 ? "9+" : totalUnread}
                     </span>
                   )}
@@ -617,8 +619,8 @@ export default function ProfilePage() {
                 {notifOpen && (
                   <>
                     <div onClick={() => setNotifOpen(false)} className="fixed inset-0 z-[199]" />
-                    <div className="absolute right-0 top-[calc(100%+6px)] w-[min(340px,90vw)] bg-white border border-border rounded-xl shadow-xl z-[200] overflow-hidden max-h-[70vh] flex flex-col">
-                      <div className="px-4 py-2.5 font-semibold text-sm border-b border-border sticky top-0 bg-white flex-shrink-0 flex items-center justify-between">
+                    <div className="absolute right-0 top-[calc(100%+6px)] w-[min(340px,90vw)] bg-surface border border-border rounded-xl shadow-xl z-[200] overflow-hidden max-h-[70vh] flex flex-col">
+                      <div className="px-4 py-2.5 font-semibold text-sm border-b border-border sticky top-0 bg-surface flex-shrink-0 flex items-center justify-between">
                         {prefsOpen ? "Pop-up settings" : "Notifications"}
                         <button
                           onClick={() => { setPrefsOpen((v) => !v); if (!notifPrefs) loadNotifPrefs(); }}
@@ -769,6 +771,8 @@ export default function ProfilePage() {
                   </>
                 )}
               </div>
+              <ThemeToggle />
+              </div>
             )}
           </div>
 
@@ -854,7 +858,7 @@ export default function ProfilePage() {
 
         {/* Edit form */}
         {editing && (
-          <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
+          <div className="bg-surface rounded-2xl shadow-sm p-4 mb-4">
             <form onSubmit={handleSave} className="flex flex-col gap-3">
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1">
@@ -1101,7 +1105,7 @@ export default function ProfilePage() {
       {reportOpen && (
         <>
           <div onClick={() => setReportOpen(false)} className="fixed inset-0 bg-black/45 backdrop-blur-sm z-[300]" />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(420px,92vw)] bg-white rounded-2xl shadow-2xl z-[301] p-6">
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(420px,92vw)] bg-surface rounded-2xl shadow-2xl z-[301] p-6">
             <div className="flex items-center justify-between mb-1">
               <h3 className="font-bold text-base text-foreground">Report @{profile?.username}</h3>
               <button onClick={() => setReportOpen(false)} className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors">
@@ -1196,7 +1200,7 @@ export default function ProfilePage() {
       {followsModal && (
         <>
           <div onClick={() => setFollowsModal(null)} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200]" />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(360px,92vw)] bg-white rounded-2xl shadow-2xl z-[201] flex flex-col max-h-[65vh]">
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(360px,92vw)] bg-surface rounded-2xl shadow-2xl z-[201] flex flex-col max-h-[65vh]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
               <span className="font-semibold text-sm capitalize">
                 {followsModal} · {followsModal === "followers" ? profile.follower_count : profile.following_count}

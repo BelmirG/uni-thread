@@ -153,22 +153,12 @@ export default function NavBar() {
 
   return (
     <nav
-      className="fixed left-1/2 -translate-x-1/2 w-[min(420px,calc(100%-2rem))] z-50 rounded-full"
+      className="nav-glass fixed left-1/2 -translate-x-1/2 w-[min(420px,calc(100%-2rem))] z-50 rounded-full"
       style={{
         // 1rem normally; on notched iPhones the safe-area inset wins so the
         // pill floats above the home indicator instead of colliding with it.
+        // Glass look lives in .nav-glass (globals.css) so dark mode can re-skin it.
         bottom: "max(1rem, env(safe-area-inset-bottom))",
-        background: "linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.18) 100%)",
-        backdropFilter: "blur(32px) saturate(180%) brightness(1.05)",
-        WebkitBackdropFilter: "blur(32px) saturate(180%) brightness(1.05)",
-        border: "1px solid rgba(255,255,255,0.65)",
-        boxShadow:
-          "inset 0 1.5px 0 rgba(255,255,255,0.90)," +   /* top rim highlight */
-          "inset 0 -1px 0 rgba(0,0,0,0.04)," +           /* bottom subtle edge */
-          "inset 1px 0 rgba(255,255,255,0.45)," +         /* left edge */
-          "inset -1px 0 rgba(255,255,255,0.35)," +        /* right edge */
-          "0 8px 32px rgba(0,0,0,0.10)," +               /* outer shadow */
-          "0 1px 3px rgba(0,0,0,0.06)",                  /* tight shadow */
       }}
     >
       <div className="relative flex py-2 px-2">
@@ -176,6 +166,7 @@ export default function NavBar() {
         {activeItem && (
           <div
             aria-hidden="true"
+            className="nav-glass-bubble"
             style={{
               position: "absolute",
               top: 4,
@@ -183,14 +174,6 @@ export default function NavBar() {
               left: `calc(${NAV_PAD}px + (${activeIndex} + 0.5) * (100% - ${NAV_PAD * 2}px) / ${n} - ${PILL_W / 2}px)`,
               width: PILL_W,
               borderRadius: 9999,
-              background: "linear-gradient(160deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.22) 100%)",
-              border: "1px solid rgba(255,255,255,0.75)",
-              boxShadow:
-                "inset 0 1.5px 0 rgba(255,255,255,0.95)," +   /* top rim — catches the light */
-                "inset 0 -1px 0 rgba(0,0,0,0.06)," +           /* bottom subtle shadow */
-                "inset 1px 0 rgba(255,255,255,0.5)," +          /* left rim */
-                "inset -1px 0 rgba(255,255,255,0.4)," +         /* right rim */
-                "0 4px 20px rgba(0,0,0,0.10)",                  /* outer drop shadow */
               transition:
                 "left 0.52s cubic-bezier(0.34, 1.56, 0.64, 1)",
             }}

@@ -35,7 +35,7 @@ export function SkeletonPostList({ count = 3 }: { count?: number }) {
 export function SkeletonProfile() {
   return (
     <div aria-hidden="true">
-      <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
+      <div className="bg-surface rounded-2xl shadow-sm p-4 mb-4">
         <div className="flex items-start gap-4">
           <Block className="w-[72px] h-[72px] rounded-full flex-shrink-0" />
           <div className="flex-1 space-y-2 pt-1.5">

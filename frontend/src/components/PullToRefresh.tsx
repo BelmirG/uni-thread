@@ -98,7 +98,7 @@ export default function PullToRefresh() {
         transition: startYRef.current === null && !refreshing ? "transform 0.2s ease, opacity 0.2s ease" : undefined,
       }}
     >
-      <div className="w-9 h-9 rounded-full bg-white shadow-lg border border-black/5 flex items-center justify-center">
+      <div className="w-9 h-9 rounded-full bg-surface shadow-lg border border-outline-variant flex items-center justify-center">
         <RefreshCw
           className={refreshing ? "w-4 h-4 animate-spin" : "w-4 h-4"}
           style={{

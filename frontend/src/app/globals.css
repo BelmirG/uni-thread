@@ -32,6 +32,79 @@
     --ring: 215 49% 43%;
 
     --radius: 0.75rem;
+
+    /* Surface scale as RGB triplets (rgb(var(--x) / <alpha>) in tailwind
+       config) so the whole app re-skins when .dark lands on <html>. */
+    --surface: 255 255 255;
+    --surface-dim: 232 232 237;
+    --surface-bright: 255 255 255;
+    --surface-container-lowest: 255 255 255;
+    --surface-container-low: 245 245 247;
+    --surface-container: 239 239 241;
+    --surface-container-high: 232 232 237;
+    --surface-container-highest: 227 227 232;
+    --surface-variant: 232 232 237;
+    --on-surface: 29 29 31;
+    --on-surface-variant: 110 110 115;
+    --outline: 134 134 139;
+    --outline-variant: 232 232 237;
+    --inverse-surface: 47 48 51;
+    --inverse-on-surface: 242 240 243;
+    --error-rgb: 186 26 26;
+    --error-container-rgb: 255 218 214;
+    --on-error-rgb: 255 255 255;
+    --on-error-container-rgb: 147 0 10;
+  }
+
+  /* Dark theme — iOS-dark neutrals: true-dark canvas, elevated grey cards,
+     the same brand blue lifted a step for contrast on dark. */
+  .dark {
+    --background: 240 3% 7%;         /* #111112 — canvas */
+    --foreground: 240 5% 96%;        /* #f4f4f6 — ink */
+
+    --card: 240 3% 11%;              /* #1b1b1d */
+    --card-foreground: 240 5% 96%;
+
+    --primary: 215 55% 60%;          /* brand blue, brightened for dark */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 215 55% 60%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 240 3% 15%;
+    --muted-foreground: 240 4% 66%;  /* #a2a2a8 */
+
+    --accent: 240 3% 15%;
+    --accent-foreground: 240 5% 96%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 3% 17%;            /* #2b2b2e */
+    --input: 240 3% 24%;
+    --ring: 215 55% 60%;
+
+    --surface: 27 27 29;             /* #1b1b1d — cards */
+    --surface-dim: 17 17 18;
+    --surface-bright: 44 44 46;
+    --surface-container-lowest: 13 13 15;
+    --surface-container-low: 22 22 24;
+    --surface-container: 32 32 36;
+    --surface-container-high: 42 42 46;
+    --surface-container-highest: 50 50 54;
+    --surface-variant: 44 44 46;
+    --on-surface: 245 245 247;
+    --on-surface-variant: 152 152 157;
+    --outline: 152 152 157;
+    --outline-variant: 56 56 58;
+    --inverse-surface: 242 240 243;
+    --inverse-on-surface: 47 48 51;
+    --error-rgb: 239 83 80;
+    --error-container-rgb: 92 26 26;
+    --on-error-rgb: 255 255 255;
+    --on-error-container-rgb: 255 180 171;
+
+    color-scheme: dark;              /* native scrollbars, inputs, pickers */
   }
 
   * {
@@ -160,6 +233,94 @@
 
 @media (prefers-reduced-motion: reduce) {
   .page-enter { animation: none; }
+}
+
+/* ── Liquid-glass surfaces ─────────────────────────────────────────────────────
+   Shared classes (instead of inline styles) so each one can re-skin when .dark
+   lands on <html> — inline styles can't react to a class change. */
+
+/* Floating nav pill */
+.nav-glass {
+  background: linear-gradient(160deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.18) 100%);
+  backdrop-filter: blur(32px) saturate(180%) brightness(1.05);
+  -webkit-backdrop-filter: blur(32px) saturate(180%) brightness(1.05);
+  border: 1px solid rgba(255,255,255,0.65);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255,255,255,0.90),
+    inset 0 -1px 0 rgba(0,0,0,0.04),
+    inset 1px 0 rgba(255,255,255,0.45),
+    inset -1px 0 rgba(255,255,255,0.35),
+    0 8px 32px rgba(0,0,0,0.10),
+    0 1px 3px rgba(0,0,0,0.06);
+}
+.dark .nav-glass {
+  background: linear-gradient(160deg, rgba(52,52,58,0.60) 0%, rgba(30,30,34,0.42) 100%);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255,255,255,0.10),
+    inset 0 -1px 0 rgba(0,0,0,0.35),
+    0 8px 32px rgba(0,0,0,0.55),
+    0 1px 3px rgba(0,0,0,0.40);
+}
+
+/* The sliding active-tab bubble inside the nav pill */
+.nav-glass-bubble {
+  background: linear-gradient(160deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.22) 100%);
+  border: 1px solid rgba(255,255,255,0.75);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255,255,255,0.95),
+    inset 0 -1px 0 rgba(0,0,0,0.06),
+    inset 1px 0 rgba(255,255,255,0.5),
+    inset -1px 0 rgba(255,255,255,0.4),
+    0 4px 20px rgba(0,0,0,0.10);
+}
+.dark .nav-glass-bubble {
+  background: linear-gradient(160deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.06) 100%);
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255,255,255,0.14),
+    inset 0 -1px 0 rgba(0,0,0,0.25),
+    0 4px 20px rgba(0,0,0,0.45);
+}
+
+/* Chat headers / composers — near-opaque frosted bar */
+.glass-bar {
+  background: rgba(255,255,255,0.90);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+.dark .glass-bar {
+  background: rgba(24,24,26,0.90);
+}
+
+/* Bottom sheets (create club, …) */
+.glass-sheet {
+  background: linear-gradient(165deg, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.62) 100%);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.75);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255,255,255,0.95),
+    inset 0 -1px 0 rgba(0,0,0,0.04),
+    0 24px 60px rgba(0,0,0,0.20);
+}
+.dark .glass-sheet {
+  background: linear-gradient(165deg, rgba(38,38,42,0.88) 0%, rgba(24,24,27,0.78) 100%);
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255,255,255,0.10),
+    inset 0 -1px 0 rgba(0,0,0,0.30),
+    0 24px 60px rgba(0,0,0,0.55);
+}
+
+/* ── Theme switch: circular reveal ─────────────────────────────────────────────
+   The new theme expands as a growing circle from the toggle button (the clip
+   animation lives in ThemeToggle.tsx via the View Transitions API). Default
+   crossfade is disabled so only the circle wipe shows. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
 }
 
 /* Ember pill — the active Hot filter smolders: a warm gradient that slowly

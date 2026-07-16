@@ -320,16 +320,8 @@ export default function ClubsPage() {
             }}
           />
           <div
-            className="fixed left-1/2 bottom-24 w-[min(460px,calc(100vw-1.5rem))] z-[301] rounded-[28px] overflow-hidden"
+            className="glass-sheet fixed left-1/2 bottom-24 w-[min(460px,calc(100vw-1.5rem))] z-[301] rounded-[28px] overflow-hidden"
             style={{
-              background: "linear-gradient(165deg, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.62) 100%)",
-              backdropFilter: "blur(40px) saturate(180%)",
-              WebkitBackdropFilter: "blur(40px) saturate(180%)",
-              border: "1px solid rgba(255,255,255,0.75)",
-              boxShadow:
-                "inset 0 1.5px 0 rgba(255,255,255,0.95)," +
-                "inset 0 -1px 0 rgba(0,0,0,0.04)," +
-                "0 24px 60px rgba(0,0,0,0.20)",
               animation: formClosing
                 ? "sheetOut 0.22s cubic-bezier(0.4,0,1,1) both"
                 : "sheetIn 0.42s cubic-bezier(0.2,0.9,0.3,1.08) both",
@@ -348,7 +340,7 @@ export default function ClubsPage() {
                 <button
                   type="button"
                   onClick={closeForm}
-                  className="w-8 h-8 rounded-full bg-black/5 hover:bg-black/10 flex items-center justify-center text-on-surface-variant transition-colors flex-shrink-0"
+                  className="w-8 h-8 rounded-full bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 flex items-center justify-center text-on-surface-variant transition-colors flex-shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -361,7 +353,7 @@ export default function ClubsPage() {
                   placeholder="Club name"
                   maxLength={100}
                   autoFocus
-                  className="w-full h-12 px-4 text-sm font-medium rounded-2xl bg-white/70 text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-white transition-all"
+                  className="w-full h-12 px-4 text-sm font-medium rounded-2xl bg-surface/70 text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-surface transition-all"
                 />
                 <textarea
                   value={description}
@@ -369,7 +361,7 @@ export default function ClubsPage() {
                   placeholder="What's this club about? (optional)"
                   rows={2}
                   maxLength={500}
-                  className="w-full px-4 py-3 text-sm rounded-2xl bg-white/70 text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-white transition-all resize-none"
+                  className="w-full px-4 py-3 text-sm rounded-2xl bg-surface/70 text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-surface transition-all resize-none"
                 />
 
                 {/* Privacy — iOS-style switch */}
@@ -378,7 +370,7 @@ export default function ClubsPage() {
                   role="switch"
                   aria-checked={isPrivate}
                   onClick={() => setIsPrivate((v) => !v)}
-                  className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/50 hover:bg-white/70 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-surface/50 hover:bg-surface/70 transition-colors text-left"
                 >
                   <Lock className={cn("w-4 h-4 flex-shrink-0 transition-colors", isPrivate ? "text-primary" : "text-on-surface-variant/60")} />
                   <div className="flex-1 min-w-0">
@@ -388,7 +380,7 @@ export default function ClubsPage() {
                   <span
                     className={cn(
                       "relative w-11 h-[26px] rounded-full flex-shrink-0 transition-colors duration-200",
-                      isPrivate ? "bg-primary" : "bg-black/15"
+                      isPrivate ? "bg-primary" : "bg-black/15 dark:bg-white/20"
                     )}
                   >
                     <span

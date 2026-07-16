@@ -541,7 +541,7 @@ function SharePanel({ postId, shareCount }: { postId: string; shareCount: number
       {open && typeof document !== "undefined" && createPortal(
         <>
           <div onClick={close} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200]" />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(360px,90vw)] bg-white rounded-2xl shadow-2xl z-[201] p-5">
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(360px,90vw)] bg-surface rounded-2xl shadow-2xl z-[201] p-5">
             <div className="flex items-center justify-between mb-4">
               <span className="font-semibold text-sm">Share via message</span>
               <button

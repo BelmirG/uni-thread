@@ -956,8 +956,7 @@ export default function ConversationPage() {
 
       {/* Header — glass */}
       <div
-        className="flex items-center gap-3 px-4 py-3 flex-shrink-0 border-b border-outline-variant/50"
-        style={{ background: "rgba(255,255,255,0.88)", backdropFilter: "blur(20px) saturate(160%)", WebkitBackdropFilter: "blur(20px) saturate(160%)" }}
+        className="glass-bar flex items-center gap-3 px-4 py-3 flex-shrink-0 border-b border-outline-variant/50"
       >
         {selectMode ? (
           <>
@@ -1024,13 +1023,13 @@ export default function ConversationPage() {
           {menuOpen && menuPos && typeof document !== "undefined" && createPortal(
             <>
               <div onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 299 }} />
-              <div style={{ position: "fixed", top: menuPos.top, right: menuPos.right, zIndex: 300, background: "white", border: "1px solid var(--outline-variant, #e0e0e0)", borderRadius: 16, boxShadow: "0 4px 24px rgba(0,0,0,0.12)", minWidth: 190, overflow: "hidden" }}>
-                <button onClick={() => { setMenuOpen(false); setMediaOpen(true); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "10px 16px", fontSize: "0.875rem", background: "none", border: "none", cursor: "pointer" }} onMouseEnter={e => (e.currentTarget.style.background = "#f5f5f5")} onMouseLeave={e => (e.currentTarget.style.background = "none")}>
-                  <GalleryHorizontalEnd style={{ width: 14, height: 14, color: "#6b7280", flexShrink: 0 }} />
+              <div style={{ position: "fixed", top: menuPos.top, right: menuPos.right, zIndex: 300, background: "hsl(var(--card))", border: "1px solid rgb(var(--outline-variant))", borderRadius: 16, boxShadow: "0 4px 24px rgba(0,0,0,0.12)", minWidth: 190, overflow: "hidden" }}>
+                <button onClick={() => { setMenuOpen(false); setMediaOpen(true); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "10px 16px", fontSize: "0.875rem", background: "none", border: "none", cursor: "pointer" }} onMouseEnter={e => (e.currentTarget.style.background = "hsl(var(--muted))")} onMouseLeave={e => (e.currentTarget.style.background = "none")}>
+                  <GalleryHorizontalEnd style={{ width: 14, height: 14, color: "rgb(var(--on-surface-variant))", flexShrink: 0 }} />
                   Media &amp; Files
                 </button>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", fontSize: "0.875rem", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
-                  <Bell style={{ width: 14, height: 14, color: "#6b7280", flexShrink: 0 }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 16px", fontSize: "0.875rem", borderTop: "1px solid hsl(var(--border))" }}>
+                  <Bell style={{ width: 14, height: 14, color: "rgb(var(--on-surface-variant))", flexShrink: 0 }} />
                   <span style={{ flex: 1, userSelect: "none" }}>Notifications</span>
                   <div
                     onClick={handleToggleMute}
@@ -1041,11 +1040,11 @@ export default function ConversationPage() {
                     <span style={{ display: "inline-block", width: 14, height: 14, borderRadius: "50%", background: "white", boxShadow: "0 1px 2px rgba(0,0,0,0.2)", transition: "transform 0.3s", transform: isMuted ? "translateX(3px)" : "translateX(19px)" }} />
                   </div>
                 </div>
-                <button onClick={() => { setMenuOpen(false); setSelectMode(true); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "10px 16px", fontSize: "0.875rem", background: "none", border: "none", borderTop: "1px solid rgba(0,0,0,0.06)", cursor: "pointer" }} onMouseEnter={e => (e.currentTarget.style.background = "#f5f5f5")} onMouseLeave={e => (e.currentTarget.style.background = "none")}>
-                  <ListChecks style={{ width: 14, height: 14, color: "#6b7280", flexShrink: 0 }} />
+                <button onClick={() => { setMenuOpen(false); setSelectMode(true); }} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "10px 16px", fontSize: "0.875rem", background: "none", border: "none", borderTop: "1px solid hsl(var(--border))", cursor: "pointer" }} onMouseEnter={e => (e.currentTarget.style.background = "hsl(var(--muted))")} onMouseLeave={e => (e.currentTarget.style.background = "none")}>
+                  <ListChecks style={{ width: 14, height: 14, color: "rgb(var(--on-surface-variant))", flexShrink: 0 }} />
                   Delete messages
                 </button>
-                <button onClick={handleDeleteConversation} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "10px 16px", fontSize: "0.875rem", background: "none", border: "none", borderTop: "1px solid rgba(0,0,0,0.06)", cursor: "pointer", color: "#ef4444" }} onMouseEnter={e => (e.currentTarget.style.background = "#fef2f2")} onMouseLeave={e => (e.currentTarget.style.background = "none")}>
+                <button onClick={handleDeleteConversation} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "10px 16px", fontSize: "0.875rem", background: "none", border: "none", borderTop: "1px solid hsl(var(--border))", cursor: "pointer", color: "#ef4444" }} onMouseEnter={e => (e.currentTarget.style.background = "#fef2f2")} onMouseLeave={e => (e.currentTarget.style.background = "none")}>
                   <Trash2 style={{ width: 14, height: 14, flexShrink: 0 }} />
                   Delete chat
                 </button>
@@ -1155,8 +1154,7 @@ export default function ConversationPage() {
       {/* Input bar — glass */}
       <form
         onSubmit={handleSubmit}
-        className="flex items-end gap-2.5 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-outline-variant/50 flex-shrink-0"
-        style={{ background: "rgba(255,255,255,0.92)", backdropFilter: "blur(20px) saturate(160%)", WebkitBackdropFilter: "blur(20px) saturate(160%)" }}
+        className="glass-bar flex items-end gap-2.5 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-outline-variant/50 flex-shrink-0"
       >
         <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple className="hidden" onChange={(e) => handleMediaSelect(e, "/api/upload")} />
         <input ref={fileInputRef} type="file" accept="application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,.txt,.md,.csv,.py,.js,.ts,.jsx,.tsx,.java,.c,.cpp,.h,.cs,.go,.rs,.rb,.php,.json,.yaml,.yml,.toml,.xml,.sh,.sql,.r,.ipynb" multiple className="hidden" onChange={(e) => handleMediaSelect(e, "/api/upload/file")} />
@@ -1222,10 +1220,10 @@ export default function ConversationPage() {
           return (
             <>
               <div onClick={() => setMediaOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(8px)", zIndex: 200 }} />
-              <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(520px, 90vw)", maxHeight: "70vh", zIndex: 201, background: "white", borderRadius: 20, display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 12px", borderBottom: "1px solid #e5e7eb", flexShrink: 0 }}>
+              <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(520px, 90vw)", maxHeight: "70vh", zIndex: 201, background: "hsl(var(--card))", borderRadius: 20, display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 12px", borderBottom: "1px solid hsl(var(--border))", flexShrink: 0 }}>
                   <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Media &amp; Files</span>
-                  <button onClick={() => setMediaOpen(false)} style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: "#f3f4f6", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <button onClick={() => setMediaOpen(false)} style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: "hsl(var(--muted))", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <X style={{ width: 14, height: 14 }} />
                   </button>
                 </div>

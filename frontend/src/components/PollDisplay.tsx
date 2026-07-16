@@ -175,12 +175,12 @@ export default function PollDisplay({ postId, poll, onUpdate }: Props) {
             onClick={() => setVotersOpen(false)}
             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(8px)", zIndex: 200 }}
           />
-          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(420px, 90vw)", maxHeight: "70vh", zIndex: 201, background: "white", borderRadius: 20, display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 12px", borderBottom: "1px solid #e5e7eb", flexShrink: 0 }}>
+          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(420px, 90vw)", maxHeight: "70vh", zIndex: 201, background: "hsl(var(--card))", borderRadius: 20, display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 12px", borderBottom: "1px solid hsl(var(--border))", flexShrink: 0 }}>
               <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Votes</span>
               <button
                 onClick={() => setVotersOpen(false)}
-                style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: "#f3f4f6", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: "hsl(var(--muted))", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
               >
                 <X style={{ width: 14, height: 14 }} />
               </button>

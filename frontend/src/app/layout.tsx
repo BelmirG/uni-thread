@@ -50,8 +50,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Applies the saved theme before first paint — without this, dark-mode
+            users get a white flash on every load. Must stay inline. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              'try{if(localStorage.theme==="dark"){document.documentElement.classList.add("dark");' +
+              'var m=document.querySelector(\'meta[name="theme-color"]\');if(m)m.setAttribute("content","#111112");}}catch(e){}',
+          }}
+        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link

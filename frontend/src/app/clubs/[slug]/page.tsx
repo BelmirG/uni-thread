@@ -569,7 +569,7 @@ export default function ClubDetailPage() {
                   {menuOpen && (
                     <>
                       <div onClick={() => setMenuOpen(false)} className="fixed inset-0 z-[199]" />
-                      <div className="absolute right-0 top-[calc(100%+4px)] bg-white border border-border rounded-xl shadow-lg min-w-[170px] z-[200] overflow-hidden">
+                      <div className="absolute right-0 top-[calc(100%+4px)] bg-surface border border-border rounded-xl shadow-lg min-w-[170px] z-[200] overflow-hidden">
                         <button
                           onClick={() => {
                             setMenuOpen(false);
@@ -874,7 +874,7 @@ export default function ClubDetailPage() {
             onClick={() => { setInviteOpen(false); setInviteMsg(null); setInviteUsername(""); }}
             className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200]"
           />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(400px,90vw)] bg-white rounded-2xl shadow-2xl z-[201] p-5">
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(400px,90vw)] bg-surface rounded-2xl shadow-2xl z-[201] p-5">
             <div className="flex items-center justify-between mb-4">
               <span className="font-semibold text-sm">Invite a member</span>
               <button
@@ -916,7 +916,7 @@ export default function ClubDetailPage() {
       {showMembers && typeof document !== "undefined" && createPortal(
         <>
           <div onClick={() => { setShowMembers(false); setMemberSearch(""); }} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[200]" />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(360px,92vw)] bg-white rounded-2xl shadow-2xl z-[201] flex flex-col max-h-[65vh]">
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(360px,92vw)] bg-surface rounded-2xl shadow-2xl z-[201] flex flex-col max-h-[65vh]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
               <span className="font-semibold text-sm">Members · {club?.member_count ?? members.length}</span>
               <button onClick={() => { setShowMembers(false); setMemberSearch(""); }} className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted transition-colors">

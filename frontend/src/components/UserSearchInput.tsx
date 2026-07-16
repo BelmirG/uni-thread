@@ -60,7 +60,7 @@ export default function UserSearchInput({ value, onChange, onSelect, placeholder
       {open && results.length > 0 && (
         <div style={{
           position: "absolute", top: "100%", left: 0, right: 0,
-          background: "#fff", border: "1px solid #ddd", borderRadius: 4,
+          background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 4,
           boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
           zIndex: 200, maxHeight: 180, overflowY: "auto",
         }}>

@@ -205,7 +205,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
   return (
     <div
       className={cn(
-        "flex items-center gap-3 bg-white border border-border rounded-2xl shadow-xl px-3.5 py-3 max-w-[300px] w-full cursor-pointer transition-all duration-300",
+        "flex items-center gap-3 bg-surface border border-border rounded-2xl shadow-xl px-3.5 py-3 max-w-[300px] w-full cursor-pointer transition-all duration-300",
         visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2"
       )}
       onClick={handleClick}
