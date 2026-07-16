@@ -316,7 +316,7 @@ export default function FeedPage() {
       <main className="max-w-xl mx-auto px-4 pt-4 pb-8">
         {/* Brand header */}
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold tracking-tight text-on-surface">UniThread</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-primary">UniThread</h1>
           <button
             onClick={() => setSearchOpen(true)}
             aria-label="Search"

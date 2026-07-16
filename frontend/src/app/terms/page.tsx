@@ -18,7 +18,7 @@ export default function TermsPage() {
           <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
             <GraduationCap className="w-5 h-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-bold tracking-tight text-foreground">UniThread</span>
+          <span className="text-xl font-bold tracking-tight text-primary">UniThread</span>
         </Link>
 
         <div className="bg-surface rounded-2xl shadow-sm px-6 py-8 sm:px-10 sm:py-10 space-y-8 text-sm leading-relaxed text-foreground">

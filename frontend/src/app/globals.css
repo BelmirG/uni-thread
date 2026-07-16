@@ -12,7 +12,7 @@
     --card: 0 0% 100%;
     --card-foreground: 240 3% 12%;
 
-    --primary: 240 3% 12%;           /* #1d1d1f — black pill buttons */
+    --primary: 215 49% 43%;          /* #3865a6 — brand blue (same as nav pill) */
     --primary-foreground: 0 0% 100%;
 
     --secondary: 215 49% 43%;        /* #3865a6 — the single muted accent */
