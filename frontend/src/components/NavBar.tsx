@@ -28,13 +28,18 @@ const NAV = [
     ),
   },
   {
+    // Icon-only tab: the domino mask says "anonymous" without the word taking
+    // up label space (label: "" also hides the text row for this item).
     href: "/qa",
-    label: "Anonymous",
+    label: "",
     activeColor: "#ffffff",
     activeBg: IUS_BLUE,
     icon: (
-      <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z" />
+      <svg viewBox="0 0 24 24" fill="currentColor" width="26" height="26">
+        <path
+          fillRule="evenodd"
+          d="M12 7C6.6 7 2 8.4 2 12c0 3.3 2.3 5.5 5.2 5.5 2 0 3.6-1.1 4.4-2.6.2-.4.6-.4.8 0 .8 1.5 2.4 2.6 4.4 2.6 2.9 0 5.2-2.2 5.2-5.5 0-3.6-4.6-5-10-5Zm-4.7 3.1c1.2 0 2.1.7 2.1 1.5s-.9 1.5-2.1 1.5-2.1-.7-2.1-1.5.9-1.5 2.1-1.5Zm9.4 0c1.2 0 2.1.7 2.1 1.5s-.9 1.5-2.1 1.5-2.1-.7-2.1-1.5.9-1.5 2.1-1.5Z"
+        />
       </svg>
     ),
   },
@@ -205,6 +210,7 @@ export default function NavBar() {
             <Link
               key={item.href}
               href={href}
+              aria-label={item.label || "Anonymous"}
               className="relative z-10 flex flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium rounded-full py-1.5"
               style={{
                 color: active ? item.activeBg : "#74777e",
@@ -217,7 +223,7 @@ export default function NavBar() {
                   <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 border-2 border-white" />
                 )}
               </div>
-              <span className={cn(active && "font-semibold")}>{item.label}</span>
+              {item.label && <span className={cn(active && "font-semibold")}>{item.label}</span>}
             </Link>
           );
         })}
