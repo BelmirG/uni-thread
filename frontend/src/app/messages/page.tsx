@@ -73,11 +73,16 @@ function LastMsgPreview({ lm, unread }: { lm: LastMessage; unread: boolean }) {
   );
 }
 
+// Survives navigation away and back (module scope, like the feed/qa caches),
+// so returning from a club chat lands on the Club chats group, not DMs.
+let lastTab: "dms" | "clubs" = "dms";
+
 export default function MessagesPage() {
   const router = useRouter();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [clubChats, setClubChats] = useState<ClubChatItem[]>([]);
-  const [tab, setTab] = useState<"dms" | "clubs">("dms");
+  const [tab, setTabState] = useState<"dms" | "clubs">(lastTab);
+  const setTab = (t: "dms" | "clubs") => { lastTab = t; setTabState(t); };
   const [loading, setLoading] = useState(true);
   const [newOpen, setNewOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -138,25 +143,37 @@ export default function MessagesPage() {
         </div>
         <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} mode="chats" />
 
-        {/* DMs / Club chats group switch */}
-        <div className="flex gap-2 mb-4">
-          {([["dms", "DMs"], ["clubs", "Club chats"]] as const).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={cn(
-                "relative text-xs font-medium px-3.5 py-1.5 rounded-full transition-colors whitespace-nowrap",
-                tab === key
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-surface shadow-sm text-on-surface-variant hover:bg-surface-container"
-              )}
-            >
-              {label}
-              {key === "dms" && tab !== "dms" && conversations.some((c) => c.unread_count > 0) && (
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500" />
-              )}
-            </button>
-          ))}
+        {/* Group switcher — DMs / Club chats (same segmented style as profile Posts/Clubs) */}
+        <div className="flex gap-1 p-1 bg-surface-container-low border border-outline-variant rounded-full mb-4">
+          {([
+            ["dms", "DMs", conversations.length],
+            ["clubs", "Club chats", clubChats.length],
+          ] as const).map(([key, label, count]) => {
+            const isActive = tab === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={cn(
+                  "relative flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium rounded-full transition-all",
+                  isActive
+                    ? "bg-surface text-on-surface shadow-sm"
+                    : "text-on-surface-variant hover:text-on-surface"
+                )}
+              >
+                {label}
+                <span className={cn(
+                  "text-xs tabular-nums px-1.5 py-0.5 rounded-full",
+                  isActive ? "bg-surface-container text-on-surface-variant" : "text-on-surface-variant/70"
+                )}>
+                  {count}
+                </span>
+                {key === "dms" && !isActive && conversations.some((c) => c.unread_count > 0) && (
+                  <span className="absolute top-1.5 right-2.5 w-2 h-2 rounded-full bg-red-500" />
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* List */}

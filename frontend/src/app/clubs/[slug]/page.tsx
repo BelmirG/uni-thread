@@ -31,7 +31,6 @@ import {
   Users,
   UserPlus,
   Pin,
-  MessageSquare,
   PenLine,
 } from "lucide-react";
 
@@ -448,7 +447,7 @@ export default function ClubDetailPage() {
   return (
     <>
       <main className="max-w-xl mx-auto px-4 pt-4 pb-36">
-        {/* Back link + chat */}
+        {/* Back link — chat now lives under Messages → Club chats */}
         <div className="flex items-center justify-between mb-4">
           <Link
             href="/clubs"
@@ -457,15 +456,6 @@ export default function ClubDetailPage() {
             <ArrowLeft className="w-4 h-4" />
             Clubs
           </Link>
-          {club.is_member && (
-            <Link
-              href={`/clubs/${slug}/chat`}
-              className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-muted transition-colors no-underline text-foreground"
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              Chat
-            </Link>
-          )}
         </div>
 
         {/* Club header card */}

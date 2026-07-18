@@ -815,7 +815,7 @@ export default function ClubChatPage() {
       <div
         className="glass-bar flex items-center gap-3 px-4 py-3 flex-shrink-0 border-b border-outline-variant/50"
       >
-        <Link href={`/clubs/${slug}`} className="flex items-center text-on-surface-variant hover:text-on-surface transition-colors no-underline flex-shrink-0">
+        <Link href="/messages" className="flex items-center text-on-surface-variant hover:text-on-surface transition-colors no-underline flex-shrink-0">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex-1 min-w-0">
