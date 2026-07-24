@@ -50,6 +50,47 @@ function targetUrl(p) {
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
+// The VAPID public key arrives base64url-encoded; subscribe() wants raw bytes.
+// (Mirror of urlBase64ToUint8Array in lib/push.ts — the SW can't import it.)
+function urlBase64ToUint8Array(base64) {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = self.atob(b64);
+  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+}
+
+// Browsers periodically rotate a push subscription on their own (key refresh,
+// storage pressure, etc.), firing this event. If we don't re-subscribe and
+// re-register the new endpoint, the server keeps pushing to the dead one until
+// it 410s and prunes it — and the user silently stops getting notifications.
+// Re-establishing it here is what keeps push working long-term.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil((async () => {
+    try {
+      const { key, enabled } = await fetch("/api/notifications/push/public-key", {
+        credentials: "include",
+      }).then((r) => r.json());
+      if (!enabled || !key) return;
+
+      const sub =
+        event.newSubscription ??
+        (await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(key),
+        }));
+
+      await fetch("/api/notifications/push/subscribe", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sub.toJSON ? sub.toJSON() : sub),
+      });
+    } catch {
+      // Best-effort — the next app open runs syncPushSubscription() as a backstop.
+    }
+  })());
+});
+
 self.addEventListener("push", (event) => {
   if (!event.data) return;
   let p;

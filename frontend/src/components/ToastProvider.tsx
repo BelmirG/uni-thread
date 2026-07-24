@@ -312,8 +312,23 @@ export default function ToastProvider({ children }: { children: React.ReactNode 
 
     connect();
 
+    // Mobile browsers suspend the socket when the app is backgrounded; the
+    // reconnect above can then be stuck behind up to 30s of backoff right when
+    // the user reopens the app — so live toasts silently don't arrive. Reconnect
+    // at once on return to foreground instead of waiting the timer out.
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      const ws = wsRef.current;
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+      if (retryRef.current) clearTimeout(retryRef.current);
+      retryDelay = 2000;
+      connect();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
       destroyed = true;
+      document.removeEventListener("visibilitychange", onVisible);
       if (retryRef.current) clearTimeout(retryRef.current);
       wsRef.current?.close();
       wsRef.current = null;

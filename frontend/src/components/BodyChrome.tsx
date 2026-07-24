@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { isImmersiveRoute } from "@/lib/immersive";
+import { syncPushSubscription } from "@/lib/push";
 
 // Zeroes the body's bottom padding (normally pb-24, reserved for the floating
 // NavBar) on immersive chat routes, so the chat fills the whole viewport.
@@ -22,6 +23,15 @@ export default function BodyChrome() {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
+    // Heal a stale/pruned push subscription on open (and again whenever the app
+    // comes back to the foreground, e.g. after the phone suspended it). No-op
+    // unless the user already enabled notifications.
+    syncPushSubscription();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") syncPushSubscription();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
   // iOS home-screen apps have a long-standing WebKit bug: after the software

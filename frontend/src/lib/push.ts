@@ -67,6 +67,45 @@ export async function enablePush(): Promise<PushState> {
   return "on";
 }
 
+// Backstop for push reliability: run on every app open. If the user already
+// granted permission, silently make sure a live subscription exists and the
+// backend knows about it. This heals two drift cases that otherwise leave the
+// user with no push until they manually re-toggle:
+//   - the server pruned a stale subscription (after a 410) but the browser
+//     still has permission, so we simply re-register;
+//   - the browser rotated the subscription while the app was closed (the
+//     pushsubscriptionchange handler is the live path; this is the catch-up).
+// It never prompts and never changes permission — a no-op unless already "on".
+export async function syncPushSubscription(): Promise<void> {
+  if (!pushSupported() || Notification.permission !== "granted") return;
+  try {
+    const { key, enabled } = await apiFetch<{ key: string; enabled: boolean }>(
+      "/api/notifications/push/public-key"
+    );
+    if (!enabled || !key) return;
+
+    const reg =
+      (await navigator.serviceWorker.getRegistration()) ??
+      (await navigator.serviceWorker.register("/sw.js"));
+    await navigator.serviceWorker.ready;
+
+    const sub =
+      (await reg.pushManager.getSubscription()) ??
+      (await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(key) as BufferSource,
+      }));
+
+    // Idempotent on the backend (upsert by endpoint) — cheap to send each open.
+    await apiFetch("/api/notifications/push/subscribe", {
+      method: "POST",
+      body: JSON.stringify(sub.toJSON()),
+    });
+  } catch {
+    // Never let a background heal surface an error to the user.
+  }
+}
+
 export async function disablePush(): Promise<void> {
   if (!pushSupported()) return;
   const reg = await navigator.serviceWorker.getRegistration();
