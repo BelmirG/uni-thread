@@ -864,6 +864,42 @@ async def rsvp_event(
     return events[post_id]
 
 
+@router.get("/{post_id}/rsvps")
+async def event_rsvps(
+    post_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Who's going and who's interested for a club event. Unlike poll votes,
+    an RSVP is a public commitment to show up — the whole point is that members
+    can see who else is coming — so the attendee lists are always visible to
+    anyone who can see the event. Same membership guard as reading it."""
+    post = (await db.execute(
+        select(Post).where(Post.id == post_id, Post.is_deleted == False)
+    )).scalar_one_or_none()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+    if post.event_starts_at is None:
+        raise HTTPException(status_code=400, detail="This post is not an event.")
+    await _guard_private_club_post(post, current_user.id, db)
+    await _guard_blocked_post(post, current_user.id, db)
+
+    rows = (await db.execute(
+        select(EventRSVP.status, User.username, User.display_name, User.avatar_url)
+        .join(User, User.id == EventRSVP.user_id)
+        .where(EventRSVP.post_id == post_id)
+        .order_by(User.display_name.asc())
+    )).all()
+
+    going: list[dict] = []
+    interested: list[dict] = []
+    for status_, username, display_name, avatar_url in rows:
+        person = {"username": username, "display_name": display_name, "avatar_url": avatar_url}
+        (going if status_ == "going" else interested).append(person)
+
+    return {"going": going, "interested": interested}
+
+
 @router.get("/{post_id}/poll-voters")
 async def poll_voters(
     post_id: uuid.UUID,

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -293,6 +293,30 @@ async def _get_membership(
     ).scalar_one_or_none()
 
 
+async def _clear_pending(club_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession) -> None:
+    """Drop any pending join request AND invitation between a user and a club.
+
+    Call it at every membership transition (join, approve, accept, leave, kick).
+    A club has two independent membership systems — user-initiated requests and
+    owner-initiated invitations — and both were leaving orphan rows: kicking a
+    member never cleared their old join request, so `has_pending_request` stayed
+    true forever, hiding their Join button (they couldn't re-request) while they
+    lingered in the owner's requests list. Wiping both on every transition keeps
+    the two systems from ever contradicting the actual membership state. Does not
+    commit — the caller's transaction owns the outcome.
+    """
+    await db.execute(
+        delete(ClubJoinRequest).where(
+            ClubJoinRequest.club_id == club_id, ClubJoinRequest.user_id == user_id
+        )
+    )
+    await db.execute(
+        delete(ClubInvitation).where(
+            ClubInvitation.club_id == club_id, ClubInvitation.invited_user_id == user_id
+        )
+    )
+
+
 # ── endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=ClubResponse)
@@ -406,6 +430,7 @@ async def join_club(
             raise HTTPException(status_code=409, detail="You already have a pending join request.")
         db.add(ClubJoinRequest(club_id=club.id, user_id=current_user.id))
     else:
+        await _clear_pending(club.id, current_user.id, db)
         db.add(ClubMember(club_id=club.id, user_id=current_user.id, role="member"))
 
     await db.commit()
@@ -494,6 +519,7 @@ async def leave_club(
             successor.role = "owner"
 
     await db.delete(membership)
+    await _clear_pending(club.id, current_user.id, db)
     await db.commit()
 
 
@@ -672,12 +698,20 @@ async def approve_join_request(
         raise HTTPException(status_code=404, detail="User not found.")
 
     request = await _get_join_request(club.id, target.id, db)
-    if not request:
+    already_member = await _get_membership(club.id, target.id, db)
+    if not request and not already_member:
         raise HTTPException(status_code=404, detail="No pending request from this user.")
 
-    await db.delete(request)
-    db.add(ClubMember(club_id=club.id, user_id=target.id, role="member"))
+    # Idempotent: if they're somehow already a member (double-approval, a race),
+    # just clear the stale request instead of a duplicate-key insert that would
+    # roll back and leave the request undeleted — the exact orphan we're fixing.
+    await _clear_pending(club.id, target.id, db)
+    if not already_member:
+        db.add(ClubMember(club_id=club.id, user_id=target.id, role="member"))
     await db.commit()
+
+    if already_member:
+        return
 
     await notify(
         db,
@@ -772,6 +806,10 @@ async def remove_member(
         raise HTTPException(status_code=400, detail="Use the leave endpoint to leave the club yourself.")
 
     await db.delete(target_membership)
+    # Wipe any old request/invite so a kicked user gets a clean slate — they can
+    # request again and the owner can invite them, instead of both being blocked
+    # by a stale "pending" row.
+    await _clear_pending(club.id, target.id, db)
     await db.commit()
 
 
@@ -841,6 +879,8 @@ async def accept_invitation(
         raise HTTPException(status_code=404, detail="No invitation found.")
 
     await db.delete(invite)
+    # Also drop any parallel join request so accepting doesn't leave an orphan.
+    await _clear_pending(club.id, current_user.id, db)
     db.add(ClubMember(club_id=club.id, user_id=current_user.id, role="member"))
     await db.commit()
 

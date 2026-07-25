@@ -5,11 +5,15 @@ import { createPortal } from "react-dom";
 import { Camera } from "lucide-react";
 import { compressImage } from "@/lib/imageCompress";
 
+// Keep in sync with the backend cap in routers/upload.py.
+const VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+
 interface Preview {
   localUrl: string;
   remoteUrl: string | null;
   uploading: boolean;
   error: string | null;
+  isVideo: boolean;
 }
 
 interface Props {
@@ -50,14 +54,27 @@ export function ImageUploader({ onUrlsChange, maxImages = 5 }: Props) {
       remoteUrl: null,
       uploading: true,
       error: null,
+      isVideo: f.type.startsWith("video/"),
     }));
     setPreviews((prev) => [...prev, ...newPreviews]);
 
     await Promise.all(
       files.map(async (file, i) => {
         const idx = startIndex + i;
+        const isVideo = file.type.startsWith("video/");
+        // Fail oversized videos before the upload so the user gets instant
+        // feedback instead of waiting for a 50MB round-trip to 413.
+        if (isVideo && file.size > VIDEO_MAX_BYTES) {
+          setPreviews((prev) => {
+            const next = [...prev];
+            if (next[idx]) next[idx] = { ...next[idx], uploading: false, error: "Video is over 50 MB" };
+            return next;
+          });
+          return;
+        }
         const fd = new FormData();
-        fd.append("file", await compressImage(file));
+        // Videos upload as-is; only images go through client-side compression.
+        fd.append("file", isVideo ? file : await compressImage(file));
         try {
           const res = await fetch("/api/upload", {
             method: "POST",
@@ -99,7 +116,7 @@ export function ImageUploader({ onUrlsChange, maxImages = 5 }: Props) {
           <input
             ref={inputRef}
             type="file"
-            accept="image/jpeg,image/png,image/gif,image/webp"
+            accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime"
             multiple
             style={{ display: "none" }}
             onChange={handleChange}
@@ -120,7 +137,7 @@ export function ImageUploader({ onUrlsChange, maxImages = 5 }: Props) {
               gap: "0.35rem",
             }}
           >
-            <Camera size={15} /> Add photos
+            <Camera size={15} /> Add media
           </button>
         </>
       )}
@@ -129,20 +146,40 @@ export function ImageUploader({ onUrlsChange, maxImages = 5 }: Props) {
         <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.5rem" }}>
           {previews.map((p, i) => (
             <div key={i} style={{ position: "relative", width: 72, height: 72, flexShrink: 0 }}>
-              <img
-                src={p.localUrl}
-                alt=""
-                onClick={() => setLightbox(p.localUrl)}
-                style={{
-                  width: 72,
-                  height: 72,
-                  objectFit: "cover",
-                  borderRadius: 4,
-                  display: "block",
-                  border: p.error ? "2px solid #e53935" : "1px solid #e0e0e0",
-                  cursor: "zoom-in",
-                }}
-              />
+              {p.isVideo ? (
+                <video
+                  src={p.localUrl}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  onClick={() => setLightbox(p.localUrl)}
+                  style={{
+                    width: 72,
+                    height: 72,
+                    objectFit: "cover",
+                    borderRadius: 4,
+                    display: "block",
+                    border: p.error ? "2px solid #e53935" : "1px solid #e0e0e0",
+                    cursor: "zoom-in",
+                    background: "#000",
+                  }}
+                />
+              ) : (
+                <img
+                  src={p.localUrl}
+                  alt=""
+                  onClick={() => setLightbox(p.localUrl)}
+                  style={{
+                    width: 72,
+                    height: 72,
+                    objectFit: "cover",
+                    borderRadius: 4,
+                    display: "block",
+                    border: p.error ? "2px solid #e53935" : "1px solid #e0e0e0",
+                    cursor: "zoom-in",
+                  }}
+                />
+              )}
               {p.uploading && (
                 <div
                   style={{
@@ -224,19 +261,36 @@ export function ImageUploader({ onUrlsChange, maxImages = 5 }: Props) {
             justifyContent: "center",
           }}
         >
-          <img
-            src={lightbox}
-            alt="Preview"
-            onClick={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            style={{
-              maxWidth: "90vw",
-              maxHeight: "90vh",
-              objectFit: "contain",
-              borderRadius: 8,
-              boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
-            }}
-          />
+          {previews.find((p) => p.localUrl === lightbox)?.isVideo ? (
+            <video
+              src={lightbox}
+              controls
+              autoPlay
+              playsInline
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: "90vw",
+                maxHeight: "90vh",
+                borderRadius: 8,
+                boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
+              }}
+            />
+          ) : (
+            <img
+              src={lightbox}
+              alt="Preview"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: "90vw",
+                maxHeight: "90vh",
+                objectFit: "contain",
+                borderRadius: 8,
+                boxShadow: "0 8px 40px rgba(0,0,0,0.6)",
+              }}
+            />
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); closeLightbox(); }}
             onMouseDown={(e) => e.stopPropagation()}

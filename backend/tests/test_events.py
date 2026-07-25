@@ -184,6 +184,33 @@ async def test_blocked_member_is_not_notified_of_an_event(client_for, make_user,
     assert rows == []
 
 
+async def test_rsvp_list_shows_who_is_going_and_interested(client_for, make_user, db):
+    """Members can see the attendee lists — the whole point of an RSVP is that
+    it's a public commitment to show up."""
+    owner, a, b = await make_user(), await make_user(), await make_user()
+    club = await _club_with_members(db, owner, a, b)
+    owner_c, a_c, b_c = client_for(owner), client_for(a), client_for(b)
+
+    post_id = (await owner_c.post(f"/api/clubs/{club.slug}/posts", json={
+        "content": "Hackathon", "event_starts_at": _future(24),
+    })).json()["id"]
+
+    await a_c.post(f"/api/posts/{post_id}/rsvp", json={"status": "going"})
+    await b_c.post(f"/api/posts/{post_id}/rsvp", json={"status": "interested"})
+
+    lists = (await owner_c.get(f"/api/posts/{post_id}/rsvps")).json()
+    assert {p["username"] for p in lists["going"]} == {a.username}
+    assert {p["username"] for p in lists["interested"]} == {b.username}
+
+
+async def test_rsvp_list_rejected_on_non_events(client_for, make_user, db):
+    owner = await make_user()
+    club = await _club_with_members(db, owner)
+    owner_c = client_for(owner)
+    plain_id = (await owner_c.post(f"/api/clubs/{club.slug}/posts", json={"content": "hi"})).json()["id"]
+    assert (await owner_c.get(f"/api/posts/{plain_id}/rsvps")).status_code == 400
+
+
 async def test_private_club_event_hidden_from_non_members(client_for, make_user, db):
     owner, outsider = await make_user(), await make_user()
     club = await _club_with_members(db, owner)

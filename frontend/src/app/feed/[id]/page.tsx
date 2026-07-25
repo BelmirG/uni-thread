@@ -16,7 +16,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { clearFeedCache } from "@/lib/feedCache";
+import { clearFeedCache, patchFeedCachePost } from "@/lib/feedCache";
 import { applyVote } from "@/lib/vote";
 import UserSearchInput from "@/components/UserSearchInput";
 import { AttachBar } from "@/components/AttachBar";
@@ -281,7 +281,7 @@ function CommentNode({ node, depth }: { node: TreeNode; depth: number }) {
                 onClick={() => ctx.onVote(p.id, "up")}
                 className={cn(
                   "flex items-center gap-0.5 px-1.5 py-1 rounded-md text-xs font-medium transition-colors",
-                  voted === "up" ? "text-orange-500" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  voted === "up" ? "text-blue-500" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 )}
               >
                 <ChevronUp className={cn("w-3.5 h-3.5", voted === "up" && "vote-pop")} />
@@ -291,7 +291,7 @@ function CommentNode({ node, depth }: { node: TreeNode; depth: number }) {
                 onClick={() => ctx.onVote(p.id, "down")}
                 className={cn(
                   "flex items-center gap-0.5 px-1.5 py-1 rounded-md text-xs font-medium transition-colors",
-                  voted === "down" ? "text-indigo-500" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  voted === "down" ? "text-yellow-500" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 )}
               >
                 <ChevronDown className={cn("w-3.5 h-3.5", voted === "down" && "vote-pop")} />
@@ -460,6 +460,9 @@ export default function PostDetailPage() {
       });
       setPost((prev) => (prev?.id === targetId ? { ...prev, ...data } : prev));
       setAllReplies((prev) => prev.map((p) => (p.id === targetId ? { ...p, ...data } : p)));
+      // Keep the feed's cached copy in sync so "Back" shows the vote, not the
+      // stale pre-vote state. Harmless if this post isn't the one in the feed.
+      patchFeedCachePost(targetId, data);
     } catch {
       const revert = { upvotes: before.upvotes, downvotes: before.downvotes, current_user_vote: before.current_user_vote };
       setPost((prev) => (prev?.id === targetId ? { ...prev, ...revert } : prev));
@@ -687,7 +690,7 @@ export default function PostDetailPage() {
                   onClick={() => handleVote(post.id, "up")}
                   className={cn(
                     "flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                    postVoted === "up" ? "text-orange-500" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    postVoted === "up" ? "text-blue-500" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   )}
                 >
                   <ChevronUp className="w-4 h-4" />
@@ -697,7 +700,7 @@ export default function PostDetailPage() {
                   onClick={() => handleVote(post.id, "down")}
                   className={cn(
                     "flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                    postVoted === "down" ? "text-indigo-500" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    postVoted === "down" ? "text-yellow-500" : "text-muted-foreground hover:text-foreground hover:bg-muted"
                   )}
                 >
                   <ChevronDown className="w-4 h-4" />

@@ -33,6 +33,18 @@ export function getFeedCache<T>(): FeedCacheEntry<T> | null {
   return cache as FeedCacheEntry<T>;
 }
 
+// Patch a single cached post in place after it's mutated outside the feed page
+// (e.g. voting from a post's detail view) — otherwise navigating back would
+// restore a snapshot with the pre-vote counts/colors. No-op if the post isn't
+// in the current snapshot.
+export function patchFeedCachePost(id: string, patch: object): void {
+  if (!cache) return;
+  cache.posts = cache.posts.map((p) => {
+    const post = p as { id: string };
+    return post.id === id ? { ...post, ...patch } : p;
+  });
+}
+
 // Call after any mutation made outside the feed page (e.g. deleting a post
 // from its detail view) — otherwise navigating back would restore a snapshot
 // that still contains the stale post.

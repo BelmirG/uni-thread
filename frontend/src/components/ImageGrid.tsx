@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { isVideoUrl } from "@/lib/media";
 
 // The viewport is locked to scale 1 (to stop iOS's input auto-zoom), so the
 // viewer implements its own photo zoom: pinch to zoom, one-finger pan while
@@ -175,24 +176,36 @@ function Lightbox({ urls, startIndex, onClose }: { urls: string[]; startIndex: n
         </div>
       )}
 
-      {/* Image — tap stops propagation so it doesn't close; double-tap zooms */}
-      <img
-        src={urls[idx]}
-        alt=""
-        onClick={onImageTap}
-        draggable={false}
-        style={{
-          maxWidth: "92vw",
-          maxHeight: "88vh",
-          objectFit: "contain",
-          borderRadius: 6,
-          display: "block",
-          userSelect: "none",
-          transform: `translate(${t.tx}px, ${t.ty}px) scale(${t.s})`,
-          transition: gesturing ? "none" : "transform 0.2s ease",
-          willChange: "transform",
-        }}
-      />
+      {/* Video plays with native controls; images get the zoom/pan gestures.
+          Tap stops propagation so it doesn't close; double-tap zooms images. */}
+      {isVideoUrl(urls[idx]) ? (
+        <video
+          src={urls[idx]}
+          controls
+          autoPlay
+          playsInline
+          onClick={(e) => e.stopPropagation()}
+          style={{ maxWidth: "92vw", maxHeight: "88vh", borderRadius: 6, display: "block" }}
+        />
+      ) : (
+        <img
+          src={urls[idx]}
+          alt=""
+          onClick={onImageTap}
+          draggable={false}
+          style={{
+            maxWidth: "92vw",
+            maxHeight: "88vh",
+            objectFit: "contain",
+            borderRadius: 6,
+            display: "block",
+            userSelect: "none",
+            transform: `translate(${t.tx}px, ${t.ty}px) scale(${t.s})`,
+            transition: gesturing ? "none" : "transform 0.2s ease",
+            willChange: "transform",
+          }}
+        />
+      )}
 
       {/* Prev */}
       {idx > 0 && (
@@ -235,16 +248,29 @@ export function ImageGrid({ urls }: { urls: string[] }) {
   if (live.length === 1) {
     return (
       <>
-        <div style={{ marginBottom: "0.65rem", borderRadius: 8, overflow: "hidden", cursor: "zoom-in" }}>
-          <img
-            src={live[0]}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            onClick={() => setLightboxIndex(0)}
-            onError={() => markFailed(live[0])}
-            style={{ width: "100%", maxHeight: 500, objectFit: "cover", display: "block" }}
-          />
+        <div style={{ marginBottom: "0.65rem", borderRadius: 8, overflow: "hidden", cursor: isVideoUrl(live[0]) ? "default" : "zoom-in" }}>
+          {isVideoUrl(live[0]) ? (
+            // preload="metadata" fetches only the first frame + duration, not
+            // the whole file — the feed stays light until someone hits play.
+            <video
+              src={live[0]}
+              controls
+              preload="metadata"
+              playsInline
+              onError={() => markFailed(live[0])}
+              style={{ width: "100%", maxHeight: 500, display: "block", background: "#000" }}
+            />
+          ) : (
+            <img
+              src={live[0]}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              onClick={() => setLightboxIndex(0)}
+              onError={() => markFailed(live[0])}
+              style={{ width: "100%", maxHeight: 500, objectFit: "cover", display: "block" }}
+            />
+          )}
         </div>
         {lightboxIndex !== null && createPortal(
           <Lightbox urls={live} startIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} />,
@@ -268,15 +294,27 @@ export function ImageGrid({ urls }: { urls: string[] }) {
             setTouchStartX(null);
           }}
         >
-          <img
-            src={live[idx]}
-            alt={`Image ${idx + 1} of ${live.length}`}
-            loading="lazy"
-            decoding="async"
-            onClick={() => setLightboxIndex(idx)}
-            onError={() => markFailed(live[idx])}
-            style={{ width: "100%", maxHeight: 420, objectFit: "cover", display: "block" }}
-          />
+          {isVideoUrl(live[idx]) ? (
+            <video
+              src={live[idx]}
+              controls
+              preload="metadata"
+              playsInline
+              onClick={(e) => e.stopPropagation()}
+              onError={() => markFailed(live[idx])}
+              style={{ width: "100%", maxHeight: 420, display: "block", background: "#000" }}
+            />
+          ) : (
+            <img
+              src={live[idx]}
+              alt={`Image ${idx + 1} of ${live.length}`}
+              loading="lazy"
+              decoding="async"
+              onClick={() => setLightboxIndex(idx)}
+              onError={() => markFailed(live[idx])}
+              style={{ width: "100%", maxHeight: 420, objectFit: "cover", display: "block" }}
+            />
+          )}
 
           {idx > 0 && (
             <button

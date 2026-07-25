@@ -36,6 +36,37 @@ IMAGE_MAGIC: dict[str, bytes] = {
     "image/webp": b"RIFF",
 }
 
+# ── videos ────────────────────────────────────────────────────────────────────
+
+# Only the cross-browser-safe containers. MP4 (H.264) and WebM play everywhere;
+# QuickTime (.mov) is what iPhones record and plays in Safari and modern Chrome.
+# We store them as-is and stream via range requests (the /uploads mount already
+# supports Range), so seeking never downloads the whole file. No server-side
+# transcoding — a campus-scale app doesn't need the ffmpeg pipeline, and a size
+# cap plus the feed's lazy loading (preload="metadata") is what keeps it fast.
+ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm", "video/quicktime"}
+VIDEO_MAX_BYTES = 50 * 1024 * 1024  # 50 MB — generous for a short clip, bounds bandwidth/storage
+VIDEO_EXTENSIONS = {
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "video/quicktime": ".mov",
+}
+
+
+def _check_video_magic(data: bytes, mime: str) -> bool:
+    """Verify the bytes actually are the declared video container.
+
+    MP4 and QuickTime both wrap everything in a top-level box whose type sits at
+    bytes 4–8 ('ftyp'). WebM is a Matroska/EBML file starting with the EBML
+    magic. This stops someone renaming an arbitrary file to .mp4 to smuggle it
+    past the type check.
+    """
+    if mime in ("video/mp4", "video/quicktime"):
+        return data[4:8] == b"ftyp"
+    if mime == "video/webm":
+        return data[:4] == b"\x1a\x45\xdf\xa3"
+    return False
+
 # ── documents (MIME-validated) ────────────────────────────────────────────────
 
 # Old binary Office formats (.doc, .xls, .ppt) support VBA macros — excluded.
@@ -174,10 +205,26 @@ async def upload_image(
     # Uploads write multi-MB files to disk — generous for real use, but stops
     # a single client from filling the volume.
     await rate_limit(request, key="upload", limit=60, window_seconds=3600)
+
+    # ── video branch: store as-is and let the browser stream it ──────────────
+    if file.content_type in ALLOWED_VIDEO_TYPES:
+        data = await file.read()
+        if len(data) > VIDEO_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="Video must be under 50 MB.")
+        if not _check_video_magic(data, file.content_type):
+            raise HTTPException(
+                status_code=422,
+                detail="File content does not match the declared video type.",
+            )
+        ext = VIDEO_EXTENSIONS[file.content_type]
+        filename = f"{uuid.uuid4()}{ext}"
+        (UPLOAD_DIR / filename).write_bytes(data)
+        return {"url": f"/uploads/{filename}"}
+
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
             status_code=422,
-            detail="Only JPEG, PNG, GIF, and WebP images are allowed.",
+            detail="Only images (JPEG, PNG, GIF, WebP) and videos (MP4, WebM, MOV) are allowed.",
         )
 
     data = await file.read()
