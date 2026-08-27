@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, GraduationCap } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { clearAllPageCaches } from "@/lib/pageCaches";
@@ -12,18 +12,29 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const router = useRouter();
+  // Lets other pages send you here and get you back afterward — e.g.
+  // /admin redirects unauthenticated visitors to /login?next=/admin.
+  const next = useSearchParams().get("next") || "/feed";
   const [form, setForm] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Already signed in? Skip the form and go straight to the feed.
+  // Already signed in? Skip the form and go straight there.
   useEffect(() => {
     apiFetch("/api/auth/me")
-      .then(() => router.replace("/feed"))
+      .then(() => router.replace(next))
       .catch(() => {});
-  }, [router]);
+  }, [router, next]);
 
   function update(field: "email" | "password") {
     return (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -41,7 +52,7 @@ export default function LoginPage() {
       });
       // A previous session on this device may have left page snapshots behind.
       clearAllPageCaches();
-      router.push("/feed");
+      router.push(next);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed.");
     } finally {

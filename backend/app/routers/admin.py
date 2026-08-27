@@ -1,8 +1,11 @@
+import re
 import secrets
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Security
+from fastapi.responses import FileResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
@@ -13,6 +16,8 @@ from sqlalchemy.orm import aliased
 from app.config import settings
 from app.core.rate_limit import rate_limit
 from app.database import get_db
+from app.dependencies import get_current_admin
+from app.models.admin_action import AdminAction
 from app.models.club import Club
 from app.models.club_member import ClubMember
 from app.models.post import Post
@@ -25,6 +30,11 @@ _api_key_header = APIKeyHeader(name="x-admin-key", auto_error=False)
 
 
 async def _verify_admin_key(request: Request, key: str = Security(_api_key_header)):
+    """Break-glass credential — used only to bootstrap the first admin account
+    or recover access if every admin is somehow locked out. Every other admin
+    endpoint requires a logged-in account with is_admin=True (see
+    get_current_admin), so day-to-day moderation is tied to a real person,
+    not a secret shared between everyone who moderates."""
     # Constant-time compare so an attacker can't recover the key byte-by-byte
     # from response timing.
     if not key or not secrets.compare_digest(key, settings.admin_key):
@@ -32,6 +42,24 @@ async def _verify_admin_key(request: Request, key: str = Security(_api_key_heade
         # throttled — but an outsider guessing keys gets cut off fast.
         await rate_limit(request, key="admin_key_fail", limit=10, window_seconds=3600)
         raise HTTPException(status_code=403, detail="Invalid admin key.")
+
+
+async def _log_action(
+    db: AsyncSession,
+    actor: User,
+    action: str,
+    target_type: str,
+    target_label: str,
+    detail: str | None = None,
+) -> None:
+    db.add(AdminAction(
+        actor_id=actor.id,
+        actor_username=actor.username,
+        action=action,
+        target_type=target_type,
+        target_label=target_label,
+        detail=detail,
+    ))
 
 
 class BanRequest(BaseModel):
@@ -63,13 +91,101 @@ def _user_summary(u: User) -> dict:
     }
 
 
+# ── bootstrap ─────────────────────────────────────────────────────────────────
+
+@router.post("/bootstrap/{username}")
+async def bootstrap_admin(
+    username: str,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_verify_admin_key),
+):
+    """Grant is_admin using the master key instead of an existing admin account —
+    for turning your own account into the first admin, or recovering access if
+    every admin account is somehow locked out. Everything else in this router
+    runs through get_current_admin instead."""
+    user = await _get_user(username, db)
+    if user.is_admin:
+        raise HTTPException(status_code=400, detail="User is already an admin.")
+    user.is_admin = True
+    db.add(AdminAction(
+        actor_id=None,
+        actor_username="(admin key)",
+        action="bootstrap_admin",
+        target_type="user",
+        target_label=username,
+    ))
+    await db.commit()
+    return {"ok": True, "username": username}
+
+
+# ── overview ──────────────────────────────────────────────────────────────────
+
+@router.get("/stats")
+async def get_stats(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    total_users = (await db.execute(select(func.count(User.id)))).scalar_one()
+    banned_users = (await db.execute(
+        select(func.count(User.id)).where(User.is_active == False)  # noqa: E712
+    )).scalar_one()
+    admin_count = (await db.execute(
+        select(func.count(User.id)).where(User.is_admin == True)  # noqa: E712
+    )).scalar_one()
+    unverified = (await db.execute(
+        select(func.count(User.id)).where(User.is_email_verified == False)  # noqa: E712
+    )).scalar_one()
+    total_posts = (await db.execute(
+        select(func.count(Post.id)).where(Post.is_deleted == False)  # noqa: E712
+    )).scalar_one()
+    total_clubs = (await db.execute(select(func.count(Club.id)))).scalar_one()
+    pending_reports = (await db.execute(
+        select(func.count(Report.id)).where(Report.status == "pending")
+    )).scalar_one()
+    return {
+        "total_users": total_users,
+        "banned_users": banned_users,
+        "admin_count": admin_count,
+        "unverified_users": unverified,
+        "total_posts": total_posts,
+        "total_clubs": total_clubs,
+        "pending_reports": pending_reports,
+    }
+
+
+@router.get("/actions")
+async def list_actions(
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """The audit trail: every moderation action taken through this panel, newest
+    first, attributed to the admin who did it."""
+    stmt = select(AdminAction).order_by(AdminAction.created_at.desc()).limit(min(limit, 300))
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        {
+            "id": str(a.id),
+            "actor_username": a.actor_username,
+            "action": a.action,
+            "target_type": a.target_type,
+            "target_label": a.target_label,
+            "detail": a.detail,
+            "created_at": a.created_at.isoformat(),
+        }
+        for a in rows
+    ]
+
+
+# ── users ─────────────────────────────────────────────────────────────────────
+
 @router.get("/users")
 async def list_users(
     q: str = "",
     filter: str = "all",  # all | unverified | banned | admins
     limit: int = 50,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(_verify_admin_key),
+    _: User = Depends(get_current_admin),
 ):
     """Browse/search accounts for moderation. Newest first."""
     conditions = []
@@ -100,7 +216,7 @@ async def list_users(
 async def verify_user(
     username: str,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(_verify_admin_key),
+    admin: User = Depends(get_current_admin),
 ):
     """Manually confirm an account whose verification email got stuck."""
     user = await _get_user(username, db)
@@ -109,6 +225,7 @@ async def verify_user(
     user.is_email_verified = True
     user.email_verification_token = None
     user.email_verification_expires_at = None
+    await _log_action(db, admin, "verify_user", "user", username)
     await db.commit()
     return {"ok": True, "username": username}
 
@@ -117,7 +234,7 @@ async def verify_user(
 async def delete_user(
     username: str,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(_verify_admin_key),
+    admin: User = Depends(get_current_admin),
 ):
     """Permanently delete an account. Their votes, follows, memberships, messages,
     and anonymous-authorship links cascade away; their posts are kept but detached
@@ -146,6 +263,10 @@ async def delete_user(
             await db.delete(club)
             succession.append({"club": club.name, "action": "deleted (no other members)"})
 
+    await _log_action(
+        db, admin, "delete_user", "user", username,
+        detail=f"clubs affected: {succession}" if succession else None,
+    )
     await db.delete(user)
     await db.commit()
     return {"ok": True, "username": username, "clubs": succession}
@@ -156,14 +277,17 @@ async def ban_user(
     username: str,
     body: BanRequest,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(_verify_admin_key),
+    admin: User = Depends(get_current_admin),
 ):
     user = await _get_user(username, db)
     if not user.is_active:
         raise HTTPException(status_code=400, detail="User is already banned.")
+    if user.is_admin:
+        raise HTTPException(status_code=400, detail="Cannot ban an admin account.")
     user.is_active = False
     user.ban_reason = body.reason.strip()
     user.banned_at = datetime.now(timezone.utc)
+    await _log_action(db, admin, "ban_user", "user", username, detail=user.ban_reason)
     await db.commit()
     return {"ok": True, "username": username, "ban_reason": user.ban_reason}
 
@@ -172,7 +296,7 @@ async def ban_user(
 async def unban_user(
     username: str,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(_verify_admin_key),
+    admin: User = Depends(get_current_admin),
 ):
     user = await _get_user(username, db)
     if user.is_active:
@@ -180,15 +304,76 @@ async def unban_user(
     user.is_active = True
     user.ban_reason = None
     user.banned_at = None
+    await _log_action(db, admin, "unban_user", "user", username)
     await db.commit()
     return {"ok": True, "username": username}
 
+
+@router.get("/users/{username}")
+async def get_user_info(
+    username: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    user = await _get_user(username, db)
+    return {
+        "username": user.username,
+        "email": user.email,
+        "display_name": user.display_name,
+        "is_active": user.is_active,
+        "is_admin": user.is_admin,
+        "is_banned": not user.is_active and user.ban_reason is not None,
+        "ban_reason": user.ban_reason,
+        "banned_at": user.banned_at.isoformat() if user.banned_at else None,
+        "created_at": user.created_at.isoformat(),
+    }
+
+
+# ── admin roles ───────────────────────────────────────────────────────────────
+
+@router.post("/users/{username}/promote")
+async def promote_user(
+    username: str,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Grant another account admin access. They'll need to log out/in (or just
+    reload) for the panel to unlock for them."""
+    user = await _get_user(username, db)
+    if user.is_admin:
+        raise HTTPException(status_code=400, detail="User is already an admin.")
+    user.is_admin = True
+    await _log_action(db, admin, "promote_admin", "user", username)
+    await db.commit()
+    return {"ok": True, "username": username}
+
+
+@router.post("/users/{username}/demote")
+async def demote_user(
+    username: str,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Revoke another admin's access. You can't demote yourself — that's what
+    the master key bootstrap route is for, if every admin is ever gone."""
+    if username == admin.username:
+        raise HTTPException(status_code=400, detail="You can't remove your own admin access.")
+    user = await _get_user(username, db)
+    if not user.is_admin:
+        raise HTTPException(status_code=400, detail="User is not an admin.")
+    user.is_admin = False
+    await _log_action(db, admin, "demote_admin", "user", username)
+    await db.commit()
+    return {"ok": True, "username": username}
+
+
+# ── reports ───────────────────────────────────────────────────────────────────
 
 @router.get("/reports")
 async def list_reports(
     status: str = "pending",
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(_verify_admin_key),
+    _: User = Depends(get_current_admin),
 ):
     Reporter = aliased(User)
     Reported = aliased(User)
@@ -226,7 +411,7 @@ async def list_reports(
 async def dismiss_report(
     report_id: str,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(_verify_admin_key),
+    admin: User = Depends(get_current_admin),
 ):
     report = (await db.execute(
         select(Report).where(Report.id == report_id)
@@ -234,27 +419,9 @@ async def dismiss_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found.")
     report.status = "dismissed"
+    await _log_action(db, admin, "dismiss_report", "report", report_id)
     await db.commit()
     return {"ok": True}
-
-
-@router.get("/users/{username}")
-async def get_user_info(
-    username: str,
-    db: AsyncSession = Depends(get_db),
-    _: str = Depends(_verify_admin_key),
-):
-    user = await _get_user(username, db)
-    return {
-        "username": user.username,
-        "email": user.email,
-        "display_name": user.display_name,
-        "is_active": user.is_active,
-        "is_banned": not user.is_active and user.ban_reason is not None,
-        "ban_reason": user.ban_reason,
-        "banned_at": user.banned_at.isoformat() if user.banned_at else None,
-        "created_at": user.created_at.isoformat(),
-    }
 
 
 # ── posts ─────────────────────────────────────────────────────────────────────
@@ -265,7 +432,7 @@ async def list_posts(
     limit: int = 50,
     deleted: bool = False,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(_verify_admin_key),
+    _: User = Depends(get_current_admin),
 ):
     """Browse/search posts (any type) to find something to remove. Newest first.
     Live and soft-deleted posts are separate views (`deleted` toggles them) so the
@@ -302,7 +469,7 @@ async def list_posts(
 async def delete_post(
     post_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: str = Depends(_verify_admin_key),
+    admin: User = Depends(get_current_admin),
 ):
     """Soft-delete any post (sets is_deleted). Content stays in the database for the
     audit trail but is hidden from all user-facing views."""
@@ -312,5 +479,140 @@ async def delete_post(
     if post.is_deleted:
         raise HTTPException(status_code=400, detail="Post is already deleted.")
     post.is_deleted = True
+    await _log_action(
+        db, admin, "delete_post", "post", str(post_id),
+        detail=(post.content or "")[:200] or None,
+    )
     await db.commit()
     return {"ok": True, "id": str(post_id)}
+
+
+# ── clubs ─────────────────────────────────────────────────────────────────────
+
+@router.get("/clubs")
+async def list_clubs(
+    q: str = "",
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    """Browse/search clubs, with a live member count, to find one to remove."""
+    stmt = (
+        select(Club, func.count(ClubMember.user_id))
+        .outerjoin(ClubMember, ClubMember.club_id == Club.id)
+        .group_by(Club.id)
+        .order_by(Club.created_at.desc())
+        .limit(min(limit, 200))
+    )
+    q = q.strip()
+    if q:
+        pattern = f"%{q}%"
+        stmt = stmt.where(or_(Club.name.ilike(pattern), Club.slug.ilike(pattern)))
+    rows = (await db.execute(stmt)).all()
+    return [
+        {
+            "id": str(club.id),
+            "name": club.name,
+            "slug": club.slug,
+            "is_private": club.is_private,
+            "member_count": member_count,
+            "created_at": club.created_at.isoformat(),
+        }
+        for club, member_count in rows
+    ]
+
+
+@router.delete("/clubs/{slug}", status_code=200)
+async def delete_club(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Permanently delete a club — memberships, join requests, invitations, and
+    chat cascade away with it (see the FK definitions on those tables)."""
+    club = (await db.execute(select(Club).where(Club.slug == slug))).scalar_one_or_none()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club not found.")
+    await _log_action(db, admin, "delete_club", "club", club.slug, detail=club.name)
+    await db.delete(club)
+    await db.commit()
+    return {"ok": True, "slug": slug}
+
+
+# ── media backup ──────────────────────────────────────────────────────────────
+#
+# The nightly database dump captures every row but no uploaded file — those live
+# on a mounted volume, so a database-only restore would come back with every
+# image and attachment broken. These two endpoints let the backup workflow pull
+# the media off the volume.
+#
+# They authenticate with the master key rather than an admin session because the
+# caller is CI, which has no browser and no login. Both are read-only.
+#
+# Stored names are UUID-based and files are never modified in place, so a backup
+# only ever needs to fetch what it does not already hold — the workflow diffs the
+# manifest against the bucket and transfers just the difference.
+
+MEDIA_DIRS = {
+    "uploads": Path(settings.data_dir) / "uploads",      # images, video, thumbnails
+    "filestore": Path(settings.data_dir) / "filestore",  # documents
+}
+
+# Deliberately strict: stored names are generated by the upload router, so
+# anything with a path separator, a parent reference, or an unexpected shape did
+# not come from us and is not served.
+_SAFE_MEDIA_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+@router.get("/media/manifest")
+async def media_manifest(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_verify_admin_key),
+):
+    """Every file currently on the media volume, with sizes so the caller can
+    verify a transfer arrived intact."""
+    files = []
+    total = 0
+    for kind, directory in MEDIA_DIRS.items():
+        if not directory.is_dir():
+            continue
+        for entry in sorted(directory.iterdir()):
+            if not entry.is_file():
+                continue
+            size = entry.stat().st_size
+            total += size
+            files.append({"kind": kind, "name": entry.name, "size": size})
+
+    # Enumerating the whole library is the step any bulk download starts with,
+    # so it is recorded even though the caller is the master key rather than a
+    # person. Logged here and not on each file: a backup run fetches thousands
+    # of files and would otherwise bury the audit log in noise.
+    db.add(AdminAction(
+        actor_id=None,
+        actor_username="(admin key)",
+        action="media_manifest",
+        target_type="media",
+        target_label=f"{len(files)} files",
+        detail=f"{total} bytes",
+    ))
+    await db.commit()
+
+    return {"files": files, "count": len(files), "total_bytes": total}
+
+
+@router.get("/media/file/{kind}/{name}")
+async def media_file(kind: str, name: str, _: None = Depends(_verify_admin_key)):
+    """Stream one file off the media volume for backup."""
+    directory = MEDIA_DIRS.get(kind)
+    if directory is None:
+        raise HTTPException(status_code=404, detail="Unknown media directory.")
+    if not _SAFE_MEDIA_NAME.match(name) or Path(name).name != name:
+        raise HTTPException(status_code=400, detail="Invalid file name.")
+
+    # Resolve and confirm containment, so even a name that slipped past the
+    # pattern cannot escape the directory via a symlink.
+    path = (directory / name).resolve()
+    if not path.is_file() or directory.resolve() not in path.parents:
+        raise HTTPException(status_code=404, detail="File not found.")
+
+    return FileResponse(path, media_type="application/octet-stream", filename=name)

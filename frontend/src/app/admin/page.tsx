@@ -1,17 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ShieldCheck, Search, Trash2, Ban, CheckCircle2, RotateCcw,
   LogOut, AlertTriangle, User as UserIcon, FileText, Flag, X,
+  LayoutGrid, Users2, ScrollText, ShieldPlus, ShieldMinus, Lock,
 } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { timeAgo } from "@/lib/timeAgo";
 
-// The admin key is held only for this tab's session (cleared when the tab closes)
-// and sent as the x-admin-key header on every admin request.
-const KEY_STORAGE = "ius_admin_key";
+interface Me {
+  username: string;
+  display_name: string;
+  is_admin: boolean;
+}
 
 interface AdminUser {
   username: string;
@@ -52,108 +57,97 @@ interface AdminReport {
   created_at: string;
 }
 
-type Tab = "users" | "reports" | "posts";
-
-function adminReq<T>(key: string, path: string, options?: RequestInit): Promise<T> {
-  return apiFetch<T>(path, { ...options, headers: { "x-admin-key": key, ...options?.headers } });
+interface AdminClub {
+  id: string;
+  name: string;
+  slug: string;
+  is_private: boolean;
+  member_count: number;
+  created_at: string;
 }
+
+interface AdminAction {
+  id: string;
+  actor_username: string;
+  action: string;
+  target_type: string;
+  target_label: string;
+  detail: string | null;
+  created_at: string;
+}
+
+interface Stats {
+  total_users: number;
+  banned_users: number;
+  admin_count: number;
+  unverified_users: number;
+  total_posts: number;
+  total_clubs: number;
+  pending_reports: number;
+}
+
+type Tab = "overview" | "users" | "reports" | "posts" | "clubs" | "admins" | "log";
 
 export default function AdminPage() {
-  const [key, setKey] = useState<string | null>(null);
+  const router = useRouter();
+  const [me, setMe] = useState<Me | null>(null);
   const [checking, setChecking] = useState(true);
 
-  // Restore a saved key on mount and confirm it still works.
   useEffect(() => {
-    const saved = sessionStorage.getItem(KEY_STORAGE);
-    if (!saved) { setChecking(false); return; }
-    adminReq(saved, "/api/admin/users?limit=1")
-      .then(() => setKey(saved))
-      .catch(() => sessionStorage.removeItem(KEY_STORAGE))
+    apiFetch<Me>("/api/auth/me")
+      .then(setMe)
+      .catch(() => router.replace("/login?next=/admin"))
       .finally(() => setChecking(false));
-  }, []);
+  }, [router]);
 
-  function signOut() {
-    sessionStorage.removeItem(KEY_STORAGE);
-    setKey(null);
-  }
-
-  if (checking) {
-    return <div className="min-h-screen bg-background" />;
-  }
-  if (!key) {
-    return <AdminGate onUnlock={(k) => { sessionStorage.setItem(KEY_STORAGE, k); setKey(k); }} />;
-  }
-  return <AdminPanel adminKey={key} onSignOut={signOut} />;
+  if (checking) return <div className="min-h-screen bg-background" />;
+  if (!me) return null; // redirect in flight
+  if (!me.is_admin) return <AccessDenied />;
+  return <AdminPanel me={me} />;
 }
 
-// ── Key gate ──────────────────────────────────────────────────────────────────
+// ── Access denied ─────────────────────────────────────────────────────────────
 
-function AdminGate({ onUnlock }: { onUnlock: (key: string) => void }) {
-  const [value, setValue] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!value.trim()) return;
-    setLoading(true);
-    setError(null);
-    try {
-      await adminReq(value.trim(), "/api/admin/users?limit=1");
-      onUnlock(value.trim());
-    } catch (err) {
-      setError(err instanceof ApiError && err.status === 403 ? "Invalid admin key." : "Could not verify key.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
+function AccessDenied() {
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
-      <div className="w-full max-w-sm">
-        <div className="flex flex-col items-center text-center mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center mb-3">
-            <ShieldCheck className="w-7 h-7 text-primary-foreground" />
-          </div>
-          <h1 className="text-xl font-bold text-on-surface">Admin access</h1>
-          <p className="text-sm text-on-surface-variant mt-1">Enter the admin key to manage UniThread.</p>
-        </div>
-        <form onSubmit={submit} className="bg-surface rounded-2xl shadow-sm p-5 space-y-3">
-          <input
-            type="password"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="Admin key"
-            autoFocus
-            className="w-full h-12 px-4 text-sm rounded-2xl bg-surface-container-low text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-          {error && <p className="text-xs text-error px-1">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading || !value.trim()}
-            className="w-full h-12 rounded-full bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 transition-all"
-          >
-            {loading ? "Checking…" : "Unlock"}
-          </button>
-        </form>
-        <div className="text-center mt-4">
-          <Link href="/feed" className="text-xs text-on-surface-variant hover:text-on-surface no-underline">← Back to app</Link>
-        </div>
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-surface-container flex items-center justify-center mb-3">
+        <Lock className="w-7 h-7 text-on-surface-variant" />
       </div>
+      <h1 className="text-xl font-bold text-on-surface">Not an admin account</h1>
+      <p className="text-sm text-on-surface-variant mt-1 max-w-xs">
+        This account doesn't have admin access. Ask an existing admin to grant it from the Admins tab.
+      </p>
+      <Link href="/feed" className="text-sm text-primary mt-4 no-underline">← Back to app</Link>
     </div>
   );
 }
 
 // ── Panel ─────────────────────────────────────────────────────────────────────
 
-function AdminPanel({ adminKey, onSignOut }: { adminKey: string; onSignOut: () => void }) {
-  const [tab, setTab] = useState<Tab>("users");
+function AdminPanel({ me }: { me: Me }) {
+  const [tab, setTab] = useState<Tab>("overview");
   const [banner, setBanner] = useState<string | null>(null);
 
   const flash = useCallback((msg: string) => {
     setBanner(msg);
     setTimeout(() => setBanner(null), 3000);
   }, []);
+
+  async function signOut() {
+    await apiFetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    window.location.href = "/login";
+  }
+
+  const tabs: [Tab, string, React.ComponentType<{ className?: string }>][] = [
+    ["overview", "Overview", LayoutGrid],
+    ["users", "Users", UserIcon],
+    ["reports", "Reports", Flag],
+    ["posts", "Posts", FileText],
+    ["clubs", "Clubs", Users2],
+    ["admins", "Admins", ShieldPlus],
+    ["log", "Log", ScrollText],
+  ];
 
   return (
     <main className="max-w-xl mx-auto px-4 pt-5 pb-16">
@@ -162,9 +156,12 @@ function AdminPanel({ adminKey, onSignOut }: { adminKey: string; onSignOut: () =
           <ShieldCheck className="w-5 h-5 text-primary" />
           <h1 className="text-xl font-bold text-on-surface">Admin</h1>
         </div>
-        <button onClick={onSignOut} className="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors">
-          <LogOut className="w-3.5 h-3.5" /> Sign out
-        </button>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-on-surface-variant hidden sm:inline">@{me.username}</span>
+          <button onClick={signOut} className="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors">
+            <LogOut className="w-3.5 h-3.5" /> Sign out
+          </button>
+        </div>
       </div>
 
       {banner && (
@@ -173,14 +170,14 @@ function AdminPanel({ adminKey, onSignOut }: { adminKey: string; onSignOut: () =
         </div>
       )}
 
-      {/* Tabs — segmented control */}
-      <div className="flex gap-1 p-1 bg-surface-container rounded-full mb-4">
-        {([["users", "Users", UserIcon], ["reports", "Reports", Flag], ["posts", "Posts", FileText]] as const).map(([k, label, Icon]) => (
+      {/* Tabs — segmented control, scrollable on small screens */}
+      <div className="flex gap-1 p-1 bg-surface-container rounded-full mb-4 overflow-x-auto no-scrollbar">
+        {tabs.map(([k, label, Icon]) => (
           <button
             key={k}
             onClick={() => setTab(k)}
             className={cn(
-              "flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-semibold rounded-full transition-all",
+              "flex-shrink-0 flex items-center justify-center gap-1.5 px-3.5 py-2 text-sm font-semibold rounded-full transition-all",
               tab === k ? "bg-surface text-on-surface shadow-sm" : "text-on-surface-variant hover:text-on-surface"
             )}
           >
@@ -189,10 +186,47 @@ function AdminPanel({ adminKey, onSignOut }: { adminKey: string; onSignOut: () =
         ))}
       </div>
 
-      {tab === "users" && <UsersTab adminKey={adminKey} flash={flash} />}
-      {tab === "reports" && <ReportsTab adminKey={adminKey} flash={flash} />}
-      {tab === "posts" && <PostsTab adminKey={adminKey} flash={flash} />}
+      {tab === "overview" && <OverviewTab />}
+      {tab === "users" && <UsersTab flash={flash} />}
+      {tab === "reports" && <ReportsTab flash={flash} />}
+      {tab === "posts" && <PostsTab flash={flash} />}
+      {tab === "clubs" && <ClubsTab flash={flash} />}
+      {tab === "admins" && <AdminsTab me={me} flash={flash} />}
+      {tab === "log" && <LogTab />}
     </main>
+  );
+}
+
+// ── Overview tab ──────────────────────────────────────────────────────────────
+
+function OverviewTab() {
+  const [stats, setStats] = useState<Stats | null>(null);
+
+  useEffect(() => {
+    apiFetch<Stats>("/api/admin/stats").then(setStats).catch(() => {});
+  }, []);
+
+  if (!stats) return <Loading />;
+
+  const tiles: [string, number][] = [
+    ["Total users", stats.total_users],
+    ["Banned", stats.banned_users],
+    ["Unverified", stats.unverified_users],
+    ["Admins", stats.admin_count],
+    ["Live posts", stats.total_posts],
+    ["Clubs", stats.total_clubs],
+    ["Pending reports", stats.pending_reports],
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {tiles.map(([label, value]) => (
+        <div key={label} className="bg-surface rounded-2xl shadow-sm p-4">
+          <div className="text-2xl font-bold text-on-surface">{value}</div>
+          <div className="text-xs text-on-surface-variant mt-0.5">{label}</div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -200,7 +234,7 @@ function AdminPanel({ adminKey, onSignOut }: { adminKey: string; onSignOut: () =
 
 const USER_FILTERS = [["all", "All"], ["unverified", "Unverified"], ["banned", "Banned"], ["admins", "Admins"]] as const;
 
-function UsersTab({ adminKey, flash }: { adminKey: string; flash: (m: string) => void }) {
+function UsersTab({ flash }: { flash: (m: string) => void }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<string>("all");
@@ -208,11 +242,11 @@ function UsersTab({ adminKey, flash }: { adminKey: string; flash: (m: string) =>
 
   const load = useCallback(() => {
     setLoading(true);
-    adminReq<AdminUser[]>(adminKey, `/api/admin/users?q=${encodeURIComponent(q)}&filter=${filter}`)
+    apiFetch<AdminUser[]>(`/api/admin/users?q=${encodeURIComponent(q)}&filter=${filter}`)
       .then(setUsers)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [adminKey, q, filter]);
+  }, [q, filter]);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
@@ -222,19 +256,19 @@ function UsersTab({ adminKey, flash }: { adminKey: string; flash: (m: string) =>
   async function act(u: AdminUser, action: "verify" | "ban" | "unban" | "delete") {
     try {
       if (action === "verify") {
-        await adminReq(adminKey, `/api/admin/users/${u.username}/verify`, { method: "POST" });
+        await apiFetch(`/api/admin/users/${u.username}/verify`, { method: "POST" });
         flash(`Verified @${u.username}`);
       } else if (action === "ban") {
         const reason = window.prompt(`Ban @${u.username} — reason?`);
         if (reason === null) return;
-        await adminReq(adminKey, `/api/admin/users/${u.username}/ban`, { method: "POST", body: JSON.stringify({ reason }) });
+        await apiFetch(`/api/admin/users/${u.username}/ban`, { method: "POST", body: JSON.stringify({ reason }) });
         flash(`Banned @${u.username}`);
       } else if (action === "unban") {
-        await adminReq(adminKey, `/api/admin/users/${u.username}/unban`, { method: "POST" });
+        await apiFetch(`/api/admin/users/${u.username}/unban`, { method: "POST" });
         flash(`Unbanned @${u.username}`);
       } else if (action === "delete") {
         if (!window.confirm(`Permanently delete @${u.username}? This cannot be undone.`)) return;
-        await adminReq(adminKey, `/api/admin/users/${u.username}`, { method: "DELETE" });
+        await apiFetch(`/api/admin/users/${u.username}`, { method: "DELETE" });
         flash(`Deleted @${u.username}`);
       }
       load();
@@ -296,23 +330,23 @@ function UsersTab({ adminKey, flash }: { adminKey: string; flash: (m: string) =>
 
 // ── Reports tab ───────────────────────────────────────────────────────────────
 
-function ReportsTab({ adminKey, flash }: { adminKey: string; flash: (m: string) => void }) {
+function ReportsTab({ flash }: { flash: (m: string) => void }) {
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
     setLoading(true);
-    adminReq<AdminReport[]>(adminKey, "/api/admin/reports?status=pending")
+    apiFetch<AdminReport[]>("/api/admin/reports?status=pending")
       .then(setReports)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [adminKey]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
   async function dismiss(id: string) {
     try {
-      await adminReq(adminKey, `/api/admin/reports/${id}/dismiss`, { method: "POST" });
+      await apiFetch(`/api/admin/reports/${id}/dismiss`, { method: "POST" });
       flash("Report dismissed");
       load();
     } catch (err) {
@@ -324,7 +358,7 @@ function ReportsTab({ adminKey, flash }: { adminKey: string; flash: (m: string) 
     const reason = window.prompt(`Ban @${username} — reason?`);
     if (reason === null) return;
     try {
-      await adminReq(adminKey, `/api/admin/users/${username}/ban`, { method: "POST", body: JSON.stringify({ reason }) });
+      await apiFetch(`/api/admin/users/${username}/ban`, { method: "POST", body: JSON.stringify({ reason }) });
       flash(`Banned @${username}`);
       load();
     } catch (err) {
@@ -335,8 +369,8 @@ function ReportsTab({ adminKey, flash }: { adminKey: string; flash: (m: string) 
   async function deleteReportedPost(reportId: string, postId: string) {
     if (!window.confirm("Delete this post? (soft delete — recoverable via DB)")) return;
     try {
-      await adminReq(adminKey, `/api/admin/posts/${postId}`, { method: "DELETE" });
-      await adminReq(adminKey, `/api/admin/reports/${reportId}/dismiss`, { method: "POST" });
+      await apiFetch(`/api/admin/posts/${postId}`, { method: "DELETE" });
+      await apiFetch(`/api/admin/reports/${reportId}/dismiss`, { method: "POST" });
       flash("Post deleted, report closed");
       load();
     } catch (err) {
@@ -393,7 +427,7 @@ function ReportsTab({ adminKey, flash }: { adminKey: string; flash: (m: string) 
 
 // ── Posts tab ─────────────────────────────────────────────────────────────────
 
-function PostsTab({ adminKey, flash }: { adminKey: string; flash: (m: string) => void }) {
+function PostsTab({ flash }: { flash: (m: string) => void }) {
   const [posts, setPosts] = useState<AdminPost[]>([]);
   const [q, setQ] = useState("");
   const [showDeleted, setShowDeleted] = useState(false);
@@ -401,11 +435,11 @@ function PostsTab({ adminKey, flash }: { adminKey: string; flash: (m: string) =>
 
   const load = useCallback(() => {
     setLoading(true);
-    adminReq<AdminPost[]>(adminKey, `/api/admin/posts?q=${encodeURIComponent(q)}&deleted=${showDeleted}`)
+    apiFetch<AdminPost[]>(`/api/admin/posts?q=${encodeURIComponent(q)}&deleted=${showDeleted}`)
       .then(setPosts)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [adminKey, q, showDeleted]);
+  }, [q, showDeleted]);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
@@ -415,7 +449,7 @@ function PostsTab({ adminKey, flash }: { adminKey: string; flash: (m: string) =>
   async function del(id: string) {
     if (!window.confirm("Delete this post? It will be hidden from all users.")) return;
     try {
-      await adminReq(adminKey, `/api/admin/posts/${id}`, { method: "DELETE" });
+      await apiFetch(`/api/admin/posts/${id}`, { method: "DELETE" });
       flash("Post deleted");
       load();
     } catch (err) {
@@ -462,6 +496,206 @@ function PostsTab({ adminKey, flash }: { adminKey: string; flash: (m: string) =>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Clubs tab ─────────────────────────────────────────────────────────────────
+
+function ClubsTab({ flash }: { flash: (m: string) => void }) {
+  const [clubs, setClubs] = useState<AdminClub[]>([]);
+  const [q, setQ] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    apiFetch<AdminClub[]>(`/api/admin/clubs?q=${encodeURIComponent(q)}`)
+      .then(setClubs)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [q]);
+
+  useEffect(() => {
+    const t = setTimeout(load, 250);
+    return () => clearTimeout(t);
+  }, [load]);
+
+  async function del(c: AdminClub) {
+    if (!window.confirm(`Permanently delete "${c.name}"? Its posts, chat, and memberships go with it. This cannot be undone.`)) return;
+    try {
+      await apiFetch(`/api/admin/clubs/${c.slug}`, { method: "DELETE" });
+      flash(`Deleted "${c.name}"`);
+      load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed.");
+    }
+  }
+
+  return (
+    <div>
+      <SearchBar value={q} onChange={setQ} placeholder="Search by club name or slug…" />
+      {loading ? <Loading /> : clubs.length === 0 ? <Empty label="No clubs found." /> : (
+        <div className="space-y-2">
+          {clubs.map((c) => (
+            <div key={c.id} className="bg-surface rounded-2xl shadow-sm p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm text-on-surface truncate">{c.name}</span>
+                    {c.is_private && <Badge className="bg-surface-container text-on-surface-variant">private</Badge>}
+                  </div>
+                  <div className="text-xs text-on-surface-variant truncate">/clubs/{c.slug} · {c.member_count} member{c.member_count === 1 ? "" : "s"}</div>
+                </div>
+              </div>
+              <div className="flex gap-2 mt-3">
+                <ActionBtn onClick={() => del(c)} icon={Trash2} label="Delete club" tone="danger" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Admins tab ────────────────────────────────────────────────────────────────
+
+function AdminsTab({ me, flash }: { me: Me; flash: (m: string) => void }) {
+  const [admins, setAdmins] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [promoteName, setPromoteName] = useState("");
+  const [promoting, setPromoting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    apiFetch<AdminUser[]>("/api/admin/users?filter=admins")
+      .then(setAdmins)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function promote(e: React.FormEvent) {
+    e.preventDefault();
+    const username = promoteName.trim().replace(/^@/, "");
+    if (!username) return;
+    setPromoting(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/admin/users/${username}/promote`, { method: "POST" });
+      flash(`Granted admin access to @${username}`);
+      setPromoteName("");
+      load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to promote user.");
+    } finally {
+      setPromoting(false);
+    }
+  }
+
+  async function demote(u: AdminUser) {
+    if (!window.confirm(`Remove admin access from @${u.username}?`)) return;
+    try {
+      await apiFetch(`/api/admin/users/${u.username}/demote`, { method: "POST" });
+      flash(`Removed admin access from @${u.username}`);
+      load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed.");
+    }
+  }
+
+  return (
+    <div>
+      <form onSubmit={promote} className="bg-surface rounded-2xl shadow-sm p-4 mb-3">
+        <label className="text-xs font-semibold text-on-surface-variant">Grant admin access</label>
+        <div className="flex gap-2 mt-1.5">
+          <input
+            value={promoteName}
+            onChange={(e) => setPromoteName(e.target.value)}
+            placeholder="username"
+            className="flex-1 h-10 px-3 text-sm rounded-xl bg-surface-container-low text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <button
+            type="submit"
+            disabled={promoting || !promoteName.trim()}
+            className="px-4 h-10 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 transition-all"
+          >
+            Grant
+          </button>
+        </div>
+        {error && <p className="text-xs text-error mt-1.5">{error}</p>}
+      </form>
+
+      {loading ? <Loading /> : admins.length === 0 ? <Empty label="No admins found." /> : (
+        <div className="space-y-2">
+          {admins.map((u) => (
+            <div key={u.username} className="bg-surface rounded-2xl shadow-sm p-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm text-on-surface truncate">{u.display_name}</span>
+                  {u.username === me.username && <Badge className="bg-surface-container text-on-surface-variant">you</Badge>}
+                </div>
+                <div className="text-xs text-on-surface-variant truncate">@{u.username} · {u.email}</div>
+              </div>
+              {u.username !== me.username && (
+                <ActionBtn onClick={() => demote(u)} icon={ShieldMinus} label="Revoke" tone="danger" />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Audit log tab ─────────────────────────────────────────────────────────────
+
+const ACTION_LABELS: Record<string, string> = {
+  verify_user: "verified",
+  ban_user: "banned",
+  unban_user: "unbanned",
+  delete_user: "deleted",
+  promote_admin: "granted admin to",
+  demote_admin: "revoked admin from",
+  dismiss_report: "dismissed report on",
+  delete_post: "deleted post",
+  delete_club: "deleted club",
+  bootstrap_admin: "bootstrapped admin",
+};
+
+function LogTab() {
+  const [actions, setActions] = useState<AdminAction[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiFetch<AdminAction[]>("/api/admin/actions")
+      .then(setActions)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <Loading />;
+  if (actions.length === 0) return <Empty label="No admin actions yet." />;
+
+  return (
+    <div className="space-y-2">
+      {actions.map((a) => (
+        <div key={a.id} className="bg-surface rounded-2xl shadow-sm p-3.5">
+          <p className="text-sm text-on-surface">
+            <span className="font-semibold">@{a.actor_username}</span>{" "}
+            {ACTION_LABELS[a.action] ?? a.action}{" "}
+            <span className="font-medium">{a.target_label}</span>
+          </p>
+          {a.detail && (
+            <p className="text-xs text-on-surface-variant mt-1 px-2.5 py-1.5 bg-surface-container-low rounded-lg whitespace-pre-wrap break-words">
+              {a.detail}
+            </p>
+          )}
+          <p className="text-[11px] text-on-surface-variant mt-1">{timeAgo(a.created_at)}</p>
+        </div>
+      ))}
     </div>
   );
 }
