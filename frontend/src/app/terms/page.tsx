@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: "Terms of Use for UniThread",
 };
 
-const EFFECTIVE_DATE = "July 5, 2026";
+const EFFECTIVE_DATE = "August 10, 2026";
 const CONTACT_EMAIL = "contact@unithread.app";
 
 export default function TermsPage() {
@@ -29,19 +29,20 @@ export default function TermsPage() {
 
           <p>
             These Terms of Use ("Terms") govern your access to and use of UniThread (the
-            "Service"), operated by Belmir Grahic ("we," "us," "the operator"). By creating an
-            account or otherwise using the Service, you agree to these Terms. If you do not
-            agree, do not use the Service.
+            "Service"), provided as a service by Belmir Grahic ("we," "us," "the operator"). By
+            creating an account or otherwise using the Service, you agree to these Terms. If you do
+            not agree, do not use the Service.
           </p>
 
           <Section title="1. Not an official IUS service">
             <p>
-              UniThread is an independent student project. It is <strong>not owned, operated,
-              endorsed, or officially affiliated with International University of Sarajevo
-              (IUS)</strong>. We use an IUS student email address only as an eligibility check to
-              keep the community campus-only. UniThread is not a channel for official university
-              communications, grades, enrollment, or administrative matters, and the university is
-              not responsible for the Service or its content.
+              UniThread is an independent project, provided as a service to the IUS student
+              community. It is <strong>not owned, operated, endorsed, or officially affiliated with
+              International University of Sarajevo (IUS)</strong>. We use an IUS student email
+              address only as an eligibility check to keep the community campus-only. UniThread is
+              not a channel for official university communications, grades, enrollment, or
+              administrative matters, and the university is not responsible for the Service or its
+              content.
             </p>
           </Section>
 
@@ -51,11 +52,16 @@ export default function TermsPage() {
                 You must register with a valid university email address ending in the domain(s)
                 currently accepted by the Service (by default, <code>@student.ius.edu.ba</code>).
               </li>
-              <li>You must be at least 18 years old, or the age of legal majority in your jurisdiction.</li>
+              <li>You must be at least 18 years old, or the age of legal majority in your jurisdiction, whichever is higher.</li>
               <li>You may maintain only one account and may not register on behalf of someone else.</li>
               <li>
                 Account eligibility may occasionally be widened temporarily for beta testing with
                 a limited set of testers; this does not change any other part of these Terms.
+              </li>
+              <li>
+                You confirm that you are not located in, or a resident of, a country subject to a
+                comprehensive trade embargo, and are not on any government list of prohibited or
+                restricted parties.
               </li>
             </ul>
           </Section>
@@ -65,15 +71,15 @@ export default function TermsPage() {
               You're responsible for the accuracy of the information you provide, for keeping your
               password confidential, and for all activity under your account. Tell us promptly at{" "}
               <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary underline">{CONTACT_EMAIL}</a>{" "}
-              if you suspect unauthorized access. You may delete your account at any time from your
-              profile settings.
+              if you suspect unauthorized access. You may delete your account at any time, from
+              within the app, in your profile settings.
             </p>
           </Section>
 
           <Section title="4. Content you post">
             <p>
-              You retain ownership of the posts, comments, messages, photos, and files you submit
-              ("User Content"). By posting, you grant us a limited, non-exclusive license to
+              You retain ownership of the posts, comments, messages, photos, videos, and files you
+              submit ("User Content"). By posting, you grant us a limited, non-exclusive license to
               store, display, and distribute that content within the Service, solely to operate
               the Service (for example, showing your post in the feed or a club chat). This
               license ends when you delete the content or your account, except for copies that may
@@ -159,10 +165,12 @@ export default function TermsPage() {
 
           <Section title="10. Disclaimers">
             <p>
-              The Service is a student project provided on an "as is" and "as available" basis,
-              without warranties of any kind, express or implied, including uninterrupted
-              availability, fitness for a particular purpose, or that it will be error-free. We
-              make reasonable efforts to keep it secure and available but cannot guarantee it.
+              The Service is provided on an "as is" and "as available" basis, without warranties of
+              any kind, express or implied, including uninterrupted availability, fitness for a
+              particular purpose, or that it will be error-free. We make reasonable efforts to keep
+              it secure and available but cannot guarantee it. We assume no responsibility for
+              maintenance or support beyond our reasonable efforts, to the extent permitted by
+              applicable law.
             </p>
           </Section>
 
@@ -173,37 +181,57 @@ export default function TermsPage() {
               Service, or for content posted by other users. Our total liability for any claim
               arising from the Service is limited to the greater of the amount you paid us in the
               past 12 months (which, as this is a free service, is expected to be zero) or a
-              nominal amount required by applicable law.
+              nominal amount required by applicable law. Nothing in these Terms limits any liability
+              that cannot be limited under applicable law, or affects the mandatory statutory rights
+              of consumers in your jurisdiction.
             </p>
           </Section>
 
           <Section title="12. Termination">
             <p>
-              You may stop using the Service and delete your account at any time. We may suspend
-              or terminate your access if you violate these Terms. Sections that by their nature
-              should survive termination (content license limits, disclaimers, liability limits)
-              continue to apply.
+              You may stop using the Service and delete your account at any time, from within the
+              app. We may suspend or terminate your access if you violate these Terms. Sections
+              that by their nature should survive termination (content license limits, disclaimers,
+              liability limits) continue to apply.
             </p>
           </Section>
 
-          <Section title="13. Changes to these Terms">
+          <Section title="13. App store distribution">
+            <p>
+              If you obtained the Service through Apple's App Store or the Google Play Store, you
+              acknowledge that the relevant store operator is not a party to these Terms and has no
+              obligation to provide support or maintenance for the Service. In the event of a
+              failure of the Service to conform to any warranty, you may notify the store operator,
+              who may (subject to its own policies) refund the purchase price — as this is a free
+              Service, no purchase price applies. The store operator is not responsible for
+              addressing any claims relating to the Service, including product liability claims,
+              claims that the Service fails to conform to legal or regulatory requirements, or
+              claims under consumer protection law. The store operator, and its subsidiaries, are
+              third-party beneficiaries of these Terms, and upon your acceptance will have the right
+              to enforce them against you.
+            </p>
+          </Section>
+
+          <Section title="14. Changes to these Terms">
             <p>
               We may update these Terms as the Service evolves. If we make a material change,
               we'll make reasonable efforts to let active users know (for example, an in-app
-              notice). Continued use after a change takes effect means you accept the updated
-              Terms.
+              notice) before the change takes effect. Continued use after a change takes effect
+              means you accept the updated Terms.
             </p>
           </Section>
 
-          <Section title="14. Governing law">
+          <Section title="15. Governing law">
             <p>
               These Terms are governed by the laws of Bosnia and Herzegovina, without regard to
               conflict-of-law principles. Any dispute will first be attempted to be resolved
-              informally by contacting us directly.
+              informally by contacting us directly. If you are a consumer resident in the European
+              Union or another jurisdiction with mandatory consumer-protection law, this section
+              does not deprive you of the protection of those mandatory rules.
             </p>
           </Section>
 
-          <Section title="15. Contact">
+          <Section title="16. Contact">
             <p>
               Questions about these Terms: <a href={`mailto:${CONTACT_EMAIL}`} className="text-primary underline">{CONTACT_EMAIL}</a>.
             </p>
