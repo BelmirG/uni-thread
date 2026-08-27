@@ -1,0 +1,108 @@
+name: Nightly media backup
+
+# The database dump captures every row but no uploaded file — images, video and
+# attachments live on a mounted volume. Without this, a restore would bring back
+# every post with its media broken.
+#
+# Uploaded files are UUID-named and never modified in place, so this is add-only:
+# it transfers what the bucket does not already hold and leaves everything else
+# alone. The first run copies everything; later runs copy only that day's uploads.
+#
+# Deletions are deliberately NOT mirrored. A backup that forgets a file as soon
+# as production does is not a backup — it would propagate an accidental deletion
+# straight into the only copy that could undo it.
+
+on:
+  schedule:
+    - cron: "30 2 * * *"  # 30 min after the database dump, so both reflect ~the same moment
+  workflow_dispatch:
+
+jobs:
+  media-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync media to R2
+        env:
+          API_BASE: ${{ secrets.PROD_API_BASE_URL }}
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          BUCKET: s3://unithread-backups
+        run: |
+          set -euo pipefail
+
+          echo "==> Fetching media manifest"
+          curl -sS --fail-with-body -H "x-admin-key: $ADMIN_KEY" \
+            "$API_BASE/api/admin/media/manifest" -o manifest.json
+
+          TOTAL=$(jq -r '.count' manifest.json)
+          BYTES=$(jq -r '.total_bytes' manifest.json)
+          echo "    server holds $TOTAL files, $(numfmt --to=iec "$BYTES")"
+
+          echo "==> Listing what the bucket already has"
+          # Keys look like media/<kind>/<name>; strip the prefix to compare.
+          aws s3 ls "$BUCKET/media/" --recursive --endpoint-url "$R2_ENDPOINT" \
+            | awk '{print $4}' | sed 's|^media/||' | sort > have.txt || true
+          echo "    bucket holds $(wc -l < have.txt) files"
+
+          jq -r '.files[] | "\(.kind)/\(.name)"' manifest.json | sort > want.txt
+          comm -23 want.txt have.txt > missing.txt
+          MISSING=$(wc -l < missing.txt)
+          echo "==> $MISSING file(s) to transfer"
+
+          if [ "$MISSING" -eq 0 ]; then
+            echo "Bucket is already up to date."
+            exit 0
+          fi
+
+          mkdir -p staging
+          FAILED=0
+          while IFS= read -r key; do
+            [ -z "$key" ] && continue
+            kind="${key%%/*}"
+            name="${key#*/}"
+            mkdir -p "staging/$kind"
+
+            if ! curl -sS --fail-with-body -H "x-admin-key: $ADMIN_KEY" \
+                 "$API_BASE/api/admin/media/file/$kind/$name" \
+                 -o "staging/$key"; then
+              echo "::warning::Download failed: $key"
+              FAILED=$((FAILED + 1))
+              rm -f "staging/$key"
+              continue
+            fi
+
+            # Verify against the manifest — a truncated transfer must not be
+            # uploaded, or the bucket would hold a corrupt file forever and this
+            # add-only sync would never revisit it.
+            want_size=$(jq -r --arg k "$kind" --arg n "$name" \
+              '.files[] | select(.kind==$k and .name==$n) | .size' manifest.json)
+            got_size=$(stat -c%s "staging/$key")
+            if [ "$want_size" != "$got_size" ]; then
+              echo "::warning::Size mismatch for $key (expected $want_size, got $got_size)"
+              FAILED=$((FAILED + 1))
+              rm -f "staging/$key"
+            fi
+          done < missing.txt
+
+          UPLOADABLE=$(find staging -type f | wc -l)
+          echo "==> Uploading $UPLOADABLE verified file(s)"
+          if [ "$UPLOADABLE" -gt 0 ]; then
+            aws s3 cp staging/ "$BUCKET/media/" --recursive \
+              --endpoint-url "$R2_ENDPOINT"
+          fi
+
+          {
+            echo "### Media backup"
+            echo ""
+            echo "- Files on server: $TOTAL ($(numfmt --to=iec "$BYTES"))"
+            echo "- Transferred this run: $UPLOADABLE"
+            echo "- Failed: $FAILED"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$FAILED" -gt 0 ]; then
+            echo "::error::$FAILED file(s) could not be backed up — they will be retried tomorrow."
+            exit 1
+          fi
