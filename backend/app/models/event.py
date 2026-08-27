@@ -11,9 +11,7 @@ RSVP_STATUSES = ("going", "interested")
 
 
 class EventRSVP(Base):
-    """One member's answer to a club event. The composite PK means a second
-    "going" is a no-op rather than a duplicate, and switching to "interested"
-    updates the same row — so counts can never double-count a person."""
+    """One member's answer to a club event."""
 
     __tablename__ = "event_rsvps"
 

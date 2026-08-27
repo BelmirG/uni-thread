@@ -1,7 +1,3 @@
-// All paths are relative (e.g. "/api/auth/login").
-// Next.js rewrites them to the backend — see next.config.js.
-// credentials: "include" tells the browser to send the httpOnly cookie
-// on every request, even though it can't read the cookie itself.
 
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -19,9 +15,6 @@ export async function apiFetch<T>(
     res = await fetch(path, {
       ...options,
       credentials: "include",
-      // Abort after 20s instead of hanging forever. Without this, a request
-      // cut off mid-flight (e.g. iOS suspending the home-screen app) never
-      // settles, leaving buttons stuck on "Posting…" until a force-quit.
       signal:
         options?.signal ??
         (typeof AbortSignal !== "undefined" && "timeout" in AbortSignal

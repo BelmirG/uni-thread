@@ -22,7 +22,6 @@ import {
   LogOut, X, Check, Camera, Lock, Bookmark, Trash2, Settings2, Ban,
 } from "lucide-react";
 
-// Pop-up preference categories — keys match the backend's NOTIFICATION_CATEGORIES.
 const NOTIF_CATEGORIES: [string, string][] = [
   ["mentions", "Mentions"],
   ["replies", "Replies"],
@@ -48,8 +47,6 @@ interface Profile {
   following_count: number;
   is_following: boolean;
   is_own_profile: boolean;
-  // True only when *you* blocked them: the profile stays reachable so you can
-  // undo it, but comes back emptied. Someone who blocked you 404s instead.
   is_blocked: boolean;
   username_changed_at: string | null;
 }
@@ -127,7 +124,6 @@ function notifHref(n: FollowNotif): string | null {
   return null;
 }
 
-// The sentence after the actor's name (or the whole sentence for system notifications).
 function notifText(n: FollowNotif): string {
   const club = n.reference_club_name ?? "your club";
   if (n.type === "mention") return " mentioned you in a post";
@@ -223,8 +219,6 @@ export default function ProfilePage() {
   const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean> | null>(null);
   const [pushState, setPushState] = useState<PushState | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
-  // iOS Safari only exposes Web Push inside a Home Screen app, so when push is
-  // "unsupported" on an iPhone the real fix is installing the app first.
   const isIOS =
     typeof navigator !== "undefined" && /iPhone|iPad|iPod/.test(navigator.userAgent);
 
@@ -255,7 +249,6 @@ export default function ProfilePage() {
 
   function toggleNotifPref(key: string) {
     const next = !(notifPrefs?.[key] ?? true);
-    // Optimistic flip; server response is authoritative, errors roll back.
     setNotifPrefs((prev) => ({ ...(prev ?? {}), [key]: next }));
     apiFetch<Record<string, boolean>>("/api/users/me/notification-prefs", {
       method: "PUT",
@@ -265,7 +258,6 @@ export default function ProfilePage() {
       .catch(() => setNotifPrefs((prev) => ({ ...(prev ?? {}), [key]: !next })));
   }
 
-  // Reopening the bell should always start on the notification list, not settings.
   useEffect(() => {
     if (!notifOpen) setPrefsOpen(false);
   }, [notifOpen]);
@@ -275,8 +267,6 @@ export default function ProfilePage() {
   const [tab, setTab] = useState<"posts" | "clubs">("posts");
 
   useEffect(() => {
-    // Render a cached snapshot instantly (no skeleton) when we have one; the
-    // fetch below still runs and silently brings the page up to date.
     const cached = getProfileCache<Profile, Post, UserClub>(username);
     if (cached) {
       setProfile(cached.profile);
@@ -288,9 +278,6 @@ export default function ProfilePage() {
     }
     Promise.all([
       apiFetch<Profile>(`/api/users/${username}`),
-      // Posts and clubs 404 for a blocked pair while the profile itself still
-      // loads (so you can unblock from here). Empty is the right fallback —
-      // only a failure on the profile call should bounce you off the page.
       apiFetch<Post[]>(`/api/users/${username}/posts`).catch(() => [] as Post[]),
       apiFetch<UserClub[]>(`/api/users/${username}/clubs`).catch(() => [] as UserClub[]),
     ])
@@ -446,8 +433,6 @@ export default function ProfilePage() {
         username_changed_at: updated.username_changed_at,
       } : prev);
       setEditing(false);
-      // Snapshots of this profile (and, after a rename, the old username's)
-      // are stale now — drop them so the next visit refetches.
       clearProfileCache(username);
       clearProfileCache(updated.username);
       if (updated.username_changed) router.replace(`/profile/${updated.username}`);
@@ -460,7 +445,6 @@ export default function ProfilePage() {
 
   async function handleLogout() {
     await apiFetch("/api/auth/logout", { method: "POST" });
-    // In-memory page snapshots must not leak into whoever signs in next.
     clearAllPageCaches();
     router.replace("/login");
   }
@@ -496,7 +480,6 @@ export default function ProfilePage() {
     if (!profile || followLoading) return;
     setFollowLoading(true);
     const wasFollowing = profile.is_following;
-    // Optimistic flip — the button should respond to the tap, not the network.
     setProfile((prev) => prev ? {
       ...prev,
       is_following: !wasFollowing,
@@ -541,8 +524,6 @@ export default function ProfilePage() {
     try {
       await apiFetch(`/api/users/${profile.username}/block`, { method: "POST" });
       clearProfileCache(profile.username);
-      // Blocking severs the follow both ways server-side; mirror that here so
-      // the header doesn't keep claiming you follow someone you just blocked.
       setProfile((prev) => prev ? { ...prev, is_blocked: true, is_following: false } : prev);
       setPosts([]);
       setClubs([]);
@@ -561,7 +542,6 @@ export default function ProfilePage() {
       await apiFetch(`/api/users/${name}/block`, { method: "DELETE" });
       clearProfileCache(name);
       setBlockedList((prev) => prev?.filter((u) => u.username !== name) ?? null);
-      // Reload so the now-visible posts, clubs, and counts come back.
       if (profile?.username === name) window.location.reload();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Could not unblock this user.");
@@ -597,8 +577,6 @@ export default function ProfilePage() {
 
   function openBell() {
     setNotifOpen(true);
-    // Refetch on open — notifications that arrived after page load (especially
-    // muted ones, which have no toast to announce them) must still show up.
     Promise.all([
       apiFetch<Invitation[]>("/api/clubs/invitations/me"),
       apiFetch<{ total: number; notifications: FollowNotif[] }>("/api/notifications"),
@@ -609,7 +587,6 @@ export default function ProfilePage() {
         apiFetch("/api/notifications/mark-read", { method: "POST" })
           .then(() => {
             setFollowNotifs((prev) => prev.map((n) => ({ ...n, is_read: true })));
-            // Clear the red dot on the nav bar's Profile tab immediately.
             window.dispatchEvent(new Event("notifs-read"));
           })
           .catch(() => {});
@@ -662,7 +639,6 @@ export default function ProfilePage() {
               <p className="text-[11px] text-muted-foreground">Joined {memberSince(profile.member_since)}</p>
             </div>
 
-            {/* Notification bell + theme switch — own profile only */}
             {profile.is_own_profile && (
               <div className="flex flex-col items-center gap-1 flex-shrink-0">
               <div className="relative">
@@ -783,7 +759,6 @@ export default function ProfilePage() {
                                 {n.actor_display_name ? (
                                   <MiniAvatar name={n.actor_display_name} url={n.actor_avatar_url} size={34} />
                                 ) : (
-                                  // System notification (milestone / anonymous answer) — no actor to show.
                                   <span className="w-[34px] h-[34px] rounded-full bg-muted flex items-center justify-center flex-shrink-0">
                                     {n.type.startsWith("milestone_")
                                       ? <ChevronUp className="w-4 h-4 text-secondary" />
@@ -1036,7 +1011,6 @@ export default function ProfilePage() {
               </Button>
             </form>
 
-            {/* Danger zone — permanent account deletion */}
             <div className="mt-5 pt-4 border-t border-destructive/20">
               {!deleteOpen ? (
                 <button
@@ -1081,8 +1055,6 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Blocked: the profile stays reachable purely so you can undo it, so
-            everything below the header is replaced by the explanation. */}
         {profile.is_blocked && (
           <div className="bg-surface border border-outline-variant rounded-2xl px-5 py-8 text-center">
             <p className="font-semibold text-foreground mb-1">You blocked @{profile.username}</p>
@@ -1093,7 +1065,6 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Section switcher — Posts / Clubs */}
         {!profile.is_blocked && (
         <div className="flex gap-1 p-1 bg-surface-container-low border border-outline-variant rounded-full mb-4">
           {([

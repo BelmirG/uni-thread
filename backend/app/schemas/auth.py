@@ -13,8 +13,6 @@ class RegisterRequest(BaseModel):
         description="Letters, numbers, and underscores only.",
     )
     display_name: str = Field(min_length=1, max_length=100)
-    # bcrypt silently truncates or errors above 72 bytes — cap it here so the
-    # user gets a clear message rather than a 500.
     password: str = Field(min_length=8, max_length=72)
 
 

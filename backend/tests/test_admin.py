@@ -1,11 +1,4 @@
-"""Admin panel access-control tests.
-
-The admin panel used to be gated by one shared secret (ADMIN_KEY) with no
-notion of who was behind it. Every mutating action is now tied to a real
-account (User.is_admin) and written to admin_actions, so these tests pin
-down the two things that actually matter: non-admins are locked out, and
-every action leaves a trail attributing it to the acting admin.
-"""
+"""Admin panel access-control tests."""
 from app.config import settings
 from app.models.admin_action import AdminAction
 from sqlalchemy import select
@@ -54,7 +47,6 @@ async def test_promote_and_demote_round_trip(client_for, make_user):
     admin_c = client_for(admin)
 
     assert (await admin_c.post(f"/api/admin/users/{promotee.username}/promote")).status_code == 200
-    # The newly promoted account can now use admin endpoints itself.
     assert (await client_for(promotee).get("/api/admin/users")).status_code == 200
 
     assert (await admin_c.post(f"/api/admin/users/{promotee.username}/demote")).status_code == 200

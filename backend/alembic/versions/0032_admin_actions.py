@@ -1,15 +1,4 @@
-"""Admin action audit log.
-
-admin_actions — one row per moderation action taken through the admin panel
-(ban, unban, delete, verify, promote/demote another admin, etc). actor_id is
-nullable with ondelete=SET NULL, and actor_username is a denormalized
-snapshot taken at write time, so the trail survives the actor's account
-being deleted later — the whole point of an audit log is that it outlives
-the thing it's auditing.
-
-Revision ID: 0032
-Revises: 0031
-"""
+"""Admin action audit log."""
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID

@@ -1,19 +1,3 @@
-#!/usr/bin/env bash
-#
-# Restores a production dump into a throwaway PostgreSQL 18 container so you can
-# verify the backup works — and then browse the restored data in psql or a GUI
-# client before throwing it away.
-#
-# Usage:
-#   ./scripts/restore-drill.sh ~/Downloads/unithread-2026-08-10.dump
-#
-# Get a dump from the Cloudflare dashboard: R2 > unithread-backups > download
-# the newest object. (Or run the "Backup restore drill" GitHub Action, which
-# does all of this automatically and needs no local credentials.)
-#
-# SAFETY: this only ever touches its own container (see CONTAINER below) on its
-# own port. It never connects to the docker-compose stack, and never touches the
-# iusconnect development database.
 
 set -euo pipefail
 
@@ -49,8 +33,6 @@ cleanup_existing() {
 cleanup_existing
 
 echo "==> Starting throwaway PostgreSQL 18 on port ${PORT}"
-# 18 matches production; pg_restore must be at least as new as the server that
-# produced the dump.
 docker run -d --name "$CONTAINER" \
   -e POSTGRES_PASSWORD="$PASSWORD" \
   -e POSTGRES_DB="$DB" \
@@ -75,8 +57,6 @@ done
 
 echo "==> Restoring"
 docker cp "$DUMP" "${CONTAINER}:/tmp/restore.dump"
-# --exit-on-error so a partial restore is a failure. Without it pg_restore
-# prints errors and still exits 0, and a half-broken backup would "pass".
 docker exec "$CONTAINER" pg_restore \
   --username=postgres --dbname="$DB" \
   --no-owner --no-privileges --exit-on-error \

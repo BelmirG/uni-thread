@@ -1,9 +1,4 @@
-"""Add is_pinned to posts
-
-Revision ID: 0007
-Revises: 0006
-Create Date: 2026-06-28
-"""
+"""Add is_pinned to posts."""
 
 from alembic import op
 import sqlalchemy as sa

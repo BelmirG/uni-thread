@@ -3,14 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 
-// Pull-to-refresh for the installed home-screen app. Safari's own gesture
-// covers the in-browser case, but a standalone PWA has no address bar and no
-// native way to reload — so without this there is literally no way to refresh
-// stale data (or pick up a new deploy) short of force-quitting the app.
-//
-// Reloading the page (rather than re-fetching in place) is deliberate: it
-// matches what the native gesture does, resets every page's in-memory cache,
-// and reconnects WebSockets that iOS silently killed in the background.
 
 const THRESHOLD = 70; // px of (eased) pull that arms the refresh
 const MAX_PULL = 110; // indicator stops following the finger past this
@@ -29,8 +21,6 @@ export default function PullToRefresh() {
     if (!standalone) return;
     setEnabled(true);
 
-    // Chat and other panes scroll inside their own container — a pull that a
-    // scrollable ancestor can consume must never trigger a page reload.
     function insideScrollable(el: Element | null): boolean {
       while (el && el !== document.body) {
         const style = window.getComputedStyle(el);
@@ -54,7 +44,6 @@ export default function PullToRefresh() {
         setPull(0);
         return;
       }
-      // Follow the finger with resistance, like the native gesture.
       const eased = Math.min(MAX_PULL, delta * 0.45);
       pullRef.current = eased;
       setPull(eased);

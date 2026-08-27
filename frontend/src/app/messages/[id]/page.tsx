@@ -15,7 +15,6 @@ import MiniAvatar from "@/components/MiniAvatar";
 import { Linkify } from "@/lib/linkify";
 
 const IUS_BLUE = "#3865a6";
-// Own-message bubble: a soft vertical gradient reads richer than a flat fill.
 const OWN_BUBBLE_BG = "linear-gradient(135deg, #4a7cc0 0%, #3865a6 100%)";
 
 interface Author {
@@ -56,8 +55,6 @@ interface DmMessage {
   shared_post: SharedPost | null;
   sender: Author;
   created_at: string;
-  // Optimistic-send bookkeeping (client-side only; client_id also arrives on
-  // the server echo so the pending bubble can be swapped for the real message).
   client_id?: string;
   pending?: boolean;
   failed?: boolean;
@@ -193,11 +190,8 @@ function SwipeableMessage({
   const onSwipeRef = useRef(onSwipe);
   const [offset, setOffset] = useState(0);
 
-  // Only your own, server-confirmed messages can be selected for deletion.
   const selectable = isOwn && !msg.pending && !msg.failed;
 
-  // The touch handlers below are bound once, so anything they need at
-  // event-time lives in refs.
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = useRef(false);
   const selectModeRef = useRef(selectMode);
@@ -227,7 +221,6 @@ function SwipeableMessage({
       longPressFired.current = false;
       offsetRef.current = 0;
       setOffset(0);
-      // Press-and-hold on your own message enters selection mode.
       if (!selectModeRef.current && selectableRef.current) {
         holdTimer.current = setTimeout(() => {
           holdTimer.current = null;
@@ -288,13 +281,9 @@ function SwipeableMessage({
         selectMode && !selectable && "opacity-40",
         selectMode && selectable && "cursor-pointer"
       )}
-      // Suppress the iOS long-press callout so press-and-hold reliably enters
-      // selection mode instead of the system menu.
       style={{ WebkitTouchCallout: "none" }}
       onMouseEnter={onHoverEnter}
       onMouseLeave={onHoverLeave}
-      // In selection mode a tap anywhere on the row toggles it — capture phase
-      // so inner links/images/buttons don't fire instead.
       onClickCapture={selectMode ? (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -371,8 +360,6 @@ function SwipeableMessage({
           <CornerUpLeft className="w-3.5 h-3.5" />
         </button>
       )}
-      {/* Selection circle — last flex child, so on own (row-reversed) rows it
-          sits at the far left edge, WhatsApp-style. */}
       {selectMode && selectable && (
         <span
           className={cn(
@@ -526,19 +513,9 @@ export default function ConversationPage() {
   const lastTailIdRef = useRef<string | null>(null);
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
-  // Scroll ONLY the message list, never the window: scrollIntoView also
-  // scrolls every scrollable ancestor, and with the iOS keyboard open that
-  // pans the whole page, leaving the composer stranded off-screen after send.
-  //
-  // Layout effect + instant jump on open: the chat must *appear* already at
-  // the bottom, not visibly slide there. After that, own sends snap down;
-  // incoming messages only pull the list if the reader is already near the
-  // bottom — never yank someone out of scrolled-up history.
   useLayoutEffect(() => {
     const el = listRef.current;
     if (!el || messages.length === 0) return;
-    // An older page was just prepended: restore the reader's exact position
-    // (anchored to the bottom edge) so history loads without any visual jump.
     if (prependHeightRef.current !== null) {
       el.scrollTop = el.scrollHeight - prependHeightRef.current;
       prependHeightRef.current = null;
@@ -551,8 +528,6 @@ export default function ConversationPage() {
       return;
     }
     const last = messages[messages.length - 1];
-    // Snap on own sends only when the tail actually changed — deleting
-    // messages mid-history must not yank the reader to the bottom.
     const isNewTail = last.id !== lastTailIdRef.current;
     lastTailIdRef.current = last.id;
     const ownJustSent = isNewTail && !!(meRef.current && last.sender.username === meRef.current.username);
@@ -560,8 +535,6 @@ export default function ConversationPage() {
     else if (nearBottomRef.current) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, otherTyping]);
 
-  // Scroll-up pagination: fetch the 50 messages before the oldest one on
-  // screen and prepend them, keeping the viewport visually anchored.
   async function loadOlder() {
     if (loadingOlderRef.current || !hasMoreRef.current) return;
     const oldest = messagesRef.current.find((m) => !m.pending && !m.failed);
@@ -587,19 +560,10 @@ export default function ConversationPage() {
     }
   }
 
-  // Merge fresh server history with what's already on screen. Two things must
-  // survive the merge:
-  //  1. Pending/failed bubbles still in flight (unless the history proves they
-  //     were delivered — then drop them instead of duplicating).
-  //  2. Confirmed messages that arrived over the socket while the fetch was
-  //     running — they're newer than the fetched history, and replacing state
-  //     with the bare server list would make them vanish from the screen.
   function mergeWithPending(server: DmMessage[], prev: DmMessage[]): DmMessage[] {
     const serverIds = new Set(server.map((s) => s.id));
     const newestServer = server.length ? server[server.length - 1].created_at : "";
     const oldestServer = server.length ? server[0].created_at : "";
-    // Older pages the reader already scrolled back to stay loaded — a refetch
-    // only covers the newest window and must not wipe paged-in history.
     const olderPrefix = prev.filter((m) =>
       !m.pending && !m.failed && !serverIds.has(m.id) && oldestServer && m.created_at < oldestServer
     );
@@ -619,7 +583,6 @@ export default function ConversationPage() {
 
   function handleIncoming(data: unknown) {
     const evt = data as { event?: string; username?: string; ids?: string[] };
-    // Someone deleted messages — drop those bubbles live on both sides.
     if (evt.event === "messages_deleted") {
       const gone = new Set(evt.ids ?? []);
       if (gone.size) {
@@ -631,7 +594,6 @@ export default function ConversationPage() {
       }
       return;
     }
-    // Ephemeral typing signal — show the indicator briefly, don't store anything.
     if (evt.event === "typing") {
       if (evt.username === otherUsernameRef.current) {
         setOtherTyping(true);
@@ -641,7 +603,6 @@ export default function ConversationPage() {
       return;
     }
     const msg = data as DmMessage;
-    // A real message replaces the "typing…" bubble instantly.
     if (msg.sender.username === otherUsernameRef.current) {
       setOtherTyping(false);
       if (typingClearRef.current) clearTimeout(typingClearRef.current);
@@ -653,7 +614,6 @@ export default function ConversationPage() {
       pendingPayloadsRef.current.delete(msg.client_id);
     }
     setMessages((prev) => {
-      // Our own echo: swap the optimistic bubble for the confirmed message.
       if (msg.client_id) {
         const idx = prev.findIndex((m) => m.client_id === msg.client_id && (m.pending || m.failed));
         if (idx >= 0) {
@@ -674,8 +634,6 @@ export default function ConversationPage() {
   useEffect(() => {
     let cancelled = false;
 
-    // Cached snapshot paints the conversation instantly; the fetch below still
-    // runs and silently brings it up to date.
     const cached = getDmCache<DmSnapshot>(id);
     if (cached) {
       setMessages(cached.messages);
@@ -698,7 +656,6 @@ export default function ConversationPage() {
         setOtherUser(conv.other_user);
         setCurrentUsername(me.username);
         setIsMuted(conv.is_muted);
-        // A full first page means there may be older history to page into.
         if (conv.messages.length >= 50) hasMoreRef.current = true;
         else if (messagesRef.current.length <= conv.messages.length) hasMoreRef.current = false;
         setMessages((prev) => mergeWithPending(conv.messages, prev));
@@ -710,26 +667,18 @@ export default function ConversationPage() {
       }
     }
 
-    // Socket and history load in parallel — the handshake shouldn't wait for
-    // the REST fetch. If access is denied, both fail consistently (the socket
-    // gets a 4xxx close, the fetch redirects away).
     wsRef.current = openChatSocket(`/api/messages/${id}/ws`, {
       onStatus: (s) => { if (!cancelled) setStatus(s); },
       onMessage: (data) => { if (!cancelled) handleIncomingRef.current(data); },
-      // The socket was down for a while — refetch to fill in anything missed.
       onReconnect: () => { fetchConversation(); },
     });
     fetchConversation();
     return () => { cancelled = true; wsRef.current?.close(); wsRef.current = null; };
   }, [id, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep the snapshot cache fresh so coming back to this chat is instant.
-  // In-flight bubbles are excluded — only server-confirmed messages belong.
   useEffect(() => {
     if (!otherUser || !meRef.current || messages.length === 0) return;
     saveDmCache(id, {
-      // Cap at the newest 50 — reopening starts from the same window a fresh
-      // fetch returns; older pages reload on scroll.
       messages: messages.filter((m) => !m.pending && !m.failed).slice(-50),
       otherUser,
       isMuted,
@@ -744,7 +693,6 @@ export default function ConversationPage() {
     if (!el) return;
     const container = listRef.current;
     if (container) {
-      // Container-only scroll (see the auto-scroll effect above for why).
       const cRect = container.getBoundingClientRect();
       const eRect = el.getBoundingClientRect();
       container.scrollTo({
@@ -764,8 +712,6 @@ export default function ConversationPage() {
   }
 
   async function uploadFile(file: File, endpoint: string): Promise<FileAttachment> {
-    // Photos are downscaled on-device first — uploading a full 5 MB camera
-    // shot just for the server to shrink it makes sending feel slow.
     const toSend = endpoint === "/api/upload" ? await compressImage(file) : file;
     const fd = new FormData();
     fd.append("file", toSend);
@@ -803,8 +749,6 @@ export default function ConversationPage() {
 
   function removePending(uid: string) { setPendingAttachments((prev) => prev.filter((a) => a.uid !== uid)); }
 
-  // If the echo hasn't come back after this long, surface a retry instead of
-  // an eternal "Sending…". The outbox usually beats this comfortably.
   function startFailTimer(clientId: string) {
     const timers = pendingTimersRef.current;
     const old = timers.get(clientId);
@@ -841,8 +785,6 @@ export default function ConversationPage() {
     if (content) wsPayload.content = content;
     if (readyAttachments.length > 0) wsPayload.attachments = readyAttachments;
 
-    // The bubble appears instantly; the server echo (matched by client_id)
-    // replaces it. If the socket is down, the outbox delivers on reconnect.
     setMessages((prev) => [...prev, {
       id: clientId,
       client_id: clientId,
@@ -865,8 +807,6 @@ export default function ConversationPage() {
 
   function handleSubmit(e: React.FormEvent) { e.preventDefault(); trySend(); }
 
-  // Tapping send while an attachment is still uploading must never be a
-  // silent no-op: arm an auto-send that fires the moment uploads settle.
   function trySend() {
     if (pendingAttachments.some((a) => a.uploading)) {
       setQueuedSend(true);
@@ -880,18 +820,12 @@ export default function ConversationPage() {
     setQueuedSend(false);
     if (input.trim() || pendingAttachments.some((a) => a.attachment !== null)) send();
   }, [queuedSend, pendingAttachments]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Enter inserts a newline (like every mobile messenger); sending is the
-  // send button's job. No onKeyDown handler needed for that — it's the
-  // textarea's default behavior.
 
-  // Tell the other side we're typing — throttled so a burst of keystrokes
-  // produces at most one signal every 2s (their indicator stays lit for 3s).
   function signalTyping() {
     const now = Date.now();
     if (now - lastTypingSentRef.current < 2000) return;
     if (status !== "connected" || !wsRef.current) return;
     lastTypingSentRef.current = now;
-    // Never queue typing signals — a stale "typing…" after reconnect is noise.
     wsRef.current.send({ event: "typing" }, false);
   }
 
@@ -925,7 +859,6 @@ export default function ConversationPage() {
         method: "POST",
         body: JSON.stringify({ message_ids: Array.from(selectedIds) }),
       });
-      // The WS broadcast also removes them, but don't wait for the round-trip.
       setMessages((prev) => prev.filter((m) => !selectedIds.has(m.id)));
       exitSelectMode();
     } catch (err: unknown) {
@@ -946,16 +879,11 @@ export default function ConversationPage() {
     }
   }
 
-  // Sending works even while reconnecting (the socket outbox delivers on
-  // reconnect) and even mid-upload (trySend queues until uploads settle).
   const canSend = input.trim().length > 0 || pendingAttachments.some((a) => a.uploading || a.attachment !== null);
 
   return (
-    // dvh (not svh): tracks the live viewport, so when the on-screen keyboard
-    // resizes it (interactive-widget=resizes-content) the composer stays visible.
     <main className="flex flex-col bg-background max-w-[700px] w-full mx-auto overflow-hidden" style={{ height: "100dvh" }}>
 
-      {/* Header — glass */}
       <div
         className="glass-bar flex items-center gap-3 px-4 py-3 flex-shrink-0 border-b border-outline-variant/50"
       >
@@ -995,9 +923,6 @@ export default function ConversationPage() {
           ))}
           <div className="min-w-0">
             <p className="font-semibold text-sm text-on-surface truncate leading-tight">{otherUser?.display_name ?? "Conversation"}</p>
-            {/* This is *connection* state, not the other person's presence —
-                so when connected, show their handle instead of a misleading
-                "Online". The socket self-heals, hence "Reconnecting…". */}
             <p className="text-[11px] text-on-surface-variant flex items-center gap-1 leading-tight">
               {status !== "connected" && (
                 <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-yellow-400" />
@@ -1096,7 +1021,6 @@ export default function ConversationPage() {
             msgRef={(el) => { if (el) msgRefs.current.set(msg.id, el); else msgRefs.current.delete(msg.id); }}
           />
         ))}
-        {/* Typing indicator — mirrors a received bubble with pulsing dots */}
         {otherTyping && otherUser && (
           <div className="flex items-end gap-2 mt-1">
             <MiniAvatar name={otherUser.display_name} url={otherUser.avatar_url ?? null} size={26} />
@@ -1152,7 +1076,6 @@ export default function ConversationPage() {
         </div>
       )}
 
-      {/* Input bar — glass */}
       <form
         onSubmit={handleSubmit}
         className="glass-bar flex items-end gap-2.5 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-outline-variant/50 flex-shrink-0"
@@ -1210,7 +1133,6 @@ export default function ConversationPage() {
         </button>
       </form>
 
-      {/* Media sheet — centered modal via portal */}
       {mediaOpen && typeof document !== "undefined" && createPortal(
         (() => {
           const allAttachments = messages.flatMap((m) => m.attachments ?? []);

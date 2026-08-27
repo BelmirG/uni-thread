@@ -1,11 +1,4 @@
-"""Per-club chat mute.
-
-club_members.chat_muted — the member still sees everything in the app; muting
-only stops the browser-push for regular chat messages in that one club.
-
-Revision ID: 0028
-Revises: 0027
-"""
+"""Per-club chat mute."""
 import sqlalchemy as sa
 from alembic import op
 

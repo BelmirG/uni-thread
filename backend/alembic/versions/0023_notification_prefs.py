@@ -1,14 +1,4 @@
-"""Per-category notification pop-up preferences.
-
-Stores the categories a user has muted (e.g. ["milestones", "clubs"]) as a
-JSONB list on users. Muted = the notification is still created and shows in
-the bell, but the live toast is pushed with silent=true so it never pops up.
-Storing the *muted* list (not the enabled list) means any future notification
-category defaults to ON for everyone with no backfill.
-
-Revision ID: 0023
-Revises: 0022
-"""
+"""Per-category notification pop-up preferences."""
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB

@@ -31,7 +31,6 @@ export default function RegisterPage() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Already signed in? Skip the form and go straight to the feed.
   useEffect(() => {
     apiFetch("/api/auth/me")
       .then(() => router.replace("/feed"))

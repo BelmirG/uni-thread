@@ -9,8 +9,7 @@ from app.database import Base
 
 
 class Bookmark(Base):
-    """A user's saved post. One row per (user, post) — the unique constraint makes
-    saving idempotent, and the toggle endpoint deletes the row to un-save."""
+    """A user's saved post."""
 
     __tablename__ = "bookmarks"
     __table_args__ = (UniqueConstraint("user_id", "post_id", name="uq_bookmark_user_post"),)

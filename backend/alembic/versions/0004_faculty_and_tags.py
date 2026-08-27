@@ -1,9 +1,4 @@
-"""Add faculty/program to users and faculty_tag to posts
-
-Revision ID: 0004
-Revises: 0003
-Create Date: 2026-06-28
-"""
+"""Add faculty/program to users and faculty_tag to posts."""
 
 from alembic import op
 import sqlalchemy as sa

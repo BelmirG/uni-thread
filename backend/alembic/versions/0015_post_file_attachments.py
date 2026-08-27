@@ -1,9 +1,4 @@
-"""add file_attachments to posts
-
-Revision ID: 0015
-Revises: 0014
-Create Date: 2026-06-30
-"""
+"""add file_attachments to posts."""
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB

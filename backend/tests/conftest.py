@@ -1,16 +1,8 @@
-"""Test fixtures.
-
-The suite runs inside the backend container (`docker compose exec backend pytest`)
-against a dedicated `iusconnect_test` database — the dev database is never touched.
-Users are created directly in the DB and authenticated by minting a JWT cookie,
-which keeps tests fast and independent of the login rate limiter.
-"""
+"""Test fixtures."""
 import os
 import random
 import uuid
 
-# Point the app at the test database BEFORE any app module is imported —
-# app.config reads DATABASE_URL once at import time.
 _DEV_URL = os.environ["DATABASE_URL"]
 _TEST_URL = _DEV_URL.rsplit("/", 1)[0] + "/iusconnect_test"
 os.environ["DATABASE_URL"] = _TEST_URL
@@ -27,8 +19,6 @@ from app.models.user import User
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def _test_database():
-    # Bootstrap: create iusconnect_test if it doesn't exist yet, connecting
-    # through the dev URL (CREATE DATABASE can't run inside the target DB).
     conn = await asyncpg.connect(dsn=_DEV_URL.replace("postgresql+asyncpg://", "postgresql://"))
     exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = 'iusconnect_test'")
     if not exists:
@@ -72,11 +62,7 @@ async def make_user(db):
 
 @pytest_asyncio.fixture
 async def client_for():
-    """Factory: an API client authenticated as the given user (None = anonymous).
-
-    Each client gets a random fake source IP so repeated runs never accumulate
-    against the Redis rate limiter (which keys on client IP).
-    """
+    """Factory: an API client authenticated as the given user (None = anonymous)."""
     clients: list[httpx.AsyncClient] = []
 
     def _make(user: User | None = None) -> httpx.AsyncClient:

@@ -1,9 +1,4 @@
-"""Add username_changed_at to users
-
-Revision ID: 0010
-Revises: 0009
-Create Date: 2026-06-29
-"""
+"""Add username_changed_at to users."""
 
 from alembic import op
 import sqlalchemy as sa

@@ -5,10 +5,6 @@ import { Bookmark } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-/**
- * Save/un-save toggle. Owns its state (optimistic flip, rolled back on failure)
- * so callers just drop it into an action bar with the server's initial value.
- */
 export default function BookmarkButton({
   postId,
   initialBookmarked,

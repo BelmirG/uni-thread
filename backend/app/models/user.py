@@ -34,8 +34,6 @@ class User(Base):
 
     username_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Notification categories this user muted (list of strings, e.g. ["milestones"]).
-    # Muted = still saved to the bell, but the live toast is pushed silent.
     muted_notifications: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'"), default=list
     )

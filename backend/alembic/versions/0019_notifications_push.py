@@ -1,9 +1,4 @@
-"""Add muted_by columns to conversations for per-user notification muting
-
-Revision ID: 0019
-Revises: 0018
-Create Date: 2026-06-30
-"""
+"""Add muted_by columns to conversations for per-user notification muting."""
 from alembic import op
 import sqlalchemy as sa
 

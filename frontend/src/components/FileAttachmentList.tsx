@@ -41,8 +41,6 @@ export function FileAttachmentList({ attachments }: { attachments: FileAttachmen
   return (
     <div className="space-y-1.5">
       {attachments.map((a, i) => {
-        // PDFs and text/code files open inline in a new tab.
-        // Office files are force-downloaded (server sends Content-Disposition: attachment).
         const isInline = a.mime_type === PDF_MIME || a.mime_type === "text/plain";
         return (
           <a

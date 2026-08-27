@@ -17,29 +17,16 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "UniThread",
-    // "default" keeps the iOS status bar opaque so page headers never end up
-    // underneath the clock when the app runs from the home screen.
     statusBarStyle: "default",
   },
 };
 
-// viewportFit: "cover" lets the page use the full screen on notched phones and
-// makes env(safe-area-inset-*) report real values, which the nav bar and chat
-// composers use to stay clear of the iPhone home indicator.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  // maximumScale + userScalable stop iOS's automatic zoom-in when focusing a
-  // text input (font-size < 16px triggers it). Without this the home-screen
-  // app ends up permanently zoomed in after composing a post, forcing users
-  // to pinch out to see the whole page. iOS still honors pinch-zoom for
-  // accessibility regardless of these flags.
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  // On browsers that support it (incl. recent iOS), the on-screen keyboard
-  // shrinks the layout instead of panning the page — so chat composers stay
-  // visible above the keyboard rather than being pushed off-screen.
   interactiveWidget: "resizes-content",
   themeColor: "#ffffff",
 };
@@ -52,8 +39,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Applies the saved theme before first paint — without this, dark-mode
-            users get a white flash on every load. Must stay inline. */}
         <script
           dangerouslySetInnerHTML={{
             __html:

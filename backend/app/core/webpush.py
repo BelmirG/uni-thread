@@ -1,18 +1,4 @@
-"""Browser push (Web Push / VAPID) delivery.
-
-This is the third delivery channel next to the bell row and the WebSocket
-toast: it reaches users who don't have a tab open. The payload is encrypted
-against the browser's own keys (p256dh/auth), so the push relay in the middle
-(Google/Mozilla/Apple) can never read the content — only deliver it.
-
-Rules:
-  - Best-effort: a failed push must never fail the request that caused it.
-  - `silent` payloads (muted categories) are not pushed — muted means
-    "visible in the bell, but never interrupts me", and a lock-screen banner
-    is the biggest interruption there is.
-  - 404/410 from the push service means the browser revoked the subscription
-    (user cleared site data, uninstalled, etc.) — delete the row.
-"""
+"""Browser push (Web Push / VAPID) delivery."""
 import asyncio
 import base64
 import json
@@ -31,8 +17,7 @@ _raw_private_key: str | None = None
 
 
 def _private_key() -> str:
-    """pywebpush wants the raw base64url EC key; the env stores base64(PEM).
-    Convert once and cache."""
+    """pywebpush wants the raw base64url EC key; the env stores base64(PEM)."""
     global _raw_private_key
     if _raw_private_key is None:
         from cryptography.hazmat.primitives import serialization
@@ -58,7 +43,6 @@ async def send_web_push(db: AsyncSession, user_id, payload: dict) -> None:
     dead: list[PushSubscription] = []
     for sub in subs:
         try:
-            # webpush() does blocking HTTP — run it off the event loop.
             await asyncio.to_thread(
                 webpush,
                 subscription_info={
@@ -68,7 +52,7 @@ async def send_web_push(db: AsyncSession, user_id, payload: dict) -> None:
                 data=data,
                 vapid_private_key=_private_key(),
                 vapid_claims={"sub": settings.vapid_subject},
-                ttl=86400,  # push services hold it up to a day if the device is offline
+                ttl=86400,
             )
         except WebPushException as exc:
             code = getattr(getattr(exc, "response", None), "status_code", None)
@@ -76,7 +60,7 @@ async def send_web_push(db: AsyncSession, user_id, payload: dict) -> None:
                 dead.append(sub)
             else:
                 logger.warning("web push to %s… failed: %s", sub.endpoint[:60], exc)
-        except Exception as exc:  # network errors etc. — never break the caller
+        except Exception as exc:
             logger.warning("web push error: %s", exc)
 
     for sub in dead:

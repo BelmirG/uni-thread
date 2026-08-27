@@ -1,9 +1,4 @@
-"""add password reset token to users
-
-Revision ID: 0018
-Revises: 0017
-Create Date: 2026-06-30
-"""
+"""add password reset token to users."""
 from alembic import op
 import sqlalchemy as sa
 

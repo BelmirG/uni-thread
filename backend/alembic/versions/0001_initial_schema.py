@@ -1,9 +1,4 @@
-"""Initial schema — all tables for IUSConnect
-
-Revision ID: 0001
-Revises:
-Create Date: 2025-01-01 00:00:00.000000
-"""
+"""Initial schema — all tables for IUSConnect."""
 from typing import Sequence, Union
 from alembic import op
 
@@ -14,7 +9,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # gen_random_uuid() is built into PostgreSQL 13+; no extension needed.
 
     op.execute("""
         CREATE TABLE users (
@@ -88,10 +82,6 @@ def upgrade() -> None:
         )
     """)
 
-    # This is the privacy-critical table.
-    # It is the ONLY place that links an anonymous post to its real author.
-    # User-facing API endpoints never join this table.
-    # Only admin/moderation endpoints may query it.
     op.execute("""
         CREATE TABLE anonymous_post_authors (
             post_id    UUID        PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,
@@ -133,7 +123,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Drop in reverse dependency order so foreign keys don't block the drops
     op.execute("DROP TABLE IF EXISTS chat_messages CASCADE")
     op.execute("DROP TABLE IF EXISTS votes CASCADE")
     op.execute("DROP TABLE IF EXISTS anonymous_post_authors CASCADE")

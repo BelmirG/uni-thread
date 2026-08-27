@@ -10,18 +10,8 @@ interface UserResult {
   avatar_url?: string | null;
 }
 
-// The partial @token immediately before the caret (same charset as the backend
-// mention parser). The captured boundary char keeps emails from triggering the
-// dropdown — written without lookbehind, which old Safari can't parse.
 const ACTIVE_MENTION_RE = /(^|[^a-zA-Z0-9_.])@([a-zA-Z0-9_]{1,30})$/;
 
-/**
- * Detects when the user is typing an @mention in `value` (before `caret`) and
- * offers matching accounts. Picking one calls onPick with the completed text.
- *
- * Render it directly under the input inside a `relative` wrapper — it positions
- * itself as an absolute dropdown.
- */
 export default function MentionSuggestions({
   value,
   caret,
@@ -64,7 +54,6 @@ export default function MentionSuggestions({
   if (!query || results.length === 0) return null;
 
   function pick(username: string) {
-    // match[0] includes the boundary char (match[1]); the "@" starts right after it.
     const at = upto.length - match![0].length + match![1].length;
     const completed = value.slice(0, at) + `@${username} ` + value.slice(upto.length);
     onPick(completed, at + username.length + 2);

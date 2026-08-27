@@ -22,16 +22,11 @@ interface Props {
   maxFiles?: number;
 }
 
-// Old binary Office formats (.doc, .xls, .ppt) support VBA macros — excluded.
-// MIME types for code files are unreliable across browsers, so code/text types
-// are listed by extension instead.
 const ACCEPT = [
-  // Documents (by MIME — reliable)
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  // Text / code (by extension — MIME unreliable, e.g. .ts reported as video/mp2t)
   ".txt", ".md", ".csv",
   ".py", ".js", ".ts", ".jsx", ".tsx",
   ".java", ".c", ".cpp", ".h", ".cs",

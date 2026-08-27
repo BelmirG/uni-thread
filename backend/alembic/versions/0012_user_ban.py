@@ -1,9 +1,4 @@
-"""Add ban_reason and banned_at to users
-
-Revision ID: 0012
-Revises: 0011
-Create Date: 2026-06-29
-"""
+"""Add ban_reason and banned_at to users."""
 
 revision = '0012'
 down_revision = '0011'

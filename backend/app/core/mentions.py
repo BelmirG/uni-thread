@@ -1,9 +1,4 @@
-"""@username mention handling (shared by post and reply endpoints).
-
-Usernames match the registration charset: letters, digits, underscores, 3–50 chars.
-We resolve mentions against real accounts server-side so a notification only fires
-for a username that actually exists — a typo like `@nobody` is silently ignored.
-"""
+"""@username mention handling (shared by post and reply endpoints)."""
 import re
 
 from sqlalchemy import func, select
@@ -14,7 +9,6 @@ from app.core.notify import push_live
 from app.models.notification import Notification
 from app.models.user import User
 
-# Negative lookbehind: don't treat the domain part of an email (name@host) as a mention.
 MENTION_RE = re.compile(r"(?<![a-zA-Z0-9_.])@([a-zA-Z0-9_]{3,50})")
 
 
@@ -24,11 +18,7 @@ def extract_mention_usernames(content: str) -> set[str]:
 
 
 async def notify_post_mentions(content: str, post, actor: User, db: AsyncSession) -> None:
-    """Create + push a 'mention' notification for every real user tagged in `content`.
-
-    The author never notifies themselves. Deep-links to the post via reference_id.
-    Runs its own commit so callers can invoke it after their main transaction.
-    """
+    """Create + push a 'mention' notification for every real user tagged in."""
     names = extract_mention_usernames(content)
     if not names:
         return
@@ -37,9 +27,6 @@ async def notify_post_mentions(content: str, post, actor: User, db: AsyncSession
         select(User).where(func.lower(User.username).in_(names), User.id != actor.id)
     )).scalars().all()
 
-    # Mentions write their own notification rows rather than going through
-    # notify(), so the block check has to be repeated here: typing @someone who
-    # blocked you must not reach them.
     hidden = await blocked_user_ids(db, actor.id)
     users = [u for u in users if u.id not in hidden]
     if not users:
@@ -57,6 +44,5 @@ async def notify_post_mentions(content: str, post, actor: User, db: AsyncSession
         "post_id": str(post.id),
     }
     for u in users:
-        # Muted category → still saved above (bell), but pushed without a popup.
         payload = {**base, "silent": "mentions" in (u.muted_notifications or [])}
         await push_live(db, u.id, payload)

@@ -1,16 +1,4 @@
-"""Email delivery.
-
-Three delivery modes, picked in order:
-1. RESEND_API_KEY set → Resend's HTTPS API. Preferred in production: many hosts
-   (Railway trial plans included) block outbound SMTP ports entirely, while
-   HTTPS is never blocked.
-2. SMTP configured (see Settings.smtp_*) → real mail through any standard
-   provider — Resend, Gmail, Brevo, Amazon SES, etc.
-3. Neither → prints the link to stdout so local development needs no mail account.
-
-Sends are best-effort: a provider outage logs an error rather than failing the
-request, so a verification email hiccup never blocks account creation itself.
-"""
+"""Email delivery."""
 
 import smtplib
 import ssl

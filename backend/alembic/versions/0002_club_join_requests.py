@@ -1,9 +1,4 @@
-"""Add club_join_requests table for private club approval flow
-
-Revision ID: 0002
-Revises: 0001
-Create Date: 2026-06-27 00:00:00.000000
-"""
+"""Add club_join_requests table for private club approval flow."""
 from typing import Sequence, Union
 from alembic import op
 

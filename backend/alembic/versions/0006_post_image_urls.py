@@ -1,9 +1,4 @@
-"""Add image_urls array to posts
-
-Revision ID: 0006
-Revises: 0005
-Create Date: 2026-06-28
-"""
+"""Add image_urls array to posts."""
 
 from alembic import op
 import sqlalchemy as sa

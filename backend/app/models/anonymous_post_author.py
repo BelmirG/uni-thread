@@ -9,11 +9,7 @@ from app.database import Base
 
 
 class AnonymousPostAuthor(Base):
-    """
-    Privacy compartment — the ONLY place that links an anonymous post to its
-    real author. Never joined in user-facing queries. Only admin/moderation
-    endpoints may read this table.
-    """
+    """Privacy compartment — the ONLY place that links an anonymous post to its real."""
     __tablename__ = "anonymous_post_authors"
 
     post_id: Mapped[uuid.UUID] = mapped_column(

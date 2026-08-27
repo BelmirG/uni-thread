@@ -33,11 +33,7 @@ _QA_DESCENDANT_COUNT = literal_column("""(
 
 
 def _build_qa_select(extra_where=None):
-    """
-    Select posts with aggregated vote + reply counts.
-    Deliberately does NOT join the users table — author identity is never
-    loaded, so it cannot accidentally appear in any serialized response.
-    """
+    """Select posts with aggregated vote + reply counts."""
     upvotes_col = (
         select(func.count())
         .where(and_(Vote.post_id == Post.id, Vote.vote_type == "up"))
@@ -97,8 +93,6 @@ async def _user_owns(
 async def _user_bookmarks(
     post_ids: list[uuid.UUID], user_id: uuid.UUID, db: AsyncSession
 ) -> set[uuid.UUID]:
-    # A bookmark is "this user saved this post" — it says nothing about who
-    # wrote the post, so reading it here doesn't touch the privacy compartment.
     if not post_ids:
         return set()
     result = await db.execute(
@@ -155,13 +149,7 @@ async def create_question(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Post an anonymous question.
-
-    author_id is intentionally NULL — the posts table holds no trace of the
-    real author. The real author is written to anonymous_post_authors in the
-    same database transaction so moderation is always possible.
-    """
+    """Post an anonymous question."""
     post = Post(
         author_id=None,        # ← no author in the posts table
         content=body.content,
@@ -174,7 +162,6 @@ async def create_question(
     db.add(post)
     await db.flush()  # generate post.id before committing
 
-    # Privacy compartment: real author stored separately, never joined publicly
     db.add(AnonymousPostAuthor(post_id=post.id, user_id=current_user.id))
     await db.commit()
     await db.refresh(post)
@@ -308,16 +295,6 @@ async def create_answer(
     await db.commit()
     await db.refresh(answer)
 
-    # Notify the question's author that an answer arrived — WITHOUT touching
-    # anyone's identity. This is the one user-facing code path allowed to read
-    # anonymous_post_authors, and it must uphold two invariants:
-    #   1. The looked-up author id is used only as the notification RECIPIENT.
-    #      It never appears in this response or any payload a client can see.
-    #   2. The notification is actorless (actor=None): the answerer's identity
-    #      is not stored on the row and not pushed over the WebSocket. Even the
-    #      question author only learns "someone answered", never who.
-    # The self-answer check below happens server-side, so its outcome (no
-    # notification) is indistinguishable from the author simply not reacting.
     question_author_id = (await db.execute(
         select(AnonymousPostAuthor.user_id).where(AnonymousPostAuthor.post_id == parent.id)
     )).scalar_one_or_none()
@@ -387,11 +364,7 @@ async def delete_post(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Only admins or the real author (looked up via anonymous_post_authors) can
-    delete an anonymous post. Regular users cannot delete others' posts even
-    if they happen to know the post ID.
-    """
+    """Only admins or the real author (looked up via anonymous_post_authors) can."""
     post = (
         await db.execute(
             select(Post).where(Post.id == post_id, Post.is_deleted == False)
@@ -400,7 +373,6 @@ async def delete_post(
     if not post:
         raise HTTPException(status_code=404, detail="Post not found.")
 
-    # Check authorship via the privacy table — not the posts table
     is_author = (
         await db.execute(
             select(AnonymousPostAuthor.post_id).where(

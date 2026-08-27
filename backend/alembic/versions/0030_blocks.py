@@ -1,16 +1,4 @@
-"""User blocking.
-
-blocks — one row per (blocker, blocked). The composite PK makes blocking
-idempotent; unblocking deletes the row. Enforcement is mutual: once a row
-exists, neither side can find or interact with the other, so the blocked
-user is never told a block happened (they just stop seeing the blocker).
-
-The reverse index exists because every list query asks "who is blocked in
-either direction", which reads the blocked_id side too.
-
-Revision ID: 0030
-Revises: 0029
-"""
+"""User blocking."""
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID

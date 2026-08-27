@@ -1,12 +1,4 @@
-"""Per-poll public voting (club polls only).
-
-posts.poll_public_votes — chosen at creation time and immutable after, so a
-poll can never be flipped from anonymous to public once votes exist. Existing
-polls keep the default false: every vote already cast stays anonymous.
-
-Revision ID: 0027
-Revises: 0026
-"""
+"""Per-poll public voting (club polls only)."""
 import sqlalchemy as sa
 from alembic import op
 

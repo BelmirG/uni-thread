@@ -28,8 +28,6 @@ const NAV = [
     ),
   },
   {
-    // Icon-only tab: the domino mask says "anonymous" without the word taking
-    // up label space (label: "" also hides the text row for this item).
     href: "/qa",
     label: "",
     activeColor: "#ffffff",
@@ -79,7 +77,7 @@ const NAV = [
 ];
 
 const n = NAV.length;
-const PILL_W = 62; // px — pill is narrower than the full item slot
+const PILL_W = 62; // px
 
 export default function NavBar() {
   const pathname = usePathname();
@@ -88,22 +86,14 @@ export default function NavBar() {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
 
-  // Remember the deepest route visited within each section, so tapping a nav tab
-  // returns you to where you were (e.g. back into a club chat or a Q&A thread)
-  // instead of the section root. NavBar lives in the root layout and never
-  // unmounts, so this state survives client-side navigation.
   const [lastRoutes, setLastRoutes] = useState<Record<string, string>>({});
   useEffect(() => {
-    // Club chat lives under /clubs/[slug]/chat in the URL, but its entry point
-    // is Messages → Club chats — so remember it under the Messages tab, never
-    // as the Clubs tab's return point (that would lock Clubs out of the list).
     const isClubChat = /^\/clubs\/[^/]+\/chat/.test(pathname);
     const section = isClubChat
       ? NAV.find((item) => item.href === "/messages")
       : NAV.find((item) =>
           item.href === "/profile" ? pathname.startsWith("/profile") : pathname.startsWith(item.href)
         );
-    // The Profile tab always points at your own profile, so it isn't remembered.
     if (section && section.href !== "/profile") {
       setLastRoutes((prev) => (prev[section.href] === pathname ? prev : { ...prev, [section.href]: pathname }));
     }
@@ -130,9 +120,6 @@ export default function NavBar() {
     return () => clearInterval(interval);
   }, [pathname]);
 
-  // Instant badge updates: bump on incoming WS notifications instead of waiting
-  // for the next poll, and clear when the bell dropdown marks everything read
-  // (the profile page dispatches "notifs-read" after a successful mark-read).
   useEffect(() => {
     const unsubscribe = onNotification((p) => {
       if (p.type === "dm") {
@@ -166,9 +153,6 @@ export default function NavBar() {
     <nav
       className="nav-glass fixed left-1/2 -translate-x-1/2 w-[min(420px,calc(100%-2rem))] z-50 rounded-full"
       style={{
-        // 1rem normally; on notched iPhones the safe-area inset wins so the
-        // pill floats above the home indicator instead of colliding with it.
-        // Glass look lives in .nav-glass (globals.css) so dark mode can re-skin it.
         bottom: "max(1rem, env(safe-area-inset-bottom))",
       }}
     >
@@ -193,9 +177,6 @@ export default function NavBar() {
 
         {NAV.map((item, i) => {
           const active = i === activeIndex;
-          // Active tab → section root (tap again to pop to the top). Inactive tab →
-          // the remembered route so you land back where you left off. Profile is
-          // always your own profile.
           const href =
             item.href === "/profile"
               ? profileHref

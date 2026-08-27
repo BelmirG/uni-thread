@@ -37,7 +37,6 @@ async def register(
     await rate_limit(request, key="register", limit=5, window_seconds=3600)
     _enforce_university_email(body.email)
 
-    # Reject duplicates with separate messages so the user knows which field conflicts.
     existing_email = await db.execute(
         select(User).where(User.email == body.email.lower())
     )
@@ -64,8 +63,6 @@ async def register(
     db.add(user)
     await db.commit()
 
-    # Sent after the response, in a worker thread — SMTP takes seconds and is
-    # blocking, so it must never run inline on the event loop.
     background_tasks.add_task(send_verification_email, body.email, token)
 
     return {"message": "Account created. Check your email to verify before logging in."}
@@ -82,7 +79,6 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Invalid verification token.")
 
     expires = user.email_verification_expires_at
-    # Normalize to timezone-aware for comparison regardless of DB driver behavior
     if expires is not None and expires.tzinfo is None:
         expires = expires.replace(tzinfo=timezone.utc)
 
@@ -108,7 +104,6 @@ async def login(
     result = await db.execute(select(User).where(User.email == body.email.lower()))
     user = result.scalar_one_or_none()
 
-    # Use the same error for "not found" and "wrong password" — don't leak which is true.
     if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
@@ -129,7 +124,7 @@ async def login(
     response.set_cookie(
         key="access_token",
         value=token,
-        httponly=True,                     # JS cannot read this — prevents XSS token theft
+        httponly=True,
         samesite="lax",                    # safe against CSRF for same-site navigations
         max_age=settings.access_token_expire_minutes * 60,
         secure=settings.cookie_secure,     # HTTPS-only in production; plain HTTP in dev
@@ -141,7 +136,6 @@ async def login(
 
 @router.post("/logout")
 async def logout(response: Response):
-    # Match the attributes the cookie was set with so the browser reliably clears it.
     response.delete_cookie(
         key="access_token",
         httponly=True,
@@ -169,7 +163,6 @@ async def forgot_password(
         select(User).where(User.email == body.email.lower())
     )).scalar_one_or_none()
 
-    # Always return the same response — don't reveal whether the email exists
     if user and user.is_email_verified:
         token = secrets.token_urlsafe(32)
         user.password_reset_token = token

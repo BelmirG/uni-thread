@@ -21,15 +21,12 @@ export default function LoginPage() {
 
 function LoginForm() {
   const router = useRouter();
-  // Lets other pages send you here and get you back afterward — e.g.
-  // /admin redirects unauthenticated visitors to /login?next=/admin.
   const next = useSearchParams().get("next") || "/feed";
   const [form, setForm] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Already signed in? Skip the form and go straight there.
   useEffect(() => {
     apiFetch("/api/auth/me")
       .then(() => router.replace(next))
@@ -50,7 +47,6 @@ function LoginForm() {
         method: "POST",
         body: JSON.stringify(form),
       });
-      // A previous session on this device may have left page snapshots behind.
       clearAllPageCaches();
       router.push(next);
     } catch (err: unknown) {

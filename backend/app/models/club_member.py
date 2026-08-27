@@ -21,8 +21,6 @@ class ClubMember(Base):
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    # Silences browser push for this club's chat messages only — @mentions and
-    # club notifications (invites, approvals, roles) still come through.
     chat_muted: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, server_default=text("false")
     )

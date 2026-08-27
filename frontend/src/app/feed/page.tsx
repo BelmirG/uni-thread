@@ -87,9 +87,6 @@ interface VoteResponse {
 
 export default function FeedPage() {
   const router = useRouter();
-  // Returning from a post's comments restores the exact feed state (posts already
-  // loaded, filters, scroll position) instead of re-fetching from the top — see
-  // the mount effect below and lib/feedCache.ts.
   const [cachedOnMount] = useState(() => getFeedCache<Post>());
   const [posts, setPosts] = useState<Post[]>(() => cachedOnMount?.posts ?? []);
   const [total, setTotal] = useState(() => cachedOnMount?.total ?? 0);
@@ -102,8 +99,6 @@ export default function FeedPage() {
   const [facultyFilter, setFacultyFilter] = useState<Faculty | null>(() => (cachedOnMount?.facultyFilter as Faculty | null) ?? null);
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  // Guards the initial-load effect so a restored cache isn't immediately
-  // overwritten by a fresh fetch on first mount.
   const skipNextLoadRef = useRef(!!cachedOnMount);
   const restoredScrollRef = useRef(false);
   const [content, setContent] = useState("");
@@ -129,10 +124,7 @@ export default function FeedPage() {
     return params;
   }
 
-  // Initial load / filter change — reset everything
   useEffect(() => {
-    // First run after restoring from cache: posts/total are already correct,
-    // just need the current user (not cached) — skip the full re-fetch.
     if (skipNextLoadRef.current) {
       skipNextLoadRef.current = false;
       apiFetch<{ username: string }>("/api/auth/me")
@@ -154,8 +146,6 @@ export default function FeedPage() {
       .finally(() => setLoading(false));
   }, [feedTab, sort, facultyFilter, feedRefreshKey, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Restore scroll position after a cache-backed mount. Runs once; a second,
-  // delayed pass corrects for late-loading images/avatars shifting page height.
   useEffect(() => {
     if (!cachedOnMount || restoredScrollRef.current) return;
     restoredScrollRef.current = true;
@@ -165,20 +155,11 @@ export default function FeedPage() {
     return () => clearTimeout(t);
   }, [cachedOnMount]);
 
-  // Keep a live snapshot so the unmount handler below can save the exact
-  // state the user leaves with (navigating into a post's comments, a
-  // profile, etc.) rather than a stale closure from an earlier render.
   const liveStateRef = useRef({ posts, total, feedTab, sort, facultyFilter });
   useEffect(() => {
     liveStateRef.current = { posts, total, feedTab, sort, facultyFilter };
   });
 
-  // Snapshot scroll position on every click, in the capture phase — before
-  // Next.js's own navigation handling resets window.scrollY for the incoming
-  // route. That reset happens while this page is still mounted and fires a
-  // genuine 'scroll' event, so a passive scroll listener alone would just
-  // observe the reset itself. Capturing at click time, ahead of any link's
-  // own handler, reliably records the real position the user was at.
   const lastScrollYRef = useRef(0);
   useEffect(() => {
     function onClickCapture() { lastScrollYRef.current = window.scrollY; }
@@ -200,7 +181,6 @@ export default function FeedPage() {
     };
   }, []);
 
-  // Infinite scroll — watch the sentinel div
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
@@ -279,7 +259,6 @@ export default function FeedPage() {
   async function handleVote(postId: string, voteType: "up" | "down") {
     const before = posts.find((p) => p.id === postId);
     if (!before) return;
-    // Instant local update; the server response (or a rollback) reconciles it.
     setPosts((prev) => prev.map((p) => (p.id === postId ? applyVote(p, voteType) : p)));
     try {
       const data = await apiFetch<VoteResponse>(`/api/posts/${postId}/vote`, {
@@ -328,7 +307,6 @@ export default function FeedPage() {
         </div>
         <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} mode="global" postType="feed" />
 
-        {/* Tabs — iOS-style segmented control */}
         <div className="flex gap-1 p-1 bg-surface-container rounded-full mb-4">
           {(["discover", "friends"] as const).map((tab) => (
             <button
@@ -346,7 +324,6 @@ export default function FeedPage() {
           ))}
         </div>
 
-        {/* Sort + faculty filter chips — horizontal scroll */}
         <div className="flex overflow-x-auto gap-2 mb-4 no-scrollbar pb-1 -mx-4 px-4">
           {feedTab === "discover" && (
             <>
@@ -489,7 +466,6 @@ export default function FeedPage() {
           ))}
         </div>
 
-        {/* Sentinel — IntersectionObserver triggers next page load when this comes into view */}
         <div ref={sentinelRef} className="h-4" />
         {loadingMore && (
           <p className="text-muted-foreground text-xs text-center py-4">Loading more…</p>
@@ -668,7 +644,6 @@ function PostCard({
         {!isOwn && <PostMenu postId={post.id} />}
       </div>
 
-      {/* Content — swaps to an inline editor for the author */}
       {editing ? (
         <div className="px-4 pb-3 space-y-2">
           <textarea

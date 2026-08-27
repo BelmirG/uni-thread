@@ -1,9 +1,4 @@
-"""Add conversations and direct_messages tables
-
-Revision ID: 0003
-Revises: 0002
-Create Date: 2026-06-27 00:00:00.000000
-"""
+"""Add conversations and direct_messages tables."""
 from typing import Sequence, Union
 from alembic import op
 

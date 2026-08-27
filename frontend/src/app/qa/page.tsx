@@ -131,9 +131,6 @@ function SharePanel({ postId }: { postId: string }) {
 
 export default function QAPage() {
   const router = useRouter();
-  // Returning from a question's answers restores the exact board state
-  // (already-loaded posts, filter, scroll position) instead of re-fetching
-  // from the top — see the mount effect below and lib/qaCache.ts.
   const [cachedOnMount] = useState(() => getQACache<QAPost>());
   const [posts, setPosts] = useState<QAPost[]>(() => cachedOnMount?.posts ?? []);
   const [total, setTotal] = useState(() => cachedOnMount?.total ?? 0);
@@ -144,8 +141,6 @@ export default function QAPage() {
   const [content, setContent] = useState("");
   const [facultyTag, setFacultyTag] = useState<Faculty | "">("");
   const [facultyFilter, setFacultyFilter] = useState<Faculty | null>(() => (cachedOnMount?.facultyFilter as Faculty | null) ?? null);
-  // Guards the initial-load effect so a restored cache isn't immediately
-  // overwritten by a fresh fetch on first mount.
   const skipNextLoadRef = useRef(!!cachedOnMount);
   const restoredScrollRef = useRef(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -165,8 +160,6 @@ export default function QAPage() {
   }
 
   useEffect(() => {
-    // First run after restoring from cache: posts/total are already correct
-    // and the session was valid moments ago — skip the re-fetch.
     if (skipNextLoadRef.current) {
       skipNextLoadRef.current = false;
       return;
@@ -178,8 +171,6 @@ export default function QAPage() {
       .finally(() => setLoading(false));
   }, [facultyFilter, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Restore scroll position after a cache-backed mount. Runs once; a second,
-  // delayed pass corrects for late-loading images shifting page height.
   useEffect(() => {
     if (!cachedOnMount || restoredScrollRef.current) return;
     restoredScrollRef.current = true;
@@ -189,17 +180,11 @@ export default function QAPage() {
     return () => clearTimeout(t);
   }, [cachedOnMount]);
 
-  // Keep a live snapshot so the unmount handler below can save the exact
-  // state the user leaves with.
   const liveStateRef = useRef({ posts, total, facultyFilter });
   useEffect(() => {
     liveStateRef.current = { posts, total, facultyFilter };
   });
 
-  // Snapshot scroll position on every click, in the capture phase — before
-  // Next.js's own navigation handling resets window.scrollY for the incoming
-  // route. See the identical comment in feed/page.tsx for why this can't be
-  // a plain scroll listener or a read at unmount time.
   const lastScrollYRef = useRef(0);
   useEffect(() => {
     function onClickCapture() { lastScrollYRef.current = window.scrollY; }
@@ -281,7 +266,6 @@ export default function QAPage() {
   async function handleVote(postId: string, voteType: "up" | "down") {
     const before = posts.find((p) => p.id === postId);
     if (!before) return;
-    // Instant local update; the server response (or a rollback) reconciles it.
     setPosts((prev) => prev.map((p) => (p.id === postId ? applyVote(p, voteType) : p)));
     try {
       const data = await apiFetch<VoteResponse>(`/api/qa/${postId}/vote`, {
@@ -327,7 +311,6 @@ export default function QAPage() {
           </div>
         </div>
 
-        {/* Faculty filter chips — horizontal scroll */}
         <div className="flex overflow-x-auto gap-2 mb-4 no-scrollbar pb-1 -mx-4 px-4">
           <button onClick={() => setFacultyFilter(null)} className={pillCls(facultyFilter === null)}>All</button>
           {FACULTIES.map((f) => (
@@ -484,8 +467,6 @@ export default function QAPage() {
                   {/* Share */}
                   <SharePanel postId={post.id} />
 
-                  {/* Save — written back into state so the back-navigation
-                      cache (qaCache) restores the correct bookmark state. */}
                   <BookmarkButton
                     postId={post.id}
                     initialBookmarked={post.is_bookmarked}

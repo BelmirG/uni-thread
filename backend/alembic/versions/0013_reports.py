@@ -1,9 +1,4 @@
-"""Add reports table
-
-Revision ID: 0013
-Revises: 0012
-Create Date: 2026-06-29
-"""
+"""Add reports table."""
 
 revision = '0013'
 down_revision = '0012'

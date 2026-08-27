@@ -66,7 +66,6 @@ export default function PollDisplay({ postId, poll, onUpdate }: Props) {
         body: JSON.stringify({ option_id: optionId }),
       });
       onUpdate(updated);
-      // Any cached voter list is stale the moment a vote changes.
       setVoters(null);
     } catch { /* ignore */ }
     finally { setLoading(false); }
@@ -84,8 +83,6 @@ export default function PollDisplay({ postId, poll, onUpdate }: Props) {
 
   return (
     <div className="space-y-2 my-2">
-      {/* Disclosure BEFORE voting — nobody should discover their vote was
-          visible only after casting it. */}
       {poll.public_votes && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Eye className="w-3.5 h-3.5 flex-shrink-0" />

@@ -1,8 +1,4 @@
-"""Club banner image.
-
-Revision ID: 0025
-Revises: 0024
-"""
+"""Club banner image."""
 import sqlalchemy as sa
 from alembic import op
 

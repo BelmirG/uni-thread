@@ -229,8 +229,6 @@ export default function ClubsPage() {
               <Link href={`/clubs/${club.slug}`} className="block px-4 pt-4 pb-3 no-underline">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-3 min-w-0 flex-1">
-                    {/* Banner thumbnail — same crop shown full-width on the club page,
-                        just cropped to a square here so the row height never changes. */}
                     <div className="w-12 h-12 rounded-2xl overflow-hidden flex-shrink-0 bg-gradient-to-br from-secondary/25 to-secondary/5 flex items-center justify-center">
                       {club.banner_url ? (
                         <img src={club.banner_url} alt="" loading="lazy" decoding="async" className="w-full h-full object-cover" />
@@ -306,7 +304,6 @@ export default function ClubsPage() {
         </div>
       </main>
 
-      {/* Create club — liquid-glass sheet */}
       {showForm && typeof document !== "undefined" && createPortal(
         <>
           <div
@@ -364,7 +361,6 @@ export default function ClubsPage() {
                   className="w-full px-4 py-3 text-sm rounded-2xl bg-surface/70 text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:bg-surface transition-all resize-none"
                 />
 
-                {/* Privacy — iOS-style switch */}
                 <button
                   type="button"
                   role="switch"

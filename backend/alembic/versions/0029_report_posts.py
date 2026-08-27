@@ -1,13 +1,4 @@
-"""Post reports.
-
-reports.reported_post_id — a report can now target a post instead of a user.
-reported_user_id becomes nullable: for anonymous posts it stays NULL so the
-report never links the post to its author (the anonymous_post_authors
-compartment stays sealed even from the reports queue).
-
-Revision ID: 0029
-Revises: 0028
-"""
+"""Post reports."""
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID

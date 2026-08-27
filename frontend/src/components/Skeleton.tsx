@@ -2,7 +2,6 @@
 
 import { cn } from "@/lib/utils";
 
-/** Grey pulse block — building block for the skeleton layouts below. */
 function Block({ className }: { className?: string }) {
   return <div className={cn("animate-pulse rounded-md bg-surface-container-high", className)} />;
 }
@@ -31,7 +30,6 @@ export function SkeletonPostList({ count = 3 }: { count?: number }) {
   );
 }
 
-/** Placeholder for the profile header card + post list while a profile loads. */
 export function SkeletonProfile() {
   return (
     <div aria-hidden="true">
@@ -55,7 +53,6 @@ export function SkeletonProfile() {
   );
 }
 
-/** Placeholder rows shown while a conversation or club list loads. */
 export function SkeletonRowList({ count = 4 }: { count?: number }) {
   return (
     <div className="space-y-2" aria-hidden="true">

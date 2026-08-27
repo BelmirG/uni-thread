@@ -21,9 +21,7 @@ class CreatePostRequest(BaseModel):
     file_attachments: list[FileAttachment] = Field(default_factory=list, max_length=5)
     poll_options: list[str] = Field(default_factory=list)
     poll_expires_at: Optional[datetime] = None
-    # Honored only by the club post endpoint — feed polls are always anonymous.
     poll_public_votes: bool = False
-    # Event details, also club-only. A start time is what makes a post an event.
     event_starts_at: Optional[datetime] = None
     event_ends_at: Optional[datetime] = None
     event_location: Optional[str] = Field(default=None, max_length=200)
@@ -38,8 +36,6 @@ class CreatePostRequest(BaseModel):
                 raise ValueError('Poll must have 2 to 4 options.')
             if any(not o.strip() for o in self.poll_options):
                 raise ValueError('Poll options cannot be empty.')
-        # An end or a location without a start would render as an event with no
-        # date — reject it at the edge rather than storing a half-event.
         if not has_event and (self.event_ends_at or self.event_location):
             raise ValueError('An event needs a start time.')
         if has_event and self.event_ends_at and self.event_ends_at <= self.event_starts_at:
@@ -92,13 +88,11 @@ class EventResponse(BaseModel):
     location: Optional[str] = None
     going_count: int = 0
     interested_count: int = 0
-    # The current user's own answer, or None if they haven't responded.
     user_status: Optional[str] = None
     is_past: bool = False
 
 
 class RSVPRequest(BaseModel):
-    # Sending your current status again clears it (the "un-RSVP" gesture).
     status: Literal['going', 'interested']
 
 

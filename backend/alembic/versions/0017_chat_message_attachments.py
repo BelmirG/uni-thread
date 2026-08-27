@@ -1,9 +1,4 @@
-"""add attachments to chat_messages
-
-Revision ID: 0017
-Revises: 0016
-Create Date: 2026-06-30
-"""
+"""add attachments to chat_messages."""
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB

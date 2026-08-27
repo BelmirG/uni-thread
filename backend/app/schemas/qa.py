@@ -27,8 +27,6 @@ class QAPostResponse(BaseModel):
     faculty_tag: Optional[str] = None
     image_urls: list[str] = []
     file_attachments: list[FileAttachment] = []
-    # Intentionally no `author` field — not hidden, simply absent from the schema.
-    # The posts table itself has author_id = NULL for these posts.
     upvotes: int
     downvotes: int
     current_user_vote: Optional[str]

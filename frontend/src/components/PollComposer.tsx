@@ -12,8 +12,6 @@ export interface PollDraft {
 interface Props {
   value: PollDraft | null;
   onChange: (draft: PollDraft | null) => void;
-  // Club composers offer public voting; feed polls are always anonymous,
-  // so the toggle simply doesn't exist there.
   allowPublicVotes?: boolean;
 }
 

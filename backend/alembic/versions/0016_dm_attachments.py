@@ -1,9 +1,4 @@
-"""add attachments to direct_messages
-
-Revision ID: 0016
-Revises: 0015
-Create Date: 2026-06-30
-"""
+"""add attachments to direct_messages."""
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB

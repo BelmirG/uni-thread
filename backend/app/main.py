@@ -9,8 +9,6 @@ from app.routers import admin, auth, chat, clubs, files, health, messages, notif
 
 app = FastAPI(title="UniThread API", version="0.1.0")
 
-# Announce the active email delivery mode at boot so a misconfigured container
-# (e.g. a variable added after the last deploy) is visible in the deploy logs.
 if settings.resend_api_key:
     _email_mode = f"Resend API (key ending ...{settings.resend_api_key[-4:]})"
 elif settings.email_configured:
@@ -41,10 +39,7 @@ app.include_router(notifications.router)
 app.include_router(users.router)
 
 class _ImmutableStaticFiles(StaticFiles):
-    """Uploaded files get a random UUID name and are never rewritten, so their
-    content can't change under a given URL. Telling the browser to cache them
-    for a year means avatars and post images load from local cache instead of
-    re-hitting the server on every page — the single cheapest smoothness win."""
+    """Uploaded files get a random UUID name and are never rewritten, so their."""
 
     def file_response(self, *args, **kwargs):
         response = super().file_response(*args, **kwargs)

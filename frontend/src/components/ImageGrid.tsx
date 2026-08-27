@@ -3,10 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isVideoUrl } from "@/lib/media";
 
-// The viewport is locked to scale 1 (to stop iOS's input auto-zoom), so the
-// viewer implements its own photo zoom: pinch to zoom, one-finger pan while
-// zoomed, double-tap to toggle — like a native gallery. At base scale the
-// familiar swipes still work: horizontal for prev/next, vertical to close.
 const ZOOM_MAX = 5;
 const DOUBLE_TAP_ZOOM = 2.5;
 
@@ -48,8 +44,6 @@ function Lightbox({ urls, startIndex, onClose }: { urls: string[]; startIndex: n
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, urls.length]);
 
-  // Keep the image from being panned entirely off screen; a little slack past
-  // the true edge feels natural and the release snap tidies it up.
   function clampT(s: number, tx: number, ty: number) {
     const maxX = ((s - 1) * window.innerWidth) / 2 + 40;
     const maxY = ((s - 1) * window.innerHeight) / 2 + 40;
@@ -91,7 +85,6 @@ function Lightbox({ urls, startIndex, onClose }: { urls: string[]; startIndex: n
       const sNew = Math.min(ZOOM_MAX, Math.max(1, s * (g.lastDist > 0 ? dist / g.lastDist : 1)));
       const cx = window.innerWidth / 2;
       const cy = window.innerHeight / 2;
-      // Keep the point between the fingers anchored while the scale changes.
       const txNew = midX - cx - (sNew / s) * (g.lastMidX - cx - tx);
       const tyNew = midY - cy - (sNew / s) * (g.lastMidY - cy - ty);
       g.lastDist = dist; g.lastMidX = midX; g.lastMidY = midY;
@@ -110,7 +103,6 @@ function Lightbox({ urls, startIndex, onClose }: { urls: string[]; startIndex: n
     const g = gRef.current;
     if (!g) return;
     if (e.touches.length >= 1) {
-      // A pinch finger lifted — carry on as pan (zoomed) or swipe (base scale).
       const touch = e.touches[0];
       const zoomed = tRef.current.s > 1;
       gRef.current = {
@@ -128,8 +120,6 @@ function Lightbox({ urls, startIndex, onClose }: { urls: string[]; startIndex: n
       if (g.mode === "swipe") {
         const dx = g.startX - g.lastX;
         const dy = g.lastY - g.startY;
-        // Vertical swipe (either direction) dismisses — the gesture every
-        // native photo viewer supports; essential in the home-screen app.
         if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx)) { onClose(); return; }
         if (dx > 40) next();
         else if (dx < -40) prev();
@@ -163,7 +153,6 @@ function Lightbox({ urls, startIndex, onClose }: { urls: string[]; startIndex: n
       onTouchEnd={onTouchEnd}
       onTouchCancel={onTouchEnd}
     >
-      {/* Close — kept below the iPhone notch/status bar via safe-area inset */}
       <button
         onClick={onClose}
         style={{ position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 16px)", right: 16, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", borderRadius: "50%", width: 38, height: 38, fontSize: "1.3rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1 }}
@@ -176,8 +165,6 @@ function Lightbox({ urls, startIndex, onClose }: { urls: string[]; startIndex: n
         </div>
       )}
 
-      {/* Video plays with native controls; images get the zoom/pan gestures.
-          Tap stops propagation so it doesn't close; double-tap zooms images. */}
       {isVideoUrl(urls[idx]) ? (
         <video
           src={urls[idx]}
@@ -230,8 +217,6 @@ export function ImageGrid({ urls }: { urls: string[] }) {
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
-  // A referenced file can be gone from disk; hiding it beats rendering the
-  // browser's broken-image placeholder in the middle of a post.
   const [failed, setFailed] = useState<string[]>([]);
 
   const live = urls.filter((u) => !failed.includes(u));
@@ -250,8 +235,6 @@ export function ImageGrid({ urls }: { urls: string[] }) {
       <>
         <div style={{ marginBottom: "0.65rem", borderRadius: 8, overflow: "hidden", cursor: isVideoUrl(live[0]) ? "default" : "zoom-in" }}>
           {isVideoUrl(live[0]) ? (
-            // preload="metadata" fetches only the first frame + duration, not
-            // the whole file — the feed stays light until someone hits play.
             <video
               src={live[0]}
               controls

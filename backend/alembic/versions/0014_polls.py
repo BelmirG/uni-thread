@@ -1,9 +1,4 @@
-"""Add poll_options and poll_votes tables
-
-Revision ID: 0014
-Revises: 0013
-Create Date: 2026-06-29
-"""
+"""Add poll_options and poll_votes tables."""
 
 revision = '0014'
 down_revision = '0013'

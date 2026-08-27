@@ -9,9 +9,6 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      # The server runs PostgreSQL 18 and pg_dump must be same or newer, but the
-      # runner's preinstalled client is 16 — so run pg_dump from the postgres:18
-      # image instead of fighting apt.
       - name: Dump database
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_PUBLIC_URL }}

@@ -1,9 +1,4 @@
-"""Add is_read to direct_messages
-
-Revision ID: 0009
-Revises: 0008
-Create Date: 2026-06-29
-"""
+"""Add is_read to direct_messages."""
 
 from alembic import op
 import sqlalchemy as sa

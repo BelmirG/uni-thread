@@ -1,16 +1,4 @@
-"""Performance indexes for hot query paths.
-
-- direct_messages.shared_post_id: the feed computes a share_count subquery per
-  post; without this index every feed load sequential-scans the DM table.
-  Partial index — only share rows have a value, ordinary DMs stay out of it.
-- poll_votes.poll_option_id: poll result counts group by option on every feed
-  load that contains a poll.
-- conversations.user2_id: the conversation list matches either side of the
-  pair; user1_id is covered by the unique-pair index, user2_id was not.
-
-Revision ID: 0026
-Revises: 0025
-"""
+"""Performance indexes for hot query paths."""
 from alembic import op
 
 revision = "0026"

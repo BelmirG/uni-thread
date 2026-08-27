@@ -73,8 +73,6 @@ function LastMsgPreview({ lm, unread }: { lm: LastMessage; unread: boolean }) {
   );
 }
 
-// Survives navigation away and back (module scope, like the feed/qa caches),
-// so returning from a club chat lands on the Club chats group, not DMs.
 let lastTab: "dms" | "clubs" = "dms";
 
 export default function MessagesPage() {
@@ -143,7 +141,6 @@ export default function MessagesPage() {
         </div>
         <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} mode="chats" />
 
-        {/* Group switcher — DMs / Club chats (same segmented style as profile Posts/Clubs) */}
         <div className="flex gap-1 p-1 bg-surface-container-low border border-outline-variant rounded-full mb-4">
           {([
             ["dms", "DMs", conversations.length],

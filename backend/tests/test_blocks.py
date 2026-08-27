@@ -1,19 +1,4 @@
-"""User blocking tests.
-
-Blocking is a safety feature, so the guarantees it makes are tested at the
-HTTP-response level rather than by inspecting rows:
-
-1. Enforcement is mutual — the person blocked cannot route around it by
-   acting first, even though only the blocker sees an "Unblock" button.
-2. The blocked side is never told a block happened: every refusal is the same
-   404 an unknown user or deleted post returns.
-3. Blocking severs the existing relationship (follows) and clears notifications
-   the two already generated for each other.
-4. The anonymous Q&A board is deliberately NOT filtered. Hiding anonymous
-   posts on block would make authorship inferable from what disappears —
-   exactly the leak `anonymous_post_authors` exists to prevent. See
-   app/core/blocks.py and test_privacy.py.
-"""
+"""User blocking tests."""
 from sqlalchemy import select
 
 from app.models.block import Block
@@ -36,12 +21,10 @@ async def test_blocked_user_cannot_find_or_reach_the_blocker(client_for, make_us
 
     await _block(alice_c, bob.username)
 
-    # Discovery: gone from both search surfaces, profile included.
     assert (await bob_c.get(f"/api/users/search?q={alice.username}")).json() == []
     assert (await bob_c.get(f"/api/messages/search-users?q={alice.username}")).json() == []
     assert (await bob_c.get(f"/api/users/{alice.username}")).status_code == 404
 
-    # Interaction: every path refuses, and refuses identically.
     assert (await bob_c.get(f"/api/posts/{post_id}")).status_code == 404
     assert (await bob_c.post(f"/api/posts/{post_id}/replies", json={"content": "reply"})).status_code == 404
     assert (await bob_c.post(f"/api/posts/{post_id}/vote", json={"vote_type": "up"})).status_code == 404
@@ -60,13 +43,10 @@ async def test_block_is_mutual_for_the_blocker_too(client_for, make_user):
     bob_post = (await bob_c.post("/api/posts", json={"content": "bob speaks"})).json()["id"]
     await _block(alice_c, bob.username)
 
-    # The blocker stops seeing the blocked user's content as well — blocking is
-    # not a one-way mute.
     feed = (await alice_c.get("/api/posts?limit=100")).json()["posts"]
     assert all(p["id"] != bob_post for p in feed)
     assert (await alice_c.get(f"/api/posts/{bob_post}")).status_code == 404
 
-    # ...but keeps a viewable profile carrying the flag that offers Unblock.
     profile = (await alice_c.get(f"/api/users/{bob.username}")).json()
     assert profile["is_blocked"] is True
 
@@ -75,9 +55,7 @@ async def test_block_is_mutual_for_the_blocker_too(client_for, make_user):
 
 
 async def test_blocked_user_can_still_block_back(client_for, make_user):
-    """The blocked side can't *see* the blocker, but must still be able to act
-    against them — otherwise blocking first would deny the other person the
-    same protection."""
+    """The blocked side can't *see* the blocker, but must still be able to act."""
     alice, bob = await make_user(), await make_user()
     alice_c, bob_c = client_for(alice), client_for(bob)
 
@@ -128,8 +106,7 @@ async def test_blocked_user_cannot_notify_via_mention(client_for, make_user, db)
 
 
 async def test_anonymous_qa_is_never_block_filtered(client_for, make_user):
-    """Blocking must not touch the anonymous board: a post vanishing the moment
-    you block someone would identify its author."""
+    """Blocking must not touch the anonymous board: a post vanishing the moment you."""
     alice, bob = await make_user(), await make_user()
     alice_c, bob_c = client_for(alice), client_for(bob)
 

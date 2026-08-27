@@ -1,6 +1,3 @@
-/* UniThread service worker — receives Web Push messages and shows system
- * notifications. Payloads are the same JSON the in-app toasts use, so the
- * text/link logic below mirrors ToastProvider.tsx. */
 
 function describe(p) {
   const name = p.actor_display_name || "Someone";
@@ -50,8 +47,6 @@ function targetUrl(p) {
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
-// The VAPID public key arrives base64url-encoded; subscribe() wants raw bytes.
-// (Mirror of urlBase64ToUint8Array in lib/push.ts — the SW can't import it.)
 function urlBase64ToUint8Array(base64) {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
   const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -59,11 +54,6 @@ function urlBase64ToUint8Array(base64) {
   return Uint8Array.from(raw, (c) => c.charCodeAt(0));
 }
 
-// Browsers periodically rotate a push subscription on their own (key refresh,
-// storage pressure, etc.), firing this event. If we don't re-subscribe and
-// re-register the new endpoint, the server keeps pushing to the dead one until
-// it 410s and prunes it — and the user silently stops getting notifications.
-// Re-establishing it here is what keeps push working long-term.
 self.addEventListener("pushsubscriptionchange", (event) => {
   event.waitUntil((async () => {
     try {
@@ -86,7 +76,6 @@ self.addEventListener("pushsubscriptionchange", (event) => {
         body: JSON.stringify(sub.toJSON ? sub.toJSON() : sub),
       });
     } catch {
-      // Best-effort — the next app open runs syncPushSubscription() as a backstop.
     }
   })());
 });
@@ -97,8 +86,6 @@ self.addEventListener("push", (event) => {
   try { p = event.data.json(); } catch { return; }
 
   event.waitUntil((async () => {
-    // If a tab is open and visible, the in-app toast already handles it —
-    // a second system banner would be duplicate noise.
     const tabs = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     if (tabs.some((t) => t.visibilityState === "visible")) return;
 
@@ -106,7 +93,6 @@ self.addEventListener("push", (event) => {
     await self.registration.showNotification(title, {
       body,
       data: { url: targetUrl(p) },
-      // Collapse repeated pushes from the same conversation into one banner.
       tag: p.type === "dm" && p.conversation_id ? "dm-" + p.conversation_id
         : p.type === "club_chat" && p.club_slug ? "club-chat-" + p.club_slug
         : undefined,

@@ -143,7 +143,6 @@ async def list_conversations(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Unread count per conversation (messages sent by the other user that are unread)
     unread_subq = (
         select(
             DirectMessage.conversation_id,
@@ -154,7 +153,6 @@ async def list_conversations(
         .subquery("unread_subq")
     )
 
-    # Window-function subquery: rank messages newest-first within each conversation
     dm_ranked = (
         select(
             DirectMessage.conversation_id,
@@ -182,8 +180,6 @@ async def list_conversations(
         else_=Conversation.user1_id,
     )
 
-    # A blocked person's thread disappears from the list for both sides. The
-    # messages are kept, not deleted — unblocking brings the thread back.
     hidden = await blocked_user_ids(db, current_user.id)
     hidden_clause = [OtherUser.id.notin_(hidden)] if hidden else []
 
@@ -243,10 +239,7 @@ async def list_club_chats(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Club chats for the Messages screen: every club the user belongs to,
-    previewed with its latest chat message (newest activity first). Must be
-    registered before the /{conversation_id} routes or "club-chats" would be
-    swallowed as a conversation id."""
+    """Club chats for the Messages screen: every club the user belongs to, previewed."""
     memberships = (await db.execute(
         select(Club, ClubMember.chat_muted)
         .join(ClubMember, ClubMember.club_id == Club.id)
@@ -256,7 +249,6 @@ async def list_club_chats(
         return []
 
     club_ids = [club.id for club, _ in memberships]
-    # DISTINCT ON (club_id) with a matching order_by = latest message per club.
     last_rows = (await db.execute(
         select(ChatMessage, User)
         .join(User, ChatMessage.author_id == User.id)
@@ -287,7 +279,6 @@ async def list_club_chats(
             "last_message": last_payload,
             "_sort": last[0].created_at if last else None,
         })
-    # Active chats first (newest message on top), silent clubs after, A→Z.
     items.sort(key=lambda i: (
         i["_sort"] is None,
         -i["_sort"].timestamp() if i["_sort"] else 0,
@@ -316,7 +307,6 @@ async def open_conversation(
     if other.id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot message yourself.")
     if await is_blocked_pair(db, current_user.id, other.id):
-        # Same 404 as a nonexistent user: the blocked side is never told why.
         raise HTTPException(status_code=404, detail="User not found.")
 
     conv = await _get_or_create_conversation(current_user, other, db)
@@ -498,8 +488,7 @@ async def get_messages(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Latest 50 messages; pass ?before=<message_id> to page back through
-    older history (returns the 50 messages preceding that one)."""
+    """Latest 50 messages; pass ?before=<message_id> to page back through older."""
     try:
         conv_id = uuid.UUID(conversation_id)
     except ValueError:
@@ -513,8 +502,6 @@ async def get_messages(
 
     other_user_id = conv.user2_id if conv.user1_id == current_user.id else conv.user1_id
     if await is_blocked_pair(db, current_user.id, other_user_id):
-        # Matches the missing-conversation response, so a saved link to a
-        # blocked thread behaves exactly like one that never existed.
         raise HTTPException(status_code=403, detail="Access denied.")
 
     other_user = (await db.execute(
@@ -533,8 +520,6 @@ async def get_messages(
         .where(DirectMessage.conversation_id == conv_id)
     )
     if before:
-        # (created_at, id) cursor — id breaks ties so identical timestamps
-        # can never skip or repeat a message across pages.
         try:
             before_id = uuid.UUID(before)
             anchor = (await db.execute(
@@ -550,13 +535,10 @@ async def get_messages(
         except ValueError:
             pass
     rows = (await db.execute(
-        # Newest 50 of the window, then reversed for display — ascending+limit
-        # would return the OLDEST 50 and silently cut off recent messages.
         stmt.order_by(DirectMessage.created_at.desc(), DirectMessage.id.desc()).limit(50)
     )).all()
     rows = list(reversed(rows))
 
-    # Mark all unread messages from the other person as read
     await db.execute(
         update(DirectMessage)
         .where(
@@ -590,9 +572,7 @@ async def delete_messages(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Delete messages from this conversation, for both participants.
-    Only the caller's own messages qualify — IDs of the other person's
-    messages are silently ignored, never deleted."""
+    """Delete messages from this conversation, for both participants."""
     try:
         conv_id = uuid.UUID(conversation_id)
     except ValueError:
@@ -622,8 +602,6 @@ async def delete_messages(
     if owned:
         await db.execute(delete(DirectMessage).where(DirectMessage.id.in_(owned)))
         await db.commit()
-        # Both open chats (including the deleter's other tabs) drop the
-        # bubbles live, same channel the messages arrived on.
         await redis.publish(f"dm:{conv_id}", json.dumps({
             "event": "messages_deleted",
             "ids": [str(i) for i in owned],
@@ -689,9 +667,6 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
             await websocket.close(code=4003, reason="Access denied")
             return
 
-        # Refuse the socket outright if either side blocked the other — this is
-        # the only thing standing between a blocked user and sending a DM, since
-        # every message goes over this channel rather than a REST endpoint.
         other_id = conv.user2_id if conv.user1_id == user.id else conv.user1_id
         if await is_blocked_pair(db, user.id, other_id):
             await websocket.close(code=4003, reason="Access denied")
@@ -699,7 +674,6 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
 
         await websocket.accept()
 
-        # Cache user IDs as plain values — conv ORM attrs expire after each commit
         conv_user1_id = conv.user1_id
         conv_user2_id = conv.user2_id
 
@@ -727,7 +701,6 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
                 except json.JSONDecodeError:
                     continue
 
-                # Ephemeral typing signal — broadcast to the conversation, never persisted.
                 if data.get("event") == "typing":
                     await redis.publish(channel, json.dumps({
                         "event": "typing",
@@ -738,7 +711,6 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
                 content = (data.get("content") or "").strip()
                 shared_post_id_str = data.get("shared_post_id")
                 raw_attachments = data.get("attachments") or []
-                # Sanitise: keep only the fields we expect, discard anything else
                 attachments = [
                     {
                         "url": str(a.get("url", "")),
@@ -753,8 +725,6 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
                 if not content and not shared_post_id_str and not attachments:
                     continue
 
-                # WS input bypasses Pydantic, so cap length here (UI caps at 2000;
-                # the margin covers the reply-quote prefix).
                 if len(content) > 4000:
                     content = content[:4000]
 
@@ -789,16 +759,11 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
                 await db.refresh(dm)
 
                 payload_dict = _build_msg_payload(dm, user, shared_post, post_author)
-                # Echo the sender's client-generated ID so their optimistic
-                # "sending…" bubble can be swapped for this confirmed message.
-                # Never persisted; other clients ignore it.
                 client_id = data.get("client_id")
                 if isinstance(client_id, str) and 0 < len(client_id) <= 64:
                     payload_dict["client_id"] = client_id
                 await redis.publish(channel, json.dumps(payload_dict))
 
-                # Push notification to the recipient — re-query mute status so
-                # toggling mute mid-session takes effect immediately
                 recipient_id = conv_user2_id if conv_user1_id == user.id else conv_user1_id
                 mute_row = (await db.execute(
                     select(Conversation.muted_by_user1, Conversation.muted_by_user2)

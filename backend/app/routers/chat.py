@@ -25,8 +25,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/clubs", tags=["chat"])
 
-# Fire-and-forget push tasks — kept referenced so the event loop can't GC them
-# mid-flight.
 _push_tasks: set[asyncio.Task] = set()
 
 
@@ -38,15 +36,7 @@ async def _broadcast_chat_push(
     content: str,
     attachments: list[dict],
 ) -> None:
-    """Browser-push a club chat message to every member except the sender.
-
-    Push-only on purpose: no bell row and no in-app toast — chat is too
-    high-frequency for those, and anyone with a visible tab sees the message
-    live anyway (the service worker also suppresses banners for visible tabs).
-    Members tagged with @mention are skipped here — they already get the more
-    specific chat_mention notification. Runs in its own session because the
-    caller's WS loop must not block on N push deliveries.
-    """
+    """Browser-push a club chat message to every member except the sender."""
     try:
         async with AsyncSessionLocal() as db:
             mentioned = set(extract_mention_usernames(content or ""))
@@ -82,11 +72,7 @@ async def _broadcast_chat_push(
 
 
 async def _notify_chat_mentions(content: str, club: Club, actor: User, db) -> None:
-    """Persist + push a 'chat_mention' for every club member tagged in a chat message.
-
-    Membership is required — tagging must never leak private-club activity to
-    outsiders. reference_id stores the club id so the notification can deep-link.
-    """
+    """Persist + push a 'chat_mention' for every club member tagged in a chat."""
     from sqlalchemy import func as sa_func
 
     names = extract_mention_usernames(content)
@@ -118,7 +104,6 @@ async def _notify_chat_mentions(content: str, club: Club, actor: User, db) -> No
         "club_slug": club.slug,
     }
     for u in targets:
-        # Muted category → still saved above (bell), but pushed without a popup.
         payload = {**base, "silent": "mentions" in (u.muted_notifications or [])}
         await push_live(db, u.id, payload)
 
@@ -147,8 +132,7 @@ async def get_chat_history(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Latest messages; pass ?before=<message_id> to page back through older
-    history (returns the messages preceding that one)."""
+    """Latest messages; pass ?before=<message_id> to page back through older history."""
     club = (await db.execute(select(Club).where(Club.slug == slug))).scalar_one_or_none()
     if not club:
         raise HTTPException(status_code=404, detail="Club not found.")
@@ -167,8 +151,6 @@ async def get_chat_history(
         .where(ChatMessage.club_id == club.id, ChatMessage.is_deleted == False)
     )
     if before:
-        # (created_at, id) cursor — id breaks ties so identical timestamps
-        # can never skip or repeat a message across pages.
         try:
             before_id = uuid.UUID(before)
             anchor = (await db.execute(
@@ -290,7 +272,6 @@ async def chat_websocket(websocket: WebSocket, slug: str):
                 except json.JSONDecodeError:
                     continue
 
-                # Ephemeral typing signal — broadcast, never persisted.
                 if data.get("event") == "typing":
                     await redis.publish(channel, json.dumps({
                         "event": "typing",
@@ -329,20 +310,13 @@ async def chat_websocket(websocket: WebSocket, slug: str):
                 await db.refresh(chat_msg)
 
                 payload_dict = _build_chat_payload(chat_msg, user)
-                # Echo the sender's client-generated ID so their optimistic
-                # "sending…" bubble can be swapped for this confirmed message.
-                # Never persisted; other clients ignore it.
                 client_id = data.get("client_id")
                 if isinstance(client_id, str) and 0 < len(client_id) <= 64:
                     payload_dict["client_id"] = client_id
                 await redis.publish(channel, json.dumps(payload_dict))
 
-                # @mentions — notify tagged users, but only fellow club members:
-                # chat in a (possibly private) club must never ping outsiders.
                 await _notify_chat_mentions(content, club, user, db)
 
-                # Browser push to everyone else, off this loop so a big club
-                # never slows the sender's next message.
                 if settings.push_configured:
                     task = asyncio.create_task(_broadcast_chat_push(
                         club.id, club.name, club.slug,

@@ -1,7 +1,3 @@
-// Optimistic vote arithmetic. Waiting a full server round-trip before the
-// number moves makes every tap feel laggy, so pages apply this transition
-// instantly, then reconcile with the server's authoritative response (or roll
-// back to the pre-tap snapshot if the request fails).
 
 export interface VoteFields {
   upvotes: number;

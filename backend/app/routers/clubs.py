@@ -39,8 +39,6 @@ router = APIRouter(prefix="/api/clubs", tags=["clubs"])
 
 logger = logging.getLogger(__name__)
 
-# Keeps fan-out tasks referenced so the event loop can't garbage-collect a
-# notification mid-delivery (same pattern the chat push broadcast uses).
 _event_notify_tasks: set[asyncio.Task] = set()
 
 
@@ -51,15 +49,7 @@ async def _notify_club_event(
     club_slug: str,
     actor: dict,
 ) -> None:
-    """Tell every other member that an event was scheduled.
-
-    Events get a full notification (bell row + toast + browser push) rather
-    than the push-only treatment club chat gets: they're rare, and the whole
-    point is that members find out in time to show up.
-
-    Runs detached with its own session so posting stays fast in a big club —
-    the poster shouldn't wait on N push deliveries to see their own post.
-    """
+    """Tell every other member that an event was scheduled."""
     try:
         async with AsyncSessionLocal() as db:
             hidden = await blocked_user_ids(db, actor["id"])
@@ -76,7 +66,6 @@ async def _notify_club_event(
             if not recipients:
                 return
 
-            # One INSERT batch + one commit; notify() would commit per member.
             for user_id, _ in recipients:
                 db.add(Notification(
                     user_id=user_id,
@@ -96,7 +85,6 @@ async def _notify_club_event(
                 "post_id": str(post_id),
             }
             for user_id, muted in recipients:
-                # Muted "clubs" → still in the bell, but no popup or push banner.
                 await push_live(db, user_id, {**base, "silent": "clubs" in (muted or [])})
     except Exception as exc:
         logger.warning("club event notification fan-out failed: %s", exc)
@@ -210,10 +198,7 @@ async def _vote_counts(
 # ── club query helper ─────────────────────────────────────────────────────────
 
 def _build_club_select(user_id: uuid.UUID, extra_where=None):
-    """
-    Returns rows of (Club, member_count, user_role, pending_request_id, chat_muted).
-    pending_request_id is non-NULL when the current user has a pending join request.
-    """
+    """Returns rows of (Club, member_count, user_role, pending_request_id."""
     AllMembers = aliased(ClubMember)
     UserMember = aliased(ClubMember)
     UserRequest = aliased(ClubJoinRequest)
@@ -294,17 +279,7 @@ async def _get_membership(
 
 
 async def _clear_pending(club_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession) -> None:
-    """Drop any pending join request AND invitation between a user and a club.
-
-    Call it at every membership transition (join, approve, accept, leave, kick).
-    A club has two independent membership systems — user-initiated requests and
-    owner-initiated invitations — and both were leaving orphan rows: kicking a
-    member never cleared their old join request, so `has_pending_request` stayed
-    true forever, hiding their Join button (they couldn't re-request) while they
-    lingered in the owner's requests list. Wiping both on every transition keeps
-    the two systems from ever contradicting the actual membership state. Does not
-    commit — the caller's transaction owns the outcome.
-    """
+    """Drop any pending join request AND invitation between a user and a club."""
     await db.execute(
         delete(ClubJoinRequest).where(
             ClubJoinRequest.club_id == club_id, ClubJoinRequest.user_id == user_id
@@ -425,7 +400,6 @@ async def join_club(
 
     is_request = club.is_private
     if is_request:
-        # Private clubs require owner approval — create a join request instead
         if await _get_join_request(club.id, current_user.id, db):
             raise HTTPException(status_code=409, detail="You already have a pending join request.")
         db.add(ClubJoinRequest(club_id=club.id, user_id=current_user.id))
@@ -436,7 +410,6 @@ async def join_club(
     await db.commit()
 
     if is_request:
-        # Ping everyone who can act on the request (owner + moderators).
         approvers = (await db.execute(
             select(ClubMember.user_id).where(
                 ClubMember.club_id == club.id,
@@ -514,7 +487,6 @@ async def leave_club(
                 detail="You are the only member. Delete the club instead of leaving.",
             )
 
-        # Promote the successor only if there is no other owner
         if successor.role != "owner":
             successor.role = "owner"
 
@@ -538,9 +510,6 @@ async def get_club_posts(
         if not membership:
             raise HTTPException(status_code=403, detail="This is a private club.")
 
-    # Blocked members stay in the club (membership is the club's business, not
-    # yours), but their posts drop out of your view of its feed. Club *chat* is
-    # deliberately left alone — hiding messages mid-conversation reads as broken.
     block_clause = visible_author_clause(
         Post.author_id, await blocked_user_ids(db, current_user.id)
     )
@@ -595,10 +564,7 @@ async def create_club_post(
         image_urls=body.image_urls,
         file_attachments=[a.model_dump() for a in body.file_attachments],
         poll_expires_at=body.poll_expires_at,
-        # Club-only feature: the flag is deliberately not honored by the feed
-        # post endpoint, so feed polls are always anonymous.
         poll_public_votes=bool(body.poll_options) and body.poll_public_votes,
-        # Events are club-only too: the feed endpoint ignores these fields.
         event_starts_at=body.event_starts_at,
         event_ends_at=body.event_ends_at,
         event_location=(body.event_location or "").strip() or None,
@@ -618,7 +584,6 @@ async def create_club_post(
 
     event = (await _load_events([post.id], current_user.id, db)).get(post.id)
 
-    # Only events notify the club — ordinary club posts stay ambient by design.
     if post.event_starts_at is not None:
         task = asyncio.create_task(_notify_club_event(
             post.id, club.id, club.name, club.slug,
@@ -702,9 +667,6 @@ async def approve_join_request(
     if not request and not already_member:
         raise HTTPException(status_code=404, detail="No pending request from this user.")
 
-    # Idempotent: if they're somehow already a member (double-approval, a race),
-    # just clear the stale request instead of a duplicate-key insert that would
-    # roll back and leave the request undeleted — the exact orphan we're fixing.
     await _clear_pending(club.id, target.id, db)
     if not already_member:
         db.add(ClubMember(club_id=club.id, user_id=target.id, role="member"))
@@ -806,9 +768,6 @@ async def remove_member(
         raise HTTPException(status_code=400, detail="Use the leave endpoint to leave the club yourself.")
 
     await db.delete(target_membership)
-    # Wipe any old request/invite so a kicked user gets a clean slate — they can
-    # request again and the owner can invite them, instead of both being blocked
-    # by a stale "pending" row.
     await _clear_pending(club.id, target.id, db)
     await db.commit()
 
@@ -831,8 +790,6 @@ async def invite_member(
     if target.id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot invite yourself.")
     if await is_blocked_pair(db, current_user.id, target.id):
-        # An invitation is a personal, notifying approach — the same 404 the
-        # rest of the app gives, so the block stays invisible to both sides.
         raise HTTPException(status_code=404, detail="User not found.")
 
     if await _get_membership(club.id, target.id, db):
@@ -856,7 +813,6 @@ async def invite_member(
         "actor_avatar_url": current_user.avatar_url,
         "club_name": club.name,
         "club_slug": club.slug,
-        # Muted category → the invite still shows in the bell, no popup.
         "silent": "clubs" in (target.muted_notifications or []),
     })
 
@@ -879,7 +835,6 @@ async def accept_invitation(
         raise HTTPException(status_code=404, detail="No invitation found.")
 
     await db.delete(invite)
-    # Also drop any parallel join request so accepting doesn't leave an orphan.
     await _clear_pending(club.id, current_user.id, db)
     db.add(ClubMember(club_id=club.id, user_id=current_user.id, role="member"))
     await db.commit()
@@ -944,7 +899,6 @@ async def update_member_role(
     target_membership.role = body.role
     await db.commit()
 
-    # Promotions are worth celebrating; demotions stay quiet.
     if was_promoted:
         await notify(
             db,

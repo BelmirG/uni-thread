@@ -22,8 +22,6 @@ DOC_EXT_TO_MIME: dict[str, str] = {
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
 
-# Text/code files — all served as text/plain regardless of source extension.
-# This ensures even .html or .xml cannot be rendered as markup by the browser.
 TEXT_EXTENSIONS: frozenset[str] = frozenset({
     ".txt", ".md", ".csv",
     ".py", ".js", ".ts", ".jsx", ".tsx",
@@ -35,11 +33,8 @@ TEXT_EXTENSIONS: frozenset[str] = frozenset({
 
 ALLOWED_EXTENSIONS: frozenset[str] = frozenset(DOC_EXT_TO_MIME) | TEXT_EXTENSIONS
 
-# PDFs and all text/code files are rendered inline in the browser.
-# Office files are force-downloaded (Content-Disposition: attachment).
 INLINE_EXTENSIONS: frozenset[str] = frozenset({".pdf"}) | TEXT_EXTENSIONS
 
-# Stored filenames are always UUID + allowed extension — no path components possible.
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
@@ -84,11 +79,9 @@ async def serve_file(
         media_type=media_type,
         headers={
             "Content-Disposition": f'{disposition}; filename="{filename}"',
-            # Prevent MIME sniffing — browser must honour the declared Content-Type.
             "X-Content-Type-Options": "nosniff",
             # No caching of potentially sensitive academic files.
             "Cache-Control": "private, no-store",
-            # Sandbox inline content so it cannot run scripts or access the parent page.
             "Content-Security-Policy": "sandbox",
         },
     )

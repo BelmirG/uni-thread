@@ -377,7 +377,6 @@ export default function ClubDetailPage() {
   async function handleVote(postId: string, voteType: "up" | "down") {
     const before = posts.find((p) => p.id === postId);
     if (!before) return;
-    // Instant local update; the server response (or a rollback) reconciles it.
     setPosts((prev) => prev.map((p) => (p.id === postId ? applyVote(p, voteType) : p)));
     try {
       const data = await apiFetch<VoteResponse>(`/api/clubs/${slug}/posts/${postId}/vote`, {
@@ -466,7 +465,6 @@ export default function ClubDetailPage() {
   return (
     <>
       <main className="max-w-xl mx-auto px-4 pt-4 pb-36">
-        {/* Back link — chat now lives under Messages → Club chats */}
         <div className="flex items-center justify-between mb-4">
           <Link
             href="/clubs"
@@ -479,8 +477,6 @@ export default function ClubDetailPage() {
 
         {/* Club header card */}
         <div className="bg-surface rounded-2xl shadow-sm mb-4">
-          {/* Banner — clipped to its own rounded top corners, not the whole card,
-              so the ⋮ menu below (which overflows this card's bounds) isn't cut off. */}
           <div className="relative h-32 sm:h-40 rounded-t-2xl overflow-hidden bg-gradient-to-br from-secondary/20 to-secondary/5">
             {club.banner_url && (
               <img
@@ -489,8 +485,6 @@ export default function ClubDetailPage() {
                 className="absolute inset-0 w-full h-full object-cover"
               />
             )}
-            {/* Fades the image into the card's background so the header text below
-                never fights the banner for a hard edge. */}
             <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent" />
             {isMod && (
               <>
@@ -983,7 +977,6 @@ export default function ClubDetailPage() {
                           <p className="text-[11px] text-muted-foreground">@{m.username}</p>
                         </div>
                       </Link>
-                      {/* Role badge — always visible on the right */}
                       <span className={cn(
                         "text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0",
                         m.role === "owner" ? "bg-purple-100 text-purple-700"
@@ -993,7 +986,6 @@ export default function ClubDetailPage() {
                         {m.role === "owner" ? "Admin" : m.role}
                       </span>
                     </div>
-                    {/* Bottom row: action buttons (only for owner managing non-owners) */}
                     {club?.role === "owner" && m.role !== "owner" && (
                       <div className="flex items-center gap-1.5 mt-2 ml-[50px]">
                         {m.role === "member" && (

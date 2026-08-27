@@ -1,18 +1,4 @@
-"""Privacy invariant tests.
-
-These prove the guarantees the design makes, not just that endpoints work:
-
-1. Anonymous Q&A posts carry no author identity through any user-facing API,
-   because the posts table never stores it (data compartmentalization) —
-   the only link lives in anonymous_post_authors, reserved for moderation.
-2. The qa_answer notification — the one audited exception allowed to read
-   anonymous_post_authors — uses the author id solely as the RECIPIENT and
-   never reveals who answered.
-3. Private club content is invisible to non-members, and direct access by
-   post id returns 404 (indistinguishable from "does not exist").
-4. Deactivated/banned accounts cannot act, even with a valid session token.
-5. Registration is gated to university email domains.
-"""
+"""Privacy invariant tests."""
 import uuid
 
 from sqlalchemy import select
@@ -33,19 +19,15 @@ async def test_anonymous_question_never_exposes_author(client_for, make_user, db
     assert alice.username not in r.text
     assert str(alice.id) not in r.text
 
-    # The posts row itself holds no author — a buggy endpoint cannot leak
-    # what was never stored there.
     post = (await db.execute(select(Post).where(Post.id == uuid.UUID(q["id"])))).scalar_one()
     assert post.author_id is None
     assert post.is_anonymous is True
 
-    # ...but moderation can still trace it through the separate privacy table.
     link = (await db.execute(
         select(AnonymousPostAuthor).where(AnonymousPostAuthor.post_id == post.id)
     )).scalar_one()
     assert link.user_id == alice.id
 
-    # Another user browsing the board and the thread sees no identity either.
     for url in ("/api/qa", f"/api/qa/{q['id']}"):
         r = await bob_c.get(url)
         assert r.status_code == 200
@@ -75,17 +57,13 @@ async def test_answer_notification_is_actorless(client_for, make_user, db):
     q = (await alice_c.post("/api/qa", json={"content": "notif test question"})).json()
     r = await bob_c.post(f"/api/qa/{q['id']}/answers", json={"content": "an answer"})
     assert r.status_code == 201
-    # The answer response itself reveals nothing about anyone.
     assert bob.username not in r.text and alice.username not in r.text
 
-    # The stored notification has no actor — the answerer's identity is not
-    # recorded, so no later query can reveal it.
     notif = (await db.execute(select(Notification).where(
         Notification.user_id == alice.id, Notification.type == "qa_answer"
     ))).scalar_one()
     assert notif.actor_id is None
 
-    # Alice's notification feed says "someone answered", never who.
     r = await alice_c.get("/api/notifications")
     assert r.status_code == 200
     assert bob.username not in r.text
@@ -118,9 +96,7 @@ async def test_only_real_author_or_admin_can_delete_anonymous_post(client_for, m
     q1 = (await alice_c.post("/api/qa", json={"content": "delete test 1"})).json()
     q2 = (await alice_c.post("/api/qa", json={"content": "delete test 2"})).json()
 
-    # A stranger cannot delete it, even knowing the post id.
     assert (await bob_c.delete(f"/api/qa/{q1['id']}")).status_code == 403
-    # The real author can (authorship checked via the privacy table).
     assert (await alice_c.delete(f"/api/qa/{q1['id']}")).status_code == 204
     # Admins can moderate.
     assert (await admin_c.delete(f"/api/qa/{q2['id']}")).status_code == 204
@@ -148,8 +124,6 @@ async def test_private_club_content_hidden_from_non_members(client_for, make_use
     assert r.status_code == 200
     assert post_id not in r.text
 
-    # Direct access by id → 404, indistinguishable from "does not exist",
-    # so an outsider can't even confirm the post is real.
     assert (await out_c.get(f"/api/posts/{post_id}")).status_code == 404
     assert (await out_c.post(f"/api/posts/{post_id}/replies", json={"content": "hi"})).status_code == 404
     assert (await out_c.post(f"/api/posts/{post_id}/vote", json={"vote_type": "up"})).status_code == 404
@@ -158,7 +132,6 @@ async def test_private_club_content_hidden_from_non_members(client_for, make_use
     assert (await out_c.get(f"/api/clubs/{slug}/posts")).status_code == 403
     assert (await out_c.get(f"/api/clubs/{slug}/chat")).status_code == 403
 
-    # Sanity check: the gate blocks outsiders, not everyone.
     assert (await owner_c.get(f"/api/posts/{post_id}")).status_code == 200
 
 
@@ -166,7 +139,6 @@ async def test_deactivated_user_cannot_act(client_for, make_user):
     ghost = await make_user(is_active=False)
     ghost_c = client_for(ghost)
 
-    # The JWT itself is valid — the account state must be what blocks access.
     assert (await ghost_c.get("/api/posts")).status_code == 401
     assert (await ghost_c.post("/api/posts", json={"content": "hi"})).status_code == 401
     assert (await ghost_c.post("/api/qa", json={"content": "hi"})).status_code == 401

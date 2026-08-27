@@ -1,26 +1,8 @@
-/* Self-healing WebSocket for chat surfaces (DMs, club chat).
- *
- * A raw WebSocket dies permanently the moment the phone locks, the tab sleeps,
- * or the network blips — and the chat stays frozen until a full page reload.
- * This wrapper makes the connection behave the way messaging apps do:
- *
- *  - drops reconnect automatically with exponential backoff (1s → 10s cap);
- *  - returning to the tab / regaining network reconnects immediately;
- *  - messages sent while offline are queued and flushed on reconnect;
- *  - after a reconnect, `onReconnect` fires so the page can refetch history
- *    and fill in whatever arrived during the gap.
- *
- * Close codes 4000–4999 are the backend's deliberate rejections (bad auth,
- * not a member, no such conversation) — retrying those would loop forever,
- * so they end the connection for good.
- */
 import { wsUrl } from "@/lib/ws";
 
 export type SocketStatus = "connecting" | "connected" | "disconnected";
 
 export interface ChatSocket {
-  /** Send a JSON payload. Queued and sent on reconnect if currently offline,
-   *  unless `queueIfClosed` is false (use that for ephemeral typing signals). */
   send: (payload: object, queueIfClosed?: boolean) => void;
   close: () => void;
 }
@@ -66,7 +48,7 @@ export function openChatSocket(
       if (closed) return;
       opts.onStatus("disconnected");
       if (event.code >= 4000 && event.code < 5000) {
-        closed = true; // deliberate server rejection — retrying can't fix it
+        closed = true;
         return;
       }
       scheduleRetry();
@@ -84,8 +66,6 @@ export function openChatSocket(
     }, delay);
   }
 
-  // Coming back to the app is the moment users notice a dead chat — skip the
-  // backoff timer and reconnect right away.
   function wake() {
     if (closed) return;
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;

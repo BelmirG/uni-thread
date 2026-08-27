@@ -9,8 +9,7 @@ from app.database import Base
 
 
 class PushSubscription(Base):
-    """One browser's push channel. endpoint is unique per browser+site, so it
-    doubles as the natural key for upsert/unsubscribe."""
+    """One browser's push channel."""
 
     __tablename__ = "push_subscriptions"
 

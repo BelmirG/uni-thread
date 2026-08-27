@@ -46,10 +46,7 @@ interface SearchClub {
 interface Props {
   open: boolean;
   onClose: () => void;
-  /** "global" searches people + posts; "chats" filters DM conversations;
-      "clubs" filters the club directory. */
   mode: "global" | "chats" | "clubs";
-  /** Which post pool a global search hits. Defaults to the public feed. */
   postType?: "feed" | "anonymous_qa";
 }
 
@@ -65,8 +62,6 @@ export function SearchOverlay({ open, onClose, mode, postType = "feed" }: Props)
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset + focus on open; chats mode loads the conversation list once and
-  // filters it locally as the user types.
   useEffect(() => {
     if (!open) return;
     setQuery("");

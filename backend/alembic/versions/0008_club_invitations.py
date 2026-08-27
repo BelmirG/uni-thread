@@ -1,9 +1,4 @@
-"""Add club_invitations table
-
-Revision ID: 0008
-Revises: 0007
-Create Date: 2026-06-29
-"""
+"""Add club_invitations table."""
 
 from alembic import op
 import sqlalchemy as sa

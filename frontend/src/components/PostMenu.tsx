@@ -5,9 +5,6 @@ import { MoreHorizontal, Flag, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-/** Three-dots overflow menu on a post card. Currently holds only "Report post"
- *  (tucked away here so moderation options aren't in users' faces) — callers
- *  should render it only on posts that aren't the viewer's own. */
 export default function PostMenu({ postId, className }: { postId: string; className?: string }) {
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState(false);

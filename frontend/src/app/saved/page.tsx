@@ -34,7 +34,6 @@ interface SavedResponse {
   total: number;
 }
 
-// Anonymous Q&A posts live under /qa, everything else under /feed.
 function postHref(p: SavedPost): string {
   return p.post_type === "anonymous_qa" ? `/qa/${p.id}` : `/feed/${p.id}`;
 }

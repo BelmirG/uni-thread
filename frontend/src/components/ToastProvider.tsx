@@ -12,7 +12,6 @@ interface NotifPayload {
     | "follow" | "club_invite" | "dm" | "mention" | "chat_mention"
     | "reply" | "milestone" | "qa_answer"
     | "club_join_request" | "club_approved" | "club_role" | "club_event";
-  // Absent on system notifications (milestone, qa_answer) — nobody's identity rides along.
   actor_username?: string;
   actor_display_name?: string;
   actor_avatar_url?: string | null;
@@ -229,7 +228,6 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
           size={38}
         />
       ) : (
-        // System notification — no actor to show, use an icon instead.
         <span className="w-[38px] h-[38px] rounded-full bg-surface-container flex items-center justify-center flex-shrink-0 text-secondary">
           {toast.payload.type === "milestone"
             ? <TrendingUp className="w-5 h-5" />
@@ -262,9 +260,7 @@ export default function ToastProvider({ children }: { children: React.ReactNode 
   }, []);
 
   const addToast = useCallback((payload: NotifPayload) => {
-    // Always notify subscribers (e.g. messages list refresh) — mute only hides the popup
     listenersRef.current.forEach((h) => h(payload));
-    // Suppress toast when muted or already in that conversation
     if (payload.silent) return;
     if (
       payload.type === "dm" &&
@@ -312,10 +308,6 @@ export default function ToastProvider({ children }: { children: React.ReactNode 
 
     connect();
 
-    // Mobile browsers suspend the socket when the app is backgrounded; the
-    // reconnect above can then be stuck behind up to 30s of backoff right when
-    // the user reopens the app — so live toasts silently don't arrive. Reconnect
-    // at once on return to foreground instead of waiting the timer out.
     function onVisible() {
       if (document.visibilityState !== "visible") return;
       const ws = wsRef.current;

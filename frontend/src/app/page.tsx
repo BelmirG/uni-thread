@@ -47,7 +47,6 @@ export default function Home() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [checkedHealth, setCheckedHealth] = useState(false);
 
-  // Signed-in students skip the pitch and land in their feed.
   useEffect(() => {
     apiFetch("/api/auth/me")
       .then(() => router.replace("/feed"))

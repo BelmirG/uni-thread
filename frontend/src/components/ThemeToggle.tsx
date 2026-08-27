@@ -3,23 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 
-// Document.startViewTransition isn't in the TS lib yet everywhere.
 type VTDocument = Document & {
   startViewTransition?: (update: () => void) => { ready: Promise<void> };
 };
 
-/**
- * Light/dark switch. The theme change plays as a circular reveal expanding
- * from the button (View Transitions API); browsers without support just get
- * an instant switch. The icon itself morphs — sun rotates/shrinks away while
- * the moon rotates in.
- */
 export default function ThemeToggle() {
   const [dark, setDark] = useState(false);
   const btnRef = useRef<HTMLButtonElement | null>(null);
 
-  // Theme is applied to <html> by the inline script in layout.tsx before
-  // hydration; read it back here so the icon starts on the right side.
   useEffect(() => {
     setDark(document.documentElement.classList.contains("dark"));
   }, []);
@@ -32,7 +23,6 @@ export default function ThemeToggle() {
       try {
         localStorage.setItem("theme", next ? "dark" : "light");
       } catch {}
-      // Keep the PWA status bar / browser chrome in step with the theme.
       document
         .querySelector('meta[name="theme-color"]')
         ?.setAttribute("content", next ? "#111112" : "#ffffff");
@@ -47,7 +37,6 @@ export default function ThemeToggle() {
       return;
     }
 
-    // Circle big enough to cover the farthest viewport corner from the button.
     const r = el.getBoundingClientRect();
     const x = r.left + r.width / 2;
     const y = r.top + r.height / 2;

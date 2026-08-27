@@ -309,7 +309,6 @@ export default function QADetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
 
-  // "Back" returns to the profile you came from, otherwise the Q&A list.
   const [backHref] = useState(() => {
     const ref = lastVisitedPath();
     return ref && ref.startsWith("/profile/") ? ref : "/qa";
@@ -346,7 +345,6 @@ export default function QADetailPage() {
     const before =
       (question?.id === targetId ? question : undefined) ?? allAnswers.find((p) => p.id === targetId);
     if (!before) return;
-    // Instant local update; the server response (or a rollback) reconciles it.
     setQuestion((prev) => (prev?.id === targetId ? applyVote(prev, voteType) : prev));
     setAllAnswers((prev) => prev.map((p) => (p.id === targetId ? applyVote(p, voteType) : p)));
     try {
@@ -367,7 +365,6 @@ export default function QADetailPage() {
     if (!window.confirm("Delete this post? This cannot be undone.")) return;
     try {
       await apiFetch(`/api/qa/${targetId}`, { method: "DELETE" });
-      // Drop the board's cached snapshot so going back doesn't resurrect it.
       clearQACache();
       setAllAnswers((prev) =>
         prev.map((p) => (p.id === targetId ? { ...p, is_deleted: true, content: "[deleted]" } : p))
@@ -463,10 +460,6 @@ export default function QADetailPage() {
   return (
     <Ctx.Provider value={ctxValue}>
       <main className="max-w-xl mx-auto px-4 pt-4 pb-8">
-        {/* Back link — returns to where you came from (profile) or the Q&A list.
-            scroll={false}: the board restores its own scroll position on return
-            (see lib/qaCache.ts) — Next's default scroll-to-top would win the race
-            and undo that restoration. */}
         <Link
           href={backHref}
           scroll={false}

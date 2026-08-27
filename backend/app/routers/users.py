@@ -57,14 +57,7 @@ async def _get_active_user(username: str, db: AsyncSession) -> User:
 
 
 async def _get_visible_user(username: str, current_user: User, db: AsyncSession) -> User:
-    """Like _get_active_user, but a blocked user simply doesn't exist.
-
-    404 (not 403) is deliberate and mutual: the blocked side can't tell a block
-    apart from a deleted account, so blocking never notifies the person blocked.
-    Use this for every read/interact path; the block and report endpoints use
-    _get_active_user instead, since you must still be able to block or report
-    someone who blocked you first.
-    """
+    """Like _get_active_user, but a blocked user simply doesn't exist."""
     target = await _get_active_user(username, db)
     if await is_blocked_pair(db, current_user.id, target.id):
         raise HTTPException(status_code=404, detail="User not found.")
@@ -90,8 +83,7 @@ async def search_users(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Search users by username or display name. Returns up to `limit` results
-    with an `is_following` flag so the frontend can show the right button."""
+    """Search users by username or display name."""
     q = q.strip()
     if not q:
         return []
@@ -117,7 +109,6 @@ async def search_users(
     if not users:
         return []
 
-    # Batch-check which of these users the current user already follows
     user_ids = [u.id for u in users]
     following_ids = set(
         row[0] for row in (await db.execute(
@@ -194,7 +185,6 @@ async def update_profile(
 
 
 class NotificationPrefsRequest(BaseModel):
-    # {"mentions": true, "milestones": false, ...} — false = muted (bell only, no popup)
     prefs: dict[str, bool]
 
 
@@ -218,7 +208,6 @@ async def update_notification_prefs(
     if unknown:
         raise HTTPException(status_code=422, detail=f"Unknown categories: {', '.join(sorted(unknown))}")
 
-    # Merge: only the categories present in the request change.
     muted = set(current_user.muted_notifications or [])
     for category, enabled in body.prefs.items():
         (muted.discard if enabled else muted.add)(category)
@@ -238,19 +227,7 @@ async def delete_my_account(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Self-serve permanent account deletion.
-
-    Guards:
-    - Password re-entry — a stolen session alone can't destroy the account.
-    - Banned accounts can't self-delete: deletion would erase the moderation
-      record (ban reason, identity) and let someone evade a ban and re-register.
-    - Admins and club owners are refused with instructions (same rules as the
-      admin panel's delete: a club's creator can't be null).
-
-    Deletion is hard: votes, follows, memberships, messages, and the
-    anonymous-authorship links cascade away; posts survive but are detached
-    (author_id → NULL), which shows as an ownerless post rather than breaking threads.
-    """
+    """Self-serve permanent account deletion."""
     from app.core.security import verify_password
 
     if not current_user.is_active:
@@ -272,7 +249,6 @@ async def delete_my_account(
     await db.delete(current_user)
     await db.commit()
 
-    # Kill the session cookie so the client is fully logged out.
     from app.config import settings
     response.delete_cookie(
         key="access_token",
@@ -294,9 +270,6 @@ async def get_profile(
 ):
     target = await _get_active_user(username, db)
 
-    # Directional: the person who blocked keeps a viewable (emptied) profile so
-    # they can undo it here; the person blocked sees a plain 404 and is never
-    # told a block exists.
     i_blocked, they_blocked_me = await block_state(db, current_user.id, target.id)
     if they_blocked_me:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -484,7 +457,6 @@ async def follow_user(
 
     if not existing:
         db.add(Follow(follower_id=current_user.id, following_id=target.id))
-        # Upsert a follow notification — unique constraint handles re-follows
         existing_notif = (await db.execute(
             select(Notification).where(
                 Notification.user_id == target.id,
@@ -558,8 +530,7 @@ async def list_blocked(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """People *you* blocked (not people who blocked you — that stays invisible).
-    Backs the Settings list, which is the reliable place to undo a block."""
+    """People *you* blocked (not people who blocked you — that stays invisible)."""
     rows = (await db.execute(
         select(User, Block.created_at)
         .join(Block, Block.blocked_id == User.id)
@@ -583,14 +554,7 @@ async def block_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Block someone. Deliberately uses _get_active_user, not _get_visible_user:
-    if they blocked you first you must still be able to block them back.
-
-    Blocking severs the existing relationship in both directions — follows are
-    dropped and any notification either of you generated for the other is
-    deleted, so the bell can't keep surfacing someone you just blocked. The
-    person blocked is never notified.
-    """
+    """Block someone. Deliberately uses _get_active_user, not _get_visible_user: if."""
     target = await _get_active_user(username, db)
     if target.id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot block yourself.")
@@ -630,8 +594,7 @@ async def unblock_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Undo your own block. Follows and notifications deleted at block time are
-    not restored — unblocking reopens contact, it doesn't rewind history."""
+    """Undo your own block."""
     target = await _get_active_user(username, db)
 
     existing = (await db.execute(

@@ -5,7 +5,6 @@ from app.config import settings
 
 engine = create_async_engine(settings.database_url, echo=False)
 
-# expire_on_commit=False: keeps ORM objects usable after commit without re-querying
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 

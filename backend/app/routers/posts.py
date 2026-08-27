@@ -100,14 +100,7 @@ def _build_post_select(extra_where=None, hot_score: bool = False):
 
 
 async def _guard_private_club_post(post: Post, user_id: uuid.UUID, db: AsyncSession) -> None:
-    """Block access to a post that lives in a private club the user hasn't joined.
-
-    The club-scoped endpoints already enforce this, but the generic /api/posts/{id}
-    read, reply, and vote routes are reachable by post id alone. Without this check a
-    non-member who learns a private club post's id could read it, its replies, reply
-    to it, or vote on it — a private-content leak. Returns 404 (not 403) so we don't
-    even confirm the post exists to outsiders.
-    """
+    """Block access to a post that lives in a private club the user hasn't joined."""
     if post.post_type != "club" or post.club_id is None:
         return
     club = (await db.execute(select(Club).where(Club.id == post.club_id))).scalar_one_or_none()
@@ -123,14 +116,7 @@ async def _guard_private_club_post(post: Post, user_id: uuid.UUID, db: AsyncSess
 
 
 async def _guard_blocked_post(post: Post, user_id: uuid.UUID, db: AsyncSession) -> None:
-    """Refuse to act on a post whose author is blocked in either direction.
-
-    Covers reply and vote, which are reachable by post id alone. 404 matches
-    what the read endpoint already returns, so the response never reveals that
-    a block (rather than a deletion) is the reason. Anonymous posts have a NULL
-    author and are always allowed through — identity isn't on display there, so
-    there's nothing for a block to act on.
-    """
+    """Refuse to act on a post whose author is blocked in either direction."""
     if post.author_id is None or post.author_id == user_id:
         return
     if await is_blocked_pair(db, user_id, post.author_id):
@@ -236,8 +222,7 @@ async def _load_polls(
 async def _load_events(
     post_ids: list[uuid.UUID], user_id: uuid.UUID, db: AsyncSession
 ) -> dict[uuid.UUID, EventResponse]:
-    """RSVP counts + the caller's own answer, for whichever of these posts are
-    events. Two batched queries, same shape as _load_polls — never per-post."""
+    """RSVP counts + the caller's own answer, for whichever of these posts are."""
     if not post_ids:
         return {}
 
@@ -272,8 +257,6 @@ async def _load_events(
         starts_at = row.event_starts_at
         if starts_at.tzinfo is None:
             starts_at = starts_at.replace(tzinfo=timezone.utc)
-        # "Past" keys off the end when there is one, so an event that runs for
-        # three hours doesn't read as over the minute it begins.
         ends_at = row.event_ends_at
         if ends_at is not None and ends_at.tzinfo is None:
             ends_at = ends_at.replace(tzinfo=timezone.utc)
@@ -421,9 +404,6 @@ async def list_posts(
     if faculty and faculty not in FACULTIES:
         raise HTTPException(status_code=422, detail="Invalid faculty tag.")
 
-    # Posts by (and for) blocked users drop out of the feed in both directions.
-    # Anonymous posts have a NULL author and are never affected — see
-    # app/core/blocks.py for why that matters.
     hidden = await blocked_user_ids(db, current_user.id)
     block_clause = visible_author_clause(Post.author_id, hidden)
 
@@ -473,7 +453,6 @@ async def list_posts(
     )
 
 
-# Must be declared before /{post_id} so "search" isn't parsed as a post id.
 @router.get("/search", response_model=PostListResponse)
 async def search_posts(
     q: str = "",
@@ -482,8 +461,7 @@ async def search_posts(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Search top-level posts by content, newest first. Club posts are excluded:
-    private club content must never surface in a global search."""
+    """Search top-level posts by content, newest first."""
     q = q.strip()
     if post_type not in ("feed", "anonymous_qa"):
         raise HTTPException(status_code=422, detail="Invalid post type.")
@@ -524,11 +502,7 @@ async def list_saved_posts(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """The current user's bookmarked posts, most recently saved first.
-
-    Private-club posts are filtered out unless the user is still a member — a
-    bookmark made while inside a club must not keep leaking content after leaving.
-    """
+    """The current user's bookmarked posts, most recently saved first."""
     saved_order = (
         select(Bookmark.post_id, Bookmark.created_at)
         .where(Bookmark.user_id == current_user.id)
@@ -585,8 +559,6 @@ async def get_post(
 
     await _guard_private_club_post(row[0], current_user.id, db)
 
-    # A blocked author's post is a 404 even by direct link, and their replies
-    # drop out of the thread. NULL (anonymous) authors are never hidden.
     hidden = await blocked_user_ids(db, current_user.id)
     if row[0].author_id is not None and row[0].author_id in hidden:
         raise HTTPException(status_code=404, detail="Post not found.")
@@ -660,9 +632,6 @@ async def create_reply(
     await db.commit()
     await db.refresh(reply)
 
-    # Mentions in a reply deep-link to the top-level thread so the notification
-    # lands somewhere useful (only thread roots have their own route). Walk up the
-    # parent chain — replies are capped at depth 6 so this is at most a few hops.
     thread_root = parent
     while thread_root.parent_post_id is not None:
         thread_root = (await db.execute(
@@ -670,8 +639,6 @@ async def create_reply(
         )).scalar_one()
     await notify_post_mentions(reply.content, thread_root, current_user, db)
 
-    # Tell the parent's author someone replied — unless they replied to themselves,
-    # or they're @mentioned in the reply (the mention notification already covers it).
     if parent.author_id and parent.author_id != current_user.id:
         parent_author = (await db.execute(
             select(User).where(User.id == parent.author_id)
@@ -744,9 +711,6 @@ async def vote_post(
     await db.commit()
     result = await _vote_counts(post_id, current_user.id, db)
 
-    # Milestone notification: fires once per threshold, only when an upvote landed
-    # (not when one was toggled off), never for votes on your own post. The stored
-    # type encodes the threshold ("milestone_10") so the existence check is exact.
     MILESTONES = (5, 10, 25, 50, 100)
     if (
         result.current_user_vote == "up"
@@ -768,7 +732,7 @@ async def vote_post(
                 db,
                 user_id=post.author_id,
                 type=mtype,
-                actor=None,  # many people voted — no single actor
+                actor=None,
                 reference_id=post.id,
                 payload_type="milestone",
                 extra={"count": result.upvotes, "post_id": str(post.id)},
@@ -830,12 +794,7 @@ async def rsvp_event(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Answer a club event, or withdraw by sending your current status again.
-
-    Membership is what grants access, so the private-club guard is the same one
-    reading the post uses. Past events stay answerable — a headcount is often
-    corrected right after the fact, and refusing would just lose data.
-    """
+    """Answer a club event, or withdraw by sending your current status again."""
     post = (await db.execute(
         select(Post).where(Post.id == post_id, Post.is_deleted == False)
     )).scalar_one_or_none()
@@ -870,10 +829,7 @@ async def event_rsvps(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Who's going and who's interested for a club event. Unlike poll votes,
-    an RSVP is a public commitment to show up — the whole point is that members
-    can see who else is coming — so the attendee lists are always visible to
-    anyone who can see the event. Same membership guard as reading it."""
+    """Who's going and who's interested for a club event."""
     post = (await db.execute(
         select(Post).where(Post.id == post_id, Post.is_deleted == False)
     )).scalar_one_or_none()
@@ -906,10 +862,7 @@ async def poll_voters(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Who voted for what — ONLY for polls created with public_votes, where
-    every voter saw the 'votes visible' label before voting. Anonymous polls
-    (the default, and every poll that predates this feature) refuse here:
-    vote identities for them must never leave the database."""
+    """Who voted for what — ONLY for polls created with public_votes, where every."""
     post = (await db.execute(
         select(Post).where(Post.id == post_id, Post.is_deleted == False)
     )).scalar_one_or_none()
@@ -953,8 +906,7 @@ async def edit_post(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Author-only content edit. Sets edited_at so the UI can show an 'edited' badge.
-    Attachments, polls, and post type are immutable — only the text changes."""
+    """Author-only content edit."""
     post = (
         await db.execute(
             select(Post).where(Post.id == post_id, Post.is_deleted == False)
@@ -967,7 +919,6 @@ async def edit_post(
 
     new_content = body.content.strip()
     if new_content != post.content:
-        # Notify only people who weren't mentioned before this edit — no duplicate pings.
         from app.core.mentions import extract_mention_usernames
         old_names = extract_mention_usernames(post.content)
         post.content = new_content
@@ -1051,11 +1002,7 @@ async def report_post(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """File a report against a post for the admin queue. For anonymous posts
-    reported_user_id stays NULL — the report never links the post to its
-    author (the anonymous_post_authors compartment stays sealed). The only
-    authorship lookup below compares against *yourself*, an audited exception
-    like the is_own flag."""
+    """File a report against a post for the admin queue."""
     post = (
         await db.execute(
             select(Post).where(Post.id == post_id, Post.is_deleted == False)  # noqa: E712

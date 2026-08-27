@@ -1,11 +1,3 @@
-// In-memory snapshot of the feed's loaded posts + scroll position.
-//
-// Module state, not sessionStorage: it only needs to survive a client-side
-// navigation away and back (e.g. into a post's comments and "Back" again),
-// not a hard reload — a fresh reload showing a clean feed is the expected,
-// desirable behavior. Since Next.js App Router keeps the same JS module
-// instances alive across client-side route changes, a plain variable here
-// is all that's needed.
 interface FeedCacheEntry<T> {
   feedTab: string;
   sort: string;
@@ -33,10 +25,6 @@ export function getFeedCache<T>(): FeedCacheEntry<T> | null {
   return cache as FeedCacheEntry<T>;
 }
 
-// Patch a single cached post in place after it's mutated outside the feed page
-// (e.g. voting from a post's detail view) — otherwise navigating back would
-// restore a snapshot with the pre-vote counts/colors. No-op if the post isn't
-// in the current snapshot.
 export function patchFeedCachePost(id: string, patch: object): void {
   if (!cache) return;
   cache.posts = cache.posts.map((p) => {
@@ -45,9 +33,6 @@ export function patchFeedCachePost(id: string, patch: object): void {
   });
 }
 
-// Call after any mutation made outside the feed page (e.g. deleting a post
-// from its detail view) — otherwise navigating back would restore a snapshot
-// that still contains the stale post.
 export function clearFeedCache(): void {
   cache = null;
 }

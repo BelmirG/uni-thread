@@ -20,7 +20,6 @@ import MentionSuggestions from "@/components/MentionSuggestions";
 import { Linkify } from "@/lib/linkify";
 
 const IUS_BLUE = "#3865a6";
-// Own-message bubble: a soft vertical gradient reads richer than a flat fill.
 const OWN_BUBBLE_BG = "linear-gradient(135deg, #4a7cc0 0%, #3865a6 100%)";
 
 interface FileAttachment {
@@ -52,8 +51,6 @@ interface ChatMessage {
   attachments: FileAttachment[];
   author: Author;
   created_at: string;
-  // Optimistic-send bookkeeping (client-side only; client_id also arrives on
-  // the server echo so the pending bubble can be swapped for the real message).
   client_id?: string;
   pending?: boolean;
   failed?: boolean;

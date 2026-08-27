@@ -1,18 +1,4 @@
-"""Club events.
-
-Events ride on the existing posts row rather than getting a table of their
-own — same approach polls take. An event is a club post that additionally
-carries a start time, an optional end time, and an optional location, so it
-keeps every behaviour posts already have (replies, votes, pinning, editing,
-moderation, soft delete) for free.
-
-event_rsvps mirrors poll_votes: one row per (post, user), the composite PK
-making "going" idempotent and the status column letting a member switch
-between going and interested without a second row.
-
-Revision ID: 0031
-Revises: 0030
-"""
+"""Club events."""
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
@@ -50,7 +36,6 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    # "What's coming up in this club" sorts by start time over club posts.
     op.create_index(
         "ix_posts_event_starts_at",
         "posts",

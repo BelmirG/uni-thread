@@ -1,9 +1,4 @@
-"""Add follows table
-
-Revision ID: 0005
-Revises: 0004
-Create Date: 2026-06-28
-"""
+"""Add follows table."""
 
 from alembic import op
 import sqlalchemy as sa

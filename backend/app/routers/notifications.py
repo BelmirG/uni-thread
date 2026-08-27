@@ -34,10 +34,6 @@ async def get_notifications(
 ):
     from sqlalchemy import func
 
-    # Opportunistic pruning: each time a user opens their notifications, drop
-    # their read entries older than 7 days. This keeps the table from growing
-    # forever without needing a cron job — every active user cleans up after
-    # themselves, and inactive users' rows don't get fetched anyway.
     await db.execute(
         delete(Notification).where(
             Notification.user_id == current_user.id,
@@ -48,13 +44,6 @@ async def get_notifications(
     await db.commit()
 
     Actor = aliased(User)
-    # reference_id can point at a post ("mention", "reply", "club_event", …) or
-    # a club ("chat_mention", most "club_*"); resolve both so the UI can
-    # deep-link without extra requests. The club join also reaches through the
-    # post's club_id — "club_event" references the event post, but the place to
-    # send someone is the club feed where the event card and its RSVP live.
-    # The actor join is OUTER because system notifications (milestones,
-    # anonymous Q&A answers) deliberately have no actor.
     base = (
         select(Notification, Actor, Post.post_type, Club.slug, Club.name)
         .outerjoin(Actor, Actor.id == Notification.actor_id)
@@ -137,8 +126,7 @@ class PushUnsubscribeRequest(BaseModel):
 
 @router.get("/push/public-key")
 async def push_public_key():
-    """The VAPID public key browsers need to subscribe. Public by design —
-    it only lets push services verify our pushes, it can't send any."""
+    """The VAPID public key browsers need to subscribe."""
     return {"key": settings.vapid_public_key, "enabled": settings.push_configured}
 
 
@@ -148,8 +136,6 @@ async def push_subscribe(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Upsert by endpoint: re-subscribing (or another account logging in on the
-    # same browser) replaces the old owner instead of duplicating the row.
     existing = (await db.execute(
         select(PushSubscription).where(PushSubscription.endpoint == body.endpoint)
     )).scalar_one_or_none()
@@ -184,10 +170,7 @@ async def push_unsubscribe(
 
 @router.websocket("/ws")
 async def notifications_ws(websocket: WebSocket):
-    """
-    WebSocket endpoint for real-time push notifications.
-    Auth via JWT cookie (same as the DM WebSocket).
-    """
+    """WebSocket endpoint for real-time push notifications."""
     token = websocket.cookies.get("access_token")
     if not token:
         await websocket.close(code=4001, reason="Not authenticated")

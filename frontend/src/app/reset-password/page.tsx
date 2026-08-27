@@ -10,8 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 
-// useSearchParams() requires a Suspense boundary in a production build, so the
-// form that reads the token lives in its own component wrapped below.
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();

@@ -1,13 +1,4 @@
-"""Club membership state-machine tests.
-
-A club has two independent ways in — user-initiated join requests and
-owner-initiated invitations — and every membership transition (join, approve,
-accept, leave, kick) must leave those two systems agreeing with reality. The
-bug these pin down: a kicked member's stale join request survived, so
-`has_pending_request` stayed true forever — hiding their Join button (they
-couldn't re-request) while they lingered in the owner's requests list, and the
-owner's invite path was blocked too. Nobody could get them back in.
-"""
+"""Club membership state-machine tests."""
 from sqlalchemy import select
 
 from app.models.club import Club
@@ -48,8 +39,7 @@ async def _is_member(db, club, user) -> bool:
 
 
 async def test_kicking_a_member_clears_their_stale_request(client_for, make_user, db):
-    """The reported bug, end to end: request → approve → kick, then the user
-    must be able to request again (no lingering 'pending')."""
+    """The reported bug, end to end: request → approve → kick, then the user must be."""
     owner, friend = await make_user(), await make_user()
     club = await _private_club(db, owner)
     owner_c, friend_c = client_for(owner), client_for(friend)
@@ -67,28 +57,24 @@ async def test_kicking_a_member_clears_their_stale_request(client_for, make_user
     assert not await _is_member(db, club, friend)
     assert not await _has_request(db, club, friend)  # the fix: no orphan left behind
 
-    # The friend is no longer stuck — they can request again.
     assert (await friend_c.post(f"/api/clubs/{club.slug}/join")).status_code == 200
 
 
 async def test_approve_is_idempotent_when_already_a_member(client_for, make_user, db):
-    """A double-approve (or a race) must not 500 on a duplicate-member insert
-    and leave the request undeleted — the failure mode that first stuck them."""
+    """A double-approve (or a race) must not 500 on a duplicate-member insert and."""
     owner, friend = await make_user(), await make_user()
     club = await _private_club(db, owner)
     owner_c, friend_c = client_for(owner), client_for(friend)
 
     await friend_c.post(f"/api/clubs/{club.slug}/join")
     assert (await owner_c.post(f"/api/clubs/{club.slug}/requests/{friend.username}/approve")).status_code == 204
-    # Second approve with no pending request but an existing membership.
     assert (await owner_c.post(f"/api/clubs/{club.slug}/requests/{friend.username}/approve")).status_code == 204
     await db.commit()
     assert await _is_member(db, club, friend)
 
 
 async def test_leaving_clears_a_pending_invitation(client_for, make_user, db):
-    """Leaving a club shouldn't leave a dangling invite that lets the user
-    'accept' their way back in behind the owner's back."""
+    """Leaving a club shouldn't leave a dangling invite that lets the user 'accept'."""
     owner, friend = await make_user(), await make_user()
     club = await _private_club(db, owner)
     owner_c, friend_c = client_for(owner), client_for(friend)

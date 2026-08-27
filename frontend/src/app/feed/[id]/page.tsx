@@ -247,7 +247,6 @@ function CommentNode({ node, depth }: { node: TreeNode; depth: number }) {
               </div>
             )}
 
-            {/* Comment content — swaps to an inline editor for the author */}
             {editing ? (
               <div className="mb-1.5 space-y-2">
                 <textarea
@@ -378,7 +377,6 @@ function CommentNode({ node, depth }: { node: TreeNode; depth: number }) {
           </div>
         )}
 
-        {/* Thread cut-off — show link to continue in a fresh page rooted at this comment */}
         {isCutOff && (
           <Link
             href={`/feed/${p.id}`}
@@ -399,8 +397,6 @@ export default function PostDetailPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
 
-  // "Back" returns to the profile you came from, otherwise the feed list.
-  // Captured at first render, before this page is pushed onto the nav stack.
   const [backHref] = useState(() => {
     const ref = lastVisitedPath();
     return ref && ref.startsWith("/profile/") ? ref : "/feed";
@@ -450,7 +446,6 @@ export default function PostDetailPage() {
     const before =
       (post?.id === targetId ? post : undefined) ?? allReplies.find((p) => p.id === targetId);
     if (!before) return;
-    // Instant local update; the server response (or a rollback) reconciles it.
     setPost((prev) => (prev?.id === targetId ? applyVote(prev, voteType) : prev));
     setAllReplies((prev) => prev.map((p) => (p.id === targetId ? applyVote(p, voteType) : p)));
     try {
@@ -460,8 +455,6 @@ export default function PostDetailPage() {
       });
       setPost((prev) => (prev?.id === targetId ? { ...prev, ...data } : prev));
       setAllReplies((prev) => prev.map((p) => (p.id === targetId ? { ...p, ...data } : p)));
-      // Keep the feed's cached copy in sync so "Back" shows the vote, not the
-      // stale pre-vote state. Harmless if this post isn't the one in the feed.
       patchFeedCachePost(targetId, data);
     } catch {
       const revert = { upvotes: before.upvotes, downvotes: before.downvotes, current_user_vote: before.current_user_vote };
@@ -474,8 +467,6 @@ export default function PostDetailPage() {
     if (!window.confirm("Delete this post? This cannot be undone.")) return;
     try {
       await apiFetch(`/api/posts/${targetId}`, { method: "DELETE" });
-      // The feed page's cached snapshot still contains this post — drop it so
-      // navigating back shows a fresh feed instead of resurrecting the post.
       clearFeedCache();
       setPost((prev) => (prev?.id === targetId ? { ...prev, is_deleted: true, content: "[deleted]" } : prev));
       setAllReplies((prev) =>
@@ -599,10 +590,6 @@ export default function PostDetailPage() {
   return (
     <Ctx.Provider value={ctxValue}>
       <main className="max-w-xl mx-auto px-4 pt-4 pb-24">
-        {/* Back link — returns to where you came from (profile) or the feed list.
-            scroll={false}: the feed restores its own scroll position on return
-            (see lib/feedCache.ts) — Next's default scroll-to-top would win the race
-            and undo that restoration. */}
         <Link
           href={backHref}
           scroll={false}
@@ -654,7 +641,6 @@ export default function PostDetailPage() {
                 </div>
               )}
 
-              {/* Post content — swaps to an inline editor for the author */}
               {editingPost ? (
                 <div className="px-4 pb-3 space-y-2">
                   <textarea

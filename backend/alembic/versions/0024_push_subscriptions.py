@@ -1,13 +1,4 @@
-"""Browser push subscriptions.
-
-One row per browser a user enabled push in (a user can have several devices).
-The endpoint URL is the push service's address for that browser; p256dh/auth
-are the browser-generated encryption keys — pushes are encrypted end-to-end,
-so the push service (Google/Mozilla/Apple) can't read the content.
-
-Revision ID: 0024
-Revises: 0023
-"""
+"""Browser push subscriptions."""
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID

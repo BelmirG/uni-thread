@@ -1,9 +1,4 @@
-"""Add notifications table
-
-Revision ID: 0011
-Revises: 0010
-Create Date: 2026-06-29
-"""
+"""Add notifications table."""
 
 from alembic import op
 import sqlalchemy as sa

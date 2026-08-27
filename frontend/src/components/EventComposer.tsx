@@ -14,9 +14,6 @@ interface Props {
   onChange: (draft: EventDraft | null) => void;
 }
 
-/** Turns a club post into an event by attaching a start time (required),
- *  an optional end, and an optional place. Mirrors PollComposer: the toggle
- *  button is the whole API surface when closed. */
 export default function EventComposer({ value, onChange }: Props) {
   const open = value !== null;
 

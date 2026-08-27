@@ -1,10 +1,3 @@
-// In-memory snapshots of open conversations and club chats, so navigating
-// back into a chat paints the last-seen messages instantly (like the feed
-// cache) while the fresh fetch catches up in the background.
-//
-// Module state on purpose — survives client-side navigation, not a reload.
-// Pending/failed optimistic bubbles are stripped by the callers before saving;
-// only server-confirmed messages belong in a snapshot.
 
 const MAX_AGE_MS = 15 * 60 * 1000;
 const MAX_ENTRIES = 15;
@@ -51,8 +44,6 @@ export function getClubChatCache<T>(slug: string): T | null {
   return get<T>(clubChatCache, slug);
 }
 
-// One account's chats must never flash up for another account on the same
-// device — wired into clearAllPageCaches (login/logout).
 export function clearChatCaches(): void {
   dmCache.clear();
   clubChatCache.clear();

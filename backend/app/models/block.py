@@ -9,9 +9,7 @@ from app.database import Base
 
 
 class Block(Base):
-    """One user blocking another. Direction is recorded (who blocked whom) so
-    only the blocker sees an "Unblock" button, but every *enforcement* check
-    treats a block as mutual — see app/core/blocks.py."""
+    """One user blocking another."""
 
     __tablename__ = "blocks"
 

@@ -1,15 +1,4 @@
-"""Club event tests.
-
-An event is a club post carrying a start time, so the things worth pinning
-down are the ones that aren't obvious from the post machinery it reuses:
-
-1. RSVP counts can't double-count a person, and re-sending your current
-   answer withdraws it.
-2. Half-events are rejected at the edge (a location or end with no start),
-   so nothing renders as an event with no date.
-3. Events are club-only — the feed endpoint ignores the fields rather than
-   quietly creating an event nobody can RSVP to.
-"""
+"""Club event tests."""
 import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -62,7 +51,6 @@ async def test_event_post_carries_details_and_rsvp_counts(client_for, make_user,
     ev = (await owner_c.post(f"/api/posts/{post_id}/rsvp", json={"status": "going"})).json()
     assert (ev["going_count"], ev["user_status"]) == (1, "going")
 
-    # Same person answering twice must not inflate the headcount.
     ev = (await owner_c.post(f"/api/posts/{post_id}/rsvp", json={"status": "going"})).json()
     assert (ev["going_count"], ev["user_status"]) == (0, None)
 
@@ -70,7 +58,6 @@ async def test_event_post_carries_details_and_rsvp_counts(client_for, make_user,
     ev = (await member_c.post(f"/api/posts/{post_id}/rsvp", json={"status": "going"})).json()
     assert ev["going_count"] == 2
 
-    # Switching sides moves the person rather than counting them twice.
     ev = (await member_c.post(f"/api/posts/{post_id}/rsvp", json={"status": "interested"})).json()
     assert (ev["going_count"], ev["interested_count"]) == (1, 1)
 
@@ -97,7 +84,6 @@ async def test_half_events_are_rejected(client_for, make_user, db):
     club = await _club_with_members(db, owner)
     owner_c = client_for(owner)
 
-    # A location or an end with no start would render as a dateless event.
     for payload in (
         {"content": "x", "event_location": "Nowhere"},
         {"content": "x", "event_ends_at": _future(3)},
@@ -118,8 +104,7 @@ async def test_rsvp_rejected_on_non_events(client_for, make_user, db):
 
 
 async def test_events_are_club_only(client_for, make_user):
-    """The feed endpoint ignores event fields rather than creating an event
-    that has no club context to RSVP within."""
+    """The feed endpoint ignores event fields rather than creating an event that has."""
     user = await make_user()
     c = client_for(user)
 
@@ -130,17 +115,13 @@ async def test_events_are_club_only(client_for, make_user):
 
 
 async def test_creating_an_event_notifies_the_other_members(client_for, make_user, db):
-    """Members need to hear about an event in time to show up — the one club
-    activity that earns a notification. The creator is never notified, and a
-    plain club post still notifies nobody."""
+    """Members need to hear about an event in time to show up — the one club."""
     owner, member, other = await make_user(), await make_user(), await make_user()
     club = await _club_with_members(db, owner, member, other)
     owner_c = client_for(owner)
 
     await owner_c.post(f"/api/clubs/{club.slug}/posts", json={"content": "just a post"})
     await asyncio.sleep(0.2)  # fan-out runs detached from the request
-    # Scoped to this test's members — the suite shares one database, so a
-    # global count would pick up events other tests created.
     assert (await db.execute(
         select(Notification).where(
             Notification.type == "club_event",
@@ -185,8 +166,7 @@ async def test_blocked_member_is_not_notified_of_an_event(client_for, make_user,
 
 
 async def test_rsvp_list_shows_who_is_going_and_interested(client_for, make_user, db):
-    """Members can see the attendee lists — the whole point of an RSVP is that
-    it's a public commitment to show up."""
+    """Members can see the attendee lists — the whole point of an RSVP is that it's."""
     owner, a, b = await make_user(), await make_user(), await make_user()
     club = await _club_with_members(db, owner, a, b)
     owner_c, a_c, b_c = client_for(owner), client_for(a), client_for(b)
@@ -222,5 +202,4 @@ async def test_private_club_event_hidden_from_non_members(client_for, make_user,
         "content": "members only", "event_starts_at": _future(24),
     })).json()["id"]
 
-    # Same 404 the read path gives — RSVP must not become a private-club oracle.
     assert (await outsider_c.post(f"/api/posts/{post_id}/rsvp", json={"status": "going"})).status_code == 404

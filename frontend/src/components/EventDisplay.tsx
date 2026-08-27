@@ -35,8 +35,6 @@ interface Props {
   onUpdate: (updated: EventInfo) => void;
 }
 
-/** "Thu, 14 Mar · 18:00" — weekday and time are what people actually scan for.
- *  The year only appears when the event isn't in the current year. */
 function formatWhen(startIso: string, endIso: string | null): string {
   const start = new Date(startIso);
   const sameYear = start.getFullYear() === new Date().getFullYear();
@@ -52,7 +50,6 @@ function formatWhen(startIso: string, endIso: string | null): string {
 
   const end = new Date(endIso);
   const endTime = end.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  // Same-day events show one date and a time range; multi-day spell out both.
   if (end.toDateString() === start.toDateString()) return `${date} · ${time}–${endTime}`;
   const endDate = end.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
   return `${date} ${time} → ${endDate} ${endTime}`;
@@ -100,7 +97,6 @@ export default function EventDisplay({ postId, event, onUpdate }: Props) {
         body: JSON.stringify({ status }),
       });
       onUpdate(updated);
-      // A fresh RSVP invalidates any attendee list we'd already fetched.
       setLists(null);
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : "Could not save your RSVP.");

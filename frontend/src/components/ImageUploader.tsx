@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import { Camera } from "lucide-react";
 import { compressImage } from "@/lib/imageCompress";
 
-// Keep in sync with the backend cap in routers/upload.py.
 const VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 
 interface Preview {
@@ -62,8 +61,6 @@ export function ImageUploader({ onUrlsChange, maxImages = 5 }: Props) {
       files.map(async (file, i) => {
         const idx = startIndex + i;
         const isVideo = file.type.startsWith("video/");
-        // Fail oversized videos before the upload so the user gets instant
-        // feedback instead of waiting for a 50MB round-trip to 413.
         if (isVideo && file.size > VIDEO_MAX_BYTES) {
           setPreviews((prev) => {
             const next = [...prev];
@@ -73,7 +70,6 @@ export function ImageUploader({ onUrlsChange, maxImages = 5 }: Props) {
           return;
         }
         const fd = new FormData();
-        // Videos upload as-is; only images go through client-side compression.
         fd.append("file", isVideo ? file : await compressImage(file));
         try {
           const res = await fetch("/api/upload", {
@@ -244,9 +240,6 @@ export function ImageUploader({ onUrlsChange, maxImages = 5 }: Props) {
         </div>
       )}
 
-      {/* Lightbox — rendered in a portal so position:fixed is relative to the
-          viewport, not the composer panel (which has a CSS transform that would
-          otherwise confine the overlay to the panel's bounds). */}
       {lightbox && createPortal(
         <div
           onClick={(e) => { e.stopPropagation(); closeLightbox(); }}

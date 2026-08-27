@@ -30,16 +30,8 @@ _api_key_header = APIKeyHeader(name="x-admin-key", auto_error=False)
 
 
 async def _verify_admin_key(request: Request, key: str = Security(_api_key_header)):
-    """Break-glass credential — used only to bootstrap the first admin account
-    or recover access if every admin is somehow locked out. Every other admin
-    endpoint requires a logged-in account with is_admin=True (see
-    get_current_admin), so day-to-day moderation is tied to a real person,
-    not a secret shared between everyone who moderates."""
-    # Constant-time compare so an attacker can't recover the key byte-by-byte
-    # from response timing.
+    """Break-glass credential — used only to bootstrap the first admin account or."""
     if not key or not secrets.compare_digest(key, settings.admin_key):
-        # Only failures count toward the limit, so the real admin is never
-        # throttled — but an outsider guessing keys gets cut off fast.
         await rate_limit(request, key="admin_key_fail", limit=10, window_seconds=3600)
         raise HTTPException(status_code=403, detail="Invalid admin key.")
 
@@ -99,10 +91,7 @@ async def bootstrap_admin(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_verify_admin_key),
 ):
-    """Grant is_admin using the master key instead of an existing admin account —
-    for turning your own account into the first admin, or recovering access if
-    every admin account is somehow locked out. Everything else in this router
-    runs through get_current_admin instead."""
+    """Grant is_admin using the master key instead of an existing admin account."""
     user = await _get_user(username, db)
     if user.is_admin:
         raise HTTPException(status_code=400, detail="User is already an admin.")
@@ -159,8 +148,7 @@ async def list_actions(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_admin),
 ):
-    """The audit trail: every moderation action taken through this panel, newest
-    first, attributed to the admin who did it."""
+    """The audit trail: every moderation action taken through this panel, newest."""
     stmt = select(AdminAction).order_by(AdminAction.created_at.desc()).limit(min(limit, 300))
     rows = (await db.execute(stmt)).scalars().all()
     return [
@@ -236,10 +224,7 @@ async def delete_user(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """Permanently delete an account. Their votes, follows, memberships, messages,
-    and anonymous-authorship links cascade away; their posts are kept but detached
-    (author set to null). Clubs they own pass to a moderator, else the
-    longest-standing member; a club with no other members is deleted with them."""
+    """Permanently delete an account."""
     user = await _get_user(username, db)
     if user.is_admin:
         raise HTTPException(status_code=400, detail="Cannot delete an admin account.")
@@ -337,8 +322,7 @@ async def promote_user(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """Grant another account admin access. They'll need to log out/in (or just
-    reload) for the panel to unlock for them."""
+    """Grant another account admin access."""
     user = await _get_user(username, db)
     if user.is_admin:
         raise HTTPException(status_code=400, detail="User is already an admin.")
@@ -354,8 +338,7 @@ async def demote_user(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """Revoke another admin's access. You can't demote yourself — that's what
-    the master key bootstrap route is for, if every admin is ever gone."""
+    """Revoke another admin's access."""
     if username == admin.username:
         raise HTTPException(status_code=400, detail="You can't remove your own admin access.")
     user = await _get_user(username, db)
@@ -377,8 +360,6 @@ async def list_reports(
 ):
     Reporter = aliased(User)
     Reported = aliased(User)
-    # Outer joins: post reports may have no reported user (anonymous posts
-    # stay unlinked from their author — even here).
     rows = (await db.execute(
         select(Report, Reporter, Reported, Post)
         .join(Reporter, Reporter.id == Report.reporter_id)
@@ -434,11 +415,7 @@ async def list_posts(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_admin),
 ):
-    """Browse/search posts (any type) to find something to remove. Newest first.
-    Live and soft-deleted posts are separate views (`deleted` toggles them) so the
-    working list stays uncluttered while the audit trail stays reachable.
-    Anonymous Q&A posts are shown without an author — admins de-anonymize through a
-    separate audited endpoint, never here."""
+    """Browse/search posts (any type) to find something to remove."""
     Author = aliased(User)
     stmt = (
         select(Post, Author)
@@ -471,8 +448,7 @@ async def delete_post(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """Soft-delete any post (sets is_deleted). Content stays in the database for the
-    audit trail but is hidden from all user-facing views."""
+    """Soft-delete any post (sets is_deleted)."""
     post = (await db.execute(select(Post).where(Post.id == post_id))).scalar_one_or_none()
     if not post:
         raise HTTPException(status_code=404, detail="Post not found.")
@@ -528,8 +504,7 @@ async def delete_club(
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """Permanently delete a club — memberships, join requests, invitations, and
-    chat cascade away with it (see the FK definitions on those tables)."""
+    """Permanently delete a club — memberships, join requests, invitations, and chat."""
     club = (await db.execute(select(Club).where(Club.slug == slug))).scalar_one_or_none()
     if not club:
         raise HTTPException(status_code=404, detail="Club not found.")
@@ -539,28 +514,11 @@ async def delete_club(
     return {"ok": True, "slug": slug}
 
 
-# ── media backup ──────────────────────────────────────────────────────────────
-#
-# The nightly database dump captures every row but no uploaded file — those live
-# on a mounted volume, so a database-only restore would come back with every
-# image and attachment broken. These two endpoints let the backup workflow pull
-# the media off the volume.
-#
-# They authenticate with the master key rather than an admin session because the
-# caller is CI, which has no browser and no login. Both are read-only.
-#
-# Stored names are UUID-based and files are never modified in place, so a backup
-# only ever needs to fetch what it does not already hold — the workflow diffs the
-# manifest against the bucket and transfers just the difference.
-
 MEDIA_DIRS = {
     "uploads": Path(settings.data_dir) / "uploads",      # images, video, thumbnails
     "filestore": Path(settings.data_dir) / "filestore",  # documents
 }
 
-# Deliberately strict: stored names are generated by the upload router, so
-# anything with a path separator, a parent reference, or an unexpected shape did
-# not come from us and is not served.
 _SAFE_MEDIA_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
@@ -569,8 +527,7 @@ async def media_manifest(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_verify_admin_key),
 ):
-    """Every file currently on the media volume, with sizes so the caller can
-    verify a transfer arrived intact."""
+    """Every file currently on the media volume, with sizes so the caller can verify."""
     files = []
     total = 0
     for kind, directory in MEDIA_DIRS.items():
@@ -583,10 +540,6 @@ async def media_manifest(
             total += size
             files.append({"kind": kind, "name": entry.name, "size": size})
 
-    # Enumerating the whole library is the step any bulk download starts with,
-    # so it is recorded even though the caller is the master key rather than a
-    # person. Logged here and not on each file: a backup run fetches thousands
-    # of files and would otherwise bury the audit log in noise.
     db.add(AdminAction(
         actor_id=None,
         actor_username="(admin key)",
@@ -609,8 +562,6 @@ async def media_file(kind: str, name: str, _: None = Depends(_verify_admin_key))
     if not _SAFE_MEDIA_NAME.match(name) or Path(name).name != name:
         raise HTTPException(status_code=400, detail="Invalid file name.")
 
-    # Resolve and confirm containment, so even a name that slipped past the
-    # pattern cannot escape the directory via a symlink.
     path = (directory / name).resolve()
     if not path.is_file() or directory.resolve() not in path.parents:
         raise HTTPException(status_code=404, detail="File not found.")

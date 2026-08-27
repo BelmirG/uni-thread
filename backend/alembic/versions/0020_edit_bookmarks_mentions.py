@@ -1,8 +1,4 @@
-"""Add post edit tracking, bookmarks, and mention notification references.
-
-Revision ID: 0020
-Revises: 0019
-"""
+"""Add post edit tracking, bookmarks, and mention notification references."""
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID
@@ -14,15 +10,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # 1. Track when a post was last edited (NULL = never edited → no "edited" badge)
     op.add_column("posts", sa.Column("edited_at", sa.DateTime(timezone=True), nullable=True))
 
-    # 2. Let a notification point at the thing it's about (e.g. a mention → its post),
-    #    so the UI can deep-link. NULL for notifications that don't reference a row.
     op.add_column("notifications", sa.Column("reference_id", UUID(as_uuid=True), nullable=True))
 
-    # 3. Bookmarks / saved posts. Composite-unique (user, post) so a post can only be
-    #    saved once per user; ON DELETE CASCADE cleans up when either side is removed.
     op.create_table(
         "bookmarks",
         sa.Column("id", UUID(as_uuid=True), primary_key=True),

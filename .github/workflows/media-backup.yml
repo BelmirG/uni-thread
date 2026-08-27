@@ -1,16 +1,5 @@
 name: Nightly media backup
 
-# The database dump captures every row but no uploaded file — images, video and
-# attachments live on a mounted volume. Without this, a restore would bring back
-# every post with its media broken.
-#
-# Uploaded files are UUID-named and never modified in place, so this is add-only:
-# it transfers what the bucket does not already hold and leaves everything else
-# alone. The first run copies everything; later runs copy only that day's uploads.
-#
-# Deletions are deliberately NOT mirrored. A backup that forgets a file as soon
-# as production does is not a backup — it would propagate an accidental deletion
-# straight into the only copy that could undo it.
 
 on:
   schedule:
@@ -42,7 +31,6 @@ jobs:
           echo "    server holds $TOTAL files, $(numfmt --to=iec "$BYTES")"
 
           echo "==> Listing what the bucket already has"
-          # Keys look like media/<kind>/<name>; strip the prefix to compare.
           aws s3 ls "$BUCKET/media/" --recursive --endpoint-url "$R2_ENDPOINT" \
             | awk '{print $4}' | sed 's|^media/||' | sort > have.txt || true
           echo "    bucket holds $(wc -l < have.txt) files"
@@ -74,9 +62,6 @@ jobs:
               continue
             fi
 
-            # Verify against the manifest — a truncated transfer must not be
-            # uploaded, or the bucket would hold a corrupt file forever and this
-            # add-only sync would never revisit it.
             want_size=$(jq -r --arg k "$kind" --arg n "$name" \
               '.files[] | select(.kind==$k and .name==$n) | .size' manifest.json)
             got_size=$(stat -c%s "staging/$key")
