@@ -155,3 +155,80 @@ async def test_registration_rejects_foreign_email_domains(client_for):
             "password": "password123",
         })
         assert r.status_code == 422, f"{email} was not rejected"
+
+
+# ── Reveal-on-report: the only admin path to an anonymous author ──────────────
+
+async def _reported_anonymous_question(client_for, make_user):
+    author, reporter = await make_user(), await make_user()
+    q = (await client_for(author).post("/api/qa", json={"content": "threatening anonymous post"})).json()
+    r = await client_for(reporter).post(f"/api/posts/{q['id']}/report", json={"reason": "This is a threat against a classmate."})
+    assert r.status_code == 201
+    return author, reporter, q["id"]
+
+
+async def _pending_report_id(admin_c, post_id: str) -> str:
+    reports = (await admin_c.get("/api/admin/reports?status=pending")).json()
+    return next(r["id"] for r in reports if r["post_id"] == post_id)
+
+
+async def test_reporter_and_other_students_never_see_the_anonymous_author(client_for, make_user):
+    author, reporter, post_id = await _reported_anonymous_question(client_for, make_user)
+    admin_c = client_for(await make_user(is_admin=True))
+    report_id = await _pending_report_id(admin_c, post_id)
+
+    # The reporter, or anyone, calling the reveal endpoint directly is refused.
+    for student in (reporter, await make_user()):
+        r = await client_for(student).post(
+            f"/api/admin/reports/{report_id}/reveal-author",
+            json={"password": "testpass123", "reason": "curious who wrote it"},
+        )
+        assert r.status_code == 403
+        assert author.username not in r.text
+
+    # Even the admin's report queue carries no identity until a deliberate reveal.
+    listing = await admin_c.get("/api/admin/reports?status=pending")
+    assert author.username not in listing.text
+    assert str(author.id) not in listing.text
+
+
+async def test_admin_reveal_needs_password_and_is_audited_without_the_name(client_for, make_user, db):
+    from app.models.admin_action import AdminAction
+
+    author, _, post_id = await _reported_anonymous_question(client_for, make_user)
+    admin = await make_user(is_admin=True)
+    admin_c = client_for(admin)
+    report_id = await _pending_report_id(admin_c, post_id)
+    url = f"/api/admin/reports/{report_id}/reveal-author"
+
+    wrong = await admin_c.post(url, json={"password": "not-my-password", "reason": "threat report"})
+    assert wrong.status_code == 403
+    assert author.username not in wrong.text
+
+    ok = await admin_c.post(url, json={"password": "testpass123", "reason": "threat report"})
+    assert ok.status_code == 200
+    assert ok.json()["author"]["username"] == author.username
+
+    log = (await db.execute(select(AdminAction).where(
+        AdminAction.action == "reveal_anonymous_author", AdminAction.actor_username == admin.username,
+    ))).scalar_one()
+    assert "threat report" in (log.detail or "")
+    assert author.username not in (log.detail or "") + log.target_label
+
+
+async def test_reveal_only_for_pending_reports_on_anonymous_posts(client_for, make_user):
+    admin_c = client_for(await make_user(is_admin=True))
+    body = {"password": "testpass123", "reason": "checking the report"}
+
+    # Dismissed report: investigation is over, so no unmasking.
+    _, _, post_id = await _reported_anonymous_question(client_for, make_user)
+    report_id = await _pending_report_id(admin_c, post_id)
+    await admin_c.post(f"/api/admin/reports/{report_id}/dismiss")
+    assert (await admin_c.post(f"/api/admin/reports/{report_id}/reveal-author", json=body)).status_code == 400
+
+    # Report on a normal (named) post: nothing to reveal.
+    named_author, reporter = await make_user(), await make_user()
+    p = (await client_for(named_author).post("/api/posts", json={"content": "named post"})).json()
+    await client_for(reporter).post(f"/api/posts/{p['id']}/report", json={"reason": "spam spam spam spam"})
+    report_id = await _pending_report_id(admin_c, p["id"])
+    assert (await admin_c.post(f"/api/admin/reports/{report_id}/reveal-author", json=body)).status_code == 400

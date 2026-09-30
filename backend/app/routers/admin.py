@@ -7,18 +7,21 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from fastapi.responses import FileResponse
 from fastapi.security import APIKeyHeader
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from sqlalchemy.orm import aliased
 
 from app.config import settings
 from app.core.accounts import retire_user_content
-from app.core.rate_limit import rate_limit
+from app.core.rate_limit import rate_limit, rate_limit_by
+from app.core.security import verify_password
 from app.database import get_db
 from app.dependencies import get_current_admin
 from app.models.admin_action import AdminAction
+from app.models.anonymous_post_author import AnonymousPostAuthor
 from app.models.club import Club
 from app.models.club_member import ClubMember
 from app.models.post import Post
@@ -376,6 +379,7 @@ async def list_reports(
             "post_type": post.post_type if post else None,
             "post_snippet": (post.content or "")[:200] if post else None,
             "post_deleted": post.is_deleted if post else None,
+            "post_is_anonymous": post.is_anonymous if post else None,
             "reason": r.reason,
             "status": r.status,
             "created_at": r.created_at.isoformat(),
@@ -399,6 +403,68 @@ async def dismiss_report(
     await _log_action(db, admin, "dismiss_report", "report", report_id)
     await db.commit()
     return {"ok": True}
+
+
+class RevealAuthorRequest(BaseModel):
+    password: str = Field(max_length=72)
+    reason: str = Field(min_length=5, max_length=500)
+
+
+@router.post("/reports/{report_id}/reveal-author")
+async def reveal_anonymous_author(
+    report_id: uuid.UUID,
+    body: RevealAuthorRequest,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Unmask the author of a reported anonymous post — the only admin path into
+    anonymous_post_authors (audited exception, see CLAUDE.md privacy section).
+
+    Terms §5 / Privacy §5 allow this only to investigate a report, so it's gated
+    on a *pending* report about an *anonymous* post; Privacy §7 promises a
+    separate administrator credential, so the admin re-enters their password.
+    The identity goes back to this admin only: it's never stored, never shown
+    to the reporter, and the audit log records that a reveal happened (who,
+    which post, why) but not whom it revealed.
+    """
+    await rate_limit_by(admin.id, key="reveal_author", limit=20, window_seconds=3600)
+    if not await run_in_threadpool(verify_password, body.password, admin.password_hash):
+        raise HTTPException(status_code=403, detail="Incorrect password.")
+
+    row = (await db.execute(
+        select(Report, Post)
+        .join(Post, Post.id == Report.reported_post_id)
+        .where(Report.id == report_id)
+    )).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    report, post = row
+    if report.status != "pending":
+        raise HTTPException(status_code=400, detail="Only pending reports can be investigated.")
+    if not post.is_anonymous:
+        raise HTTPException(status_code=400, detail="This report isn't about an anonymous post.")
+
+    author = (await db.execute(
+        select(User)
+        .join(AnonymousPostAuthor, AnonymousPostAuthor.user_id == User.id)
+        .where(AnonymousPostAuthor.post_id == post.id)
+    )).scalar_one_or_none()
+
+    await _log_action(
+        db, admin, "reveal_anonymous_author", "post", str(post.id),
+        detail=f"report {report.id}: {body.reason.strip()}",
+    )
+    await db.commit()
+
+    if author is None:
+        return {"author": None}
+    return {
+        "author": {
+            "username": author.username,
+            "display_name": author.display_name,
+            "is_banned": (not author.is_active) and author.ban_reason is not None,
+        }
+    }
 
 
 # ── posts ─────────────────────────────────────────────────────────────────────

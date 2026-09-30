@@ -6,9 +6,9 @@ import Link from "next/link";
 import {
   ShieldCheck, Search, Trash2, Ban, CheckCircle2, RotateCcw,
   LogOut, AlertTriangle, User as UserIcon, FileText, Flag, X,
-  LayoutGrid, Users2, ScrollText, ShieldPlus, Lock,
+  LayoutGrid, Users2, ScrollText, ShieldPlus, Lock, Eye,
 } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/timeAgo";
 
@@ -52,6 +52,7 @@ interface AdminReport {
   post_type: string | null;
   post_snippet: string | null;
   post_deleted: boolean | null;
+  post_is_anonymous: boolean | null;
   reason: string;
   status: string;
   created_at: string;
@@ -330,9 +331,47 @@ function UsersTab({ flash }: { flash: (m: string) => void }) {
 
 // ── Reports tab ───────────────────────────────────────────────────────────────
 
+interface RevealedAuthor {
+  username: string;
+  display_name: string;
+  is_banned: boolean;
+}
+
 function ReportsTab({ flash }: { flash: (m: string) => void }) {
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [loading, setLoading] = useState(true);
+  // Unmasked authors live only in this component's memory: never cached,
+  // gone on reload. null = the author's account no longer exists.
+  const [revealed, setRevealed] = useState<Record<string, RevealedAuthor | null>>({});
+  const [revealingId, setRevealingId] = useState<string | null>(null);
+  const [revealReason, setRevealReason] = useState("");
+  const [revealPassword, setRevealPassword] = useState("");
+  const [revealError, setRevealError] = useState<string | null>(null);
+  const [revealBusy, setRevealBusy] = useState(false);
+
+  function closeReveal() {
+    setRevealingId(null);
+    setRevealReason("");
+    setRevealPassword("");
+    setRevealError(null);
+  }
+
+  async function reveal(reportId: string) {
+    setRevealBusy(true);
+    setRevealError(null);
+    try {
+      const res = await apiFetch<{ author: RevealedAuthor | null }>(
+        `/api/admin/reports/${reportId}/reveal-author`,
+        { method: "POST", body: JSON.stringify({ reason: revealReason, password: revealPassword }) },
+      );
+      setRevealed((prev) => ({ ...prev, [reportId]: res.author }));
+      closeReveal();
+    } catch (err) {
+      setRevealError(err instanceof ApiError ? err.message : "Failed to reveal the author.");
+    } finally {
+      setRevealBusy(false);
+    }
+  }
 
   const load = useCallback(() => {
     setLoading(true);
@@ -354,15 +393,17 @@ function ReportsTab({ flash }: { flash: (m: string) => void }) {
     }
   }
 
-  async function banReported(username: string) {
+  async function banReported(username: string): Promise<boolean> {
     const reason = window.prompt(`Ban @${username} — reason?`);
-    if (reason === null) return;
+    if (reason === null) return false;
     try {
       await apiFetch(`/api/admin/users/${username}/ban`, { method: "POST", body: JSON.stringify({ reason }) });
       flash(`Banned @${username}`);
       load();
+      return true;
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed.");
+      return false;
     }
   }
 
@@ -396,6 +437,12 @@ function ReportsTab({ flash }: { flash: (m: string) => void }) {
                     {r.reported_user
                       ? <> by <Link href={`/profile/${r.reported_user}`} className="font-semibold text-primary no-underline">@{r.reported_user}</Link></>
                       : <span className="text-on-surface-variant"> (anonymous)</span>}
+                    {r.id in revealed && (
+                      revealed[r.id]
+                        ? <> — posted by <Link href={`/profile/${revealed[r.id]!.username}`} className="font-semibold text-primary no-underline">@{revealed[r.id]!.username}</Link>
+                            <span className="text-on-surface-variant"> ({revealed[r.id]!.display_name}, visible only to you)</span></>
+                        : <span className="text-on-surface-variant"> — author's account no longer exists</span>
+                    )}
                     {r.post_deleted && <span className="text-on-surface-variant italic"> · already deleted</span>}
                   </>
                 ) : (
@@ -417,8 +464,63 @@ function ReportsTab({ flash }: { flash: (m: string) => void }) {
             {r.reported_user && (
               <ActionBtn onClick={() => banReported(r.reported_user!)} icon={Ban} label="Ban user" tone="danger" />
             )}
+            {r.type === "post" && r.post_is_anonymous && !(r.id in revealed) && revealingId !== r.id && (
+              <ActionBtn onClick={() => { closeReveal(); setRevealingId(r.id); }} icon={Eye} label="Reveal author" tone="neutral" />
+            )}
+            {revealed[r.id] && !revealed[r.id]!.is_banned && (
+              <ActionBtn
+                onClick={async () => {
+                  const author = revealed[r.id]!;
+                  if (await banReported(author.username)) {
+                    setRevealed((prev) => ({ ...prev, [r.id]: { ...author, is_banned: true } }));
+                  }
+                }}
+                icon={Ban}
+                label="Ban author"
+                tone="danger"
+              />
+            )}
             <ActionBtn onClick={() => dismiss(r.id)} icon={X} label="Dismiss" tone="neutral" />
           </div>
+          {revealingId === r.id && (
+            <form
+              onSubmit={(e) => { e.preventDefault(); reveal(r.id); }}
+              className="mt-3 p-3 rounded-xl bg-surface-container-low space-y-2"
+            >
+              <p className="text-xs text-on-surface-variant leading-relaxed">
+                Only use this to investigate the report. The name is shown only to you and isn&apos;t
+                saved; the audit log records that you revealed it and why. The reporter never sees it.
+              </p>
+              <input
+                value={revealReason}
+                onChange={(e) => setRevealReason(e.target.value)}
+                placeholder="Reason (e.g. threats in reported post)"
+                maxLength={500}
+                className="w-full h-10 px-3 text-sm rounded-xl bg-surface text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <input
+                type="password"
+                value={revealPassword}
+                onChange={(e) => setRevealPassword(e.target.value)}
+                placeholder="Your password"
+                autoComplete="current-password"
+                className="w-full h-10 px-3 text-sm rounded-xl bg-surface text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              {revealError && <p className="text-xs text-error">{revealError}</p>}
+              <div className="flex gap-2 justify-end">
+                <button type="button" onClick={closeReveal} className="px-3 h-9 rounded-xl text-sm text-on-surface-variant hover:bg-surface-container">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={revealBusy || revealReason.trim().length < 5 || !revealPassword}
+                  className="px-4 h-9 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 transition-all"
+                >
+                  {revealBusy ? "Checking…" : "Reveal"}
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       ))}
     </div>
@@ -614,6 +716,7 @@ const ACTION_LABELS: Record<string, string> = {
   delete_post: "deleted post",
   delete_club: "deleted club",
   delete_chat_message: "deleted a chat message in",
+  reveal_anonymous_author: "revealed the author of reported anonymous post",
   bootstrap_admin: "granted admin (master key) to",
   revoke_admin: "revoked admin (master key) from",
 };
