@@ -20,26 +20,23 @@ from app.core.redis import redis
 
 
 def client_ip(conn: HTTPConnection) -> str:
-    """The address that actually reached our edge — not the one the client claims.
+    """The real client address, from the one header the client can't forge.
 
-    X-Forwarded-For grows left to right: whatever the client sent comes first,
-    then each proxy appends the address it received the request from. So the
-    leftmost entry is attacker-controlled (uvicorn's --forwarded-allow-ips="*"
-    trusts it, which is why request.client can't be used for security), while
-    the rightmost *public* entry is the one Railway's edge appended. Private
-    hops to its right (the Next.js proxy, the platform network) are skipped.
+    Railway's edge sets X-Real-IP on every request and overwrites any value the
+    client sent. The alternatives are unsafe:
+    - X-Forwarded-For: rewritten by the proxies; behind a CDN its first entry
+      is the CDN's egress address, not the user. (uvicorn's
+      --forwarded-allow-ips="*" copies that entry into request.client, so
+      request.client must never be used for security either.)
+    - CF-Connecting-IP: only trustworthy if every request is forced through
+      Cloudflare, which the hosting setup doesn't guarantee.
+    Locally (no proxy) there's no X-Real-IP and the socket peer is used.
     """
-    raw = ",".join(conn.headers.getlist("x-forwarded-for"))
-    hops = [h.strip() for h in raw.split(",") if h.strip()]
-    for hop in reversed(hops):
-        try:
-            if ipaddress.ip_address(hop).is_global:
-                return hop
-        except ValueError:
-            continue
-    if hops:
-        return hops[-1]
-    return conn.client.host if conn.client else "unknown"
+    real = conn.headers.get("x-real-ip", "").strip()
+    try:
+        return str(ipaddress.ip_address(real))
+    except ValueError:
+        return conn.client.host if conn.client else "unknown"
 
 
 async def allow(key: str, identity: str, *, limit: int, window_seconds: int) -> bool:

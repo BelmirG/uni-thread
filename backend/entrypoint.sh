@@ -22,10 +22,10 @@ fi
 
 echo "==> Starting FastAPI server on port ${PORT} (reload=${RELOAD:-0})..."
 # --proxy-headers applies X-Forwarded-Proto so the app knows the request was HTTPS.
-# NOTE: with "*" uvicorn also sets request.client to the LEFTMOST X-Forwarded-For
-# entry — which the client writes itself and can forge. Never use request.client
-# for security decisions; rate limiting uses app.core.rate_limit.client_ip, which
-# reads the entry Railway's edge appended.
+# NOTE: with "*" uvicorn also sets request.client to the first X-Forwarded-For
+# entry, which behind Cloudflare is a rotating Cloudflare address, not the user.
+# Never use request.client for security decisions; rate limiting uses
+# app.core.rate_limit.client_ip, which reads X-Real-IP (set by Railway's edge).
 exec uvicorn app.main:app --host "${HOST}" --port "${PORT}" ${RELOAD_FLAG} \
   --proxy-headers --forwarded-allow-ips="*" \
   --timeout-graceful-shutdown 3

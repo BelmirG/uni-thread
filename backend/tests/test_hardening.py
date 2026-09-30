@@ -19,46 +19,48 @@ from app.models.post import Post
 from app.models.user import User
 
 
-def _req(xff: str | None, peer: str = "10.0.0.1") -> Request:
-    headers = [(b"x-forwarded-for", xff.encode())] if xff is not None else []
-    return Request({"type": "http", "headers": headers, "client": (peer, 1234)})
+def _req(headers: dict[str, str], peer: str = "10.0.0.1") -> Request:
+    raw = [(k.lower().encode(), v.encode()) for k, v in headers.items()]
+    return Request({"type": "http", "headers": raw, "client": (peer, 1234)})
 
 
 def _public_ip() -> str:
-    # 8.8.0.0/16 is globally routable; random per run so Redis counters from a
-    # previous run (same 5-minute window) can't leak into this one.
+    # Random per run so Redis counters from a previous run (same window) can't
+    # leak into this one.
     return f"8.8.{random.randint(0, 255)}.{random.randint(1, 254)}"
 
 
-def _client_behind_edge(real_ip: str, spoofed: str | None = None) -> httpx.AsyncClient:
-    """What the backend sees in production: whatever the client claimed, then
-    the address Railway's edge appended, arriving via a private-network peer."""
-    xff = f"{spoofed}, {real_ip}" if spoofed else real_ip
+def _client_behind_edge(real_ip: str, forged: str | None = None) -> httpx.AsyncClient:
+    """What the backend sees in production: Railway's edge sets X-Real-IP to the
+    real client; X-Forwarded-For / CF-Connecting-IP may hold anything."""
+    headers = {"X-Real-IP": real_ip}
+    if forged:
+        headers |= {"X-Forwarded-For": forged, "CF-Connecting-IP": forged}
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app, client=("10.1.2.3", 1)),
         base_url="http://test",
-        headers={"X-Forwarded-For": xff},
+        headers=headers,
     )
 
 
 # ── client IP ─────────────────────────────────────────────────────────────────
 
-def test_client_ip_ignores_what_the_client_claims():
-    assert client_ip(_req("1.2.3.4, 8.8.8.8")) == "8.8.8.8"
+def test_client_ip_uses_the_edge_set_header():
+    assert client_ip(_req({"X-Real-IP": "8.8.8.8", "X-Forwarded-For": "1.2.3.4"})) == "8.8.8.8"
 
 
-def test_client_ip_skips_private_hops_to_the_right():
-    assert client_ip(_req("1.2.3.4, 8.8.8.8, 10.0.0.5")) == "8.8.8.8"
-    assert client_ip(_req("8.8.8.8, 100.64.0.9, fd12::1")) == "8.8.8.8"
+def test_client_ip_never_trusts_forgeable_headers():
+    forged = {"X-Forwarded-For": "1.2.3.4", "CF-Connecting-IP": "5.6.7.8"}
+    assert client_ip(_req(forged, peer="10.9.9.9")) == "10.9.9.9"
 
 
 def test_client_ip_handles_ipv6_and_garbage():
-    assert client_ip(_req("not-an-ip, 2606:4700::1111")) == "2606:4700::1111"
-    assert client_ip(_req("8.8.8.8, garbage")) == "8.8.8.8"
+    assert client_ip(_req({"X-Real-IP": "2606:4700::1111"})) == "2606:4700::1111"
+    assert client_ip(_req({"X-Real-IP": "not-an-ip"}, peer="10.9.9.9")) == "10.9.9.9"
 
 
 def test_client_ip_falls_back_to_peer_without_header():
-    assert client_ip(_req(None, peer="10.9.9.9")) == "10.9.9.9"
+    assert client_ip(_req({}, peer="10.9.9.9")) == "10.9.9.9"
 
 
 # ── rate limits ───────────────────────────────────────────────────────────────
@@ -68,7 +70,7 @@ async def test_rotating_spoofed_ips_no_longer_bypass_login_limit():
     real = _public_ip()
     codes = []
     for i in range(31):
-        async with _client_behind_edge(real, spoofed=f"1.1.{i}.1") as c:
+        async with _client_behind_edge(real, forged=f"1.1.{i}.1") as c:
             r = await c.post("/api/auth/login", json={
                 "email": f"nobody{i}_{uuid.uuid4().hex[:6]}@student.ius.edu.ba",
                 "password": "wrong-password",
