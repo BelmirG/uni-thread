@@ -12,7 +12,8 @@ from sqlalchemy.orm import aliased
 from app.core.blocks import blocked_user_ids, is_blocked_pair
 from app.core.notify import push_live
 from app.core.redis import redis
-from app.core.security import decode_access_token
+from app.core.rate_limit import allow, rate_limit_by
+from app.core.sessions import user_from_token, watch_session
 from app.database import AsyncSessionLocal, get_db
 from app.dependencies import get_current_user
 from app.models.chat_message import ChatMessage
@@ -299,6 +300,7 @@ async def open_conversation(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await rate_limit_by(current_user.id, key="dm_open", limit=30, window_seconds=3600)
     other = (await db.execute(
         select(User).where(User.username == body.username)
     )).scalar_one_or_none()
@@ -328,6 +330,7 @@ async def share_post(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await rate_limit_by(current_user.id, key="dm_send", limit=60, window_seconds=60)
     other = (await db.execute(
         select(User).where(User.username == body.recipient_username)
     )).scalar_one_or_none()
@@ -637,14 +640,6 @@ async def delete_conversation(
 @router.websocket("/{conversation_id}/ws")
 async def dm_websocket(websocket: WebSocket, conversation_id: str):
     token = websocket.cookies.get("access_token")
-    if not token:
-        await websocket.close(code=4001, reason="Not authenticated")
-        return
-
-    user_id_str = decode_access_token(token)
-    if not user_id_str:
-        await websocket.close(code=4001, reason="Invalid or expired token")
-        return
 
     try:
         conv_id = uuid.UUID(conversation_id)
@@ -653,11 +648,9 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
         return
 
     async with AsyncSessionLocal() as db:
-        user = (await db.execute(
-            select(User).where(User.id == uuid.UUID(user_id_str))
-        )).scalar_one_or_none()
-        if not user or not user.is_active:
-            await websocket.close(code=4001, reason="User not found")
+        user = await user_from_token(db, token)
+        if not user:
+            await websocket.close(code=4001, reason="Not authenticated")
             return
 
         conv = (await db.execute(
@@ -668,7 +661,11 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
             return
 
         other_id = conv.user2_id if conv.user1_id == user.id else conv.user1_id
-        if await is_blocked_pair(db, user.id, other_id):
+
+        async def not_blocked(session: AsyncSession, me: User) -> bool:
+            return not await is_blocked_pair(session, me.id, other_id)
+
+        if not await not_blocked(db, user):
             await websocket.close(code=4003, reason="Access denied")
             return
 
@@ -702,10 +699,11 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
                     continue
 
                 if data.get("event") == "typing":
-                    await redis.publish(channel, json.dumps({
-                        "event": "typing",
-                        "username": user.username,
-                    }))
+                    if await allow("dm_typing", str(user.id), limit=120, window_seconds=60):
+                        await redis.publish(channel, json.dumps({
+                            "event": "typing",
+                            "username": user.username,
+                        }))
                     continue
 
                 content = (data.get("content") or "").strip()
@@ -724,6 +722,16 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
 
                 if not content and not shared_post_id_str and not attachments:
                     continue
+
+                # Shares the "dm_send" bucket with POST /share. Over the limit the
+                # message is dropped and the sender's bubble offers a retry.
+                if not await allow("dm_send", str(user.id), limit=60, window_seconds=60):
+                    continue
+
+                # A ban, logout, password reset or a new block applies to the next message.
+                if not await user_from_token(db, token) or not await not_blocked(db, user):
+                    await websocket.close(code=4003, reason="Access revoked")
+                    return
 
                 if len(content) > 4000:
                     content = content[:4000]
@@ -792,10 +800,11 @@ async def dm_websocket(websocket: WebSocket, conversation_id: str):
 
         redis_task = asyncio.create_task(redis_to_ws())
         ws_task = asyncio.create_task(ws_to_redis())
+        guard_task = asyncio.create_task(watch_session(websocket, token, not_blocked))
 
         try:
             done, pending = await asyncio.wait(
-                {redis_task, ws_task},
+                {redis_task, ws_task, guard_task},
                 return_when=asyncio.FIRST_COMPLETED,
             )
             for task in pending:

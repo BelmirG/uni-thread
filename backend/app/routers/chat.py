@@ -10,11 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.mentions import extract_mention_usernames
 from app.core.notify import push_live
+from app.core.rate_limit import allow
 from app.core.redis import redis
-from app.core.security import decode_access_token
+from app.core.sessions import user_from_token, watch_session
 from app.core.webpush import send_web_push
 from app.database import AsyncSessionLocal, get_db
 from app.dependencies import get_current_user
+from app.models.admin_action import AdminAction
 from app.models.chat_message import ChatMessage
 from app.models.club import Club
 from app.models.club_member import ClubMember
@@ -210,39 +212,84 @@ async def unmute_club_chat(
     await db.commit()
 
 
+# ── Delete a message ───────────────────────────────────────────────────────────
+
+@router.delete("/{slug}/chat/{message_id}", status_code=204)
+async def delete_chat_message(
+    slug: str,
+    message_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Author, the club's owner/moderators, or an app admin can remove a message."""
+    club = (await db.execute(select(Club).where(Club.slug == slug))).scalar_one_or_none()
+    if not club:
+        raise HTTPException(status_code=404, detail="Club not found.")
+    msg = (await db.execute(
+        select(ChatMessage).where(
+            ChatMessage.id == message_id,
+            ChatMessage.club_id == club.id,
+            ChatMessage.is_deleted == False,  # noqa: E712
+        )
+    )).scalar_one_or_none()
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found.")
+
+    is_author = msg.author_id == current_user.id
+    if not is_author:
+        role = (await db.execute(
+            select(ClubMember.role).where(
+                ClubMember.club_id == club.id, ClubMember.user_id == current_user.id
+            )
+        )).scalar_one_or_none()
+        club_moderator = role in ("owner", "moderator")
+        if not club_moderator and not current_user.is_admin:
+            raise HTTPException(status_code=403, detail="You can only delete your own messages.")
+        if not club_moderator:
+            # App admin acting outside their own club roles — keep an audit trail.
+            db.add(AdminAction(
+                actor_id=current_user.id,
+                actor_username=current_user.username,
+                action="delete_chat_message",
+                target_type="chat_message",
+                target_label=club.slug,
+                detail=(msg.content or "")[:200] or None,
+            ))
+
+    msg.is_deleted = True
+    await db.commit()
+    await redis.publish(f"club_chat:{club.id}", json.dumps({
+        "event": "messages_deleted",
+        "ids": [str(msg.id)],
+    }))
+
+
 # ── WebSocket: real-time chat ──────────────────────────────────────────────────
 
 @router.websocket("/{slug}/chat/ws")
 async def chat_websocket(websocket: WebSocket, slug: str):
     token = websocket.cookies.get("access_token")
-    if not token:
-        await websocket.close(code=4001, reason="Not authenticated")
-        return
-
-    user_id_str = decode_access_token(token)
-    if not user_id_str:
-        await websocket.close(code=4001, reason="Invalid or expired token")
-        return
 
     async with AsyncSessionLocal() as db:
-        user = (await db.execute(
-            select(User).where(User.id == uuid.UUID(user_id_str))
-        )).scalar_one_or_none()
-        if not user or not user.is_active:
-            await websocket.close(code=4001, reason="User not found")
+        user = await user_from_token(db, token)
+        if not user:
+            await websocket.close(code=4001, reason="Not authenticated")
             return
 
         club = (await db.execute(select(Club).where(Club.slug == slug))).scalar_one_or_none()
         if not club:
             await websocket.close(code=4004, reason="Club not found")
             return
+        club_id = club.id
 
-        membership = (await db.execute(
-            select(ClubMember).where(
-                ClubMember.club_id == club.id, ClubMember.user_id == user.id
-            )
-        )).scalar_one_or_none()
-        if not membership:
+        async def still_member(session: AsyncSession, member: User) -> bool:
+            return (await session.execute(
+                select(ClubMember.user_id).where(
+                    ClubMember.club_id == club_id, ClubMember.user_id == member.id
+                )
+            )).first() is not None
+
+        if not await still_member(db, user):
             await websocket.close(code=4003, reason="Not a member of this club")
             return
 
@@ -273,11 +320,12 @@ async def chat_websocket(websocket: WebSocket, slug: str):
                     continue
 
                 if data.get("event") == "typing":
-                    await redis.publish(channel, json.dumps({
-                        "event": "typing",
-                        "username": user.username,
-                        "display_name": user.display_name,
-                    }))
+                    if await allow("chat_typing", str(user.id), limit=120, window_seconds=60):
+                        await redis.publish(channel, json.dumps({
+                            "event": "typing",
+                            "username": user.username,
+                            "display_name": user.display_name,
+                        }))
                     continue
 
                 content = (data.get("content") or "").strip()
@@ -295,6 +343,17 @@ async def chat_websocket(websocket: WebSocket, slug: str):
 
                 if not content and not attachments:
                     continue
+
+                # Over the limit: drop it — the sender's bubble turns into
+                # "Not sent — tap to retry" on its own.
+                if not await allow("chat_send", str(user.id), limit=60, window_seconds=60):
+                    continue
+
+                # Re-check before every write: a ban, logout, password reset or
+                # removal from the club takes effect on the very next message.
+                if not await user_from_token(db, token) or not await still_member(db, user):
+                    await websocket.close(code=4003, reason="Access revoked")
+                    return
 
                 if content and len(content) > 2000:
                     content = content[:2000]
@@ -333,10 +392,13 @@ async def chat_websocket(websocket: WebSocket, slug: str):
 
         redis_task = asyncio.create_task(redis_to_ws())
         ws_task = asyncio.create_task(ws_to_redis())
+        # Also cuts off *receiving*: a banned or removed member stops seeing
+        # new messages within SESSION_RECHECK_SECONDS even if they never send.
+        guard_task = asyncio.create_task(watch_session(websocket, token, still_member))
 
         try:
             done, pending = await asyncio.wait(
-                {redis_task, ws_task},
+                {redis_task, ws_task, guard_task},
                 return_when=asyncio.FIRST_COMPLETED,
             )
             for task in pending:

@@ -21,11 +21,11 @@ if [ "${RELOAD:-0}" = "1" ]; then
 fi
 
 echo "==> Starting FastAPI server on port ${PORT} (reload=${RELOAD:-0})..."
-# --proxy-headers makes uvicorn take the real client IP from X-Forwarded-For.
-# Behind Railway (or any managed host) the direct peer is always the platform's
-# proxy, so without this every user shares one IP — and one rate-limit bucket,
-# meaning five friends registering would lock out everyone else for an hour.
-# Trusting "*" is safe here because only the platform proxy can reach the container.
+# --proxy-headers applies X-Forwarded-Proto so the app knows the request was HTTPS.
+# NOTE: with "*" uvicorn also sets request.client to the LEFTMOST X-Forwarded-For
+# entry — which the client writes itself and can forge. Never use request.client
+# for security decisions; rate limiting uses app.core.rate_limit.client_ip, which
+# reads the entry Railway's edge appended.
 exec uvicorn app.main:app --host "${HOST}" --port "${PORT}" ${RELOAD_FLAG} \
   --proxy-headers --forwarded-allow-ips="*" \
   --timeout-graceful-shutdown 3

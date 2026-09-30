@@ -74,7 +74,12 @@ class Settings(BaseSettings):
         """Fail fast at startup if production is misconfigured with dev defaults."""
         if not self.is_production:
             return
-        placeholders = {"dev-secret-key-change-before-production", "change-this-admin-key", ""}
+        placeholders = {
+            "dev-secret-key-change-before-production",
+            "change-this-admin-key",
+            "change-this-before-deploying",  # an older docker-compose default, still in git history
+            "",
+        }
         if self.secret_key in placeholders or len(self.secret_key) < 32:
             raise RuntimeError(
                 "SECRET_KEY must be a unique random string of at least 32 chars in production."

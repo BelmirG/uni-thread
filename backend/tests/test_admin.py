@@ -41,22 +41,50 @@ async def test_ban_is_attributed_to_the_acting_admin(client_for, make_user, db):
     assert action.detail == "spam"
 
 
-async def test_promote_and_demote_round_trip(client_for, make_user):
+async def test_admin_session_cannot_grant_admin(client_for, make_user):
     admin = await make_user(is_admin=True)
-    promotee = await make_user()
+    target = await make_user()
     admin_c = client_for(admin)
 
-    assert (await admin_c.post(f"/api/admin/users/{promotee.username}/promote")).status_code == 200
-    assert (await client_for(promotee).get("/api/admin/users")).status_code == 200
-
-    assert (await admin_c.post(f"/api/admin/users/{promotee.username}/demote")).status_code == 200
-    assert (await client_for(promotee).get("/api/admin/users")).status_code == 403
+    assert (await admin_c.post(f"/api/admin/users/{target.username}/promote")).status_code == 404
+    assert (await admin_c.post(f"/api/admin/bootstrap/{target.username}")).status_code == 403
+    assert (await client_for(target).get("/api/admin/users")).status_code == 403
 
 
-async def test_admin_cannot_demote_themselves(client_for, make_user):
+async def test_admin_session_cannot_revoke_another_admin(client_for, make_user):
     admin = await make_user(is_admin=True)
-    r = await client_for(admin).post(f"/api/admin/users/{admin.username}/demote")
-    assert r.status_code == 400
+    other_admin = await make_user(is_admin=True)
+    admin_c = client_for(admin)
+
+    assert (await admin_c.post(f"/api/admin/users/{other_admin.username}/demote")).status_code == 404
+    assert (await admin_c.post(f"/api/admin/revoke/{other_admin.username}")).status_code == 403
+    assert (await client_for(other_admin).get("/api/admin/users")).status_code == 200
+
+
+async def test_revoke_requires_the_master_key(client_for, make_user):
+    admin = await make_user(is_admin=True)
+    c = client_for(None)
+
+    r = await c.post(f"/api/admin/revoke/{admin.username}", headers={"x-admin-key": "wrong"})
+    assert r.status_code == 403
+    assert (await client_for(admin).get("/api/admin/users")).status_code == 200
+
+    r = await c.post(f"/api/admin/revoke/{admin.username}", headers={"x-admin-key": settings.admin_key})
+    assert r.status_code == 200
+    assert (await client_for(admin).get("/api/admin/users")).status_code == 403
+
+
+async def test_bootstrap_refuses_unverified_and_banned_accounts(client_for, make_user, db):
+    c = client_for(None)
+    key = {"x-admin-key": settings.admin_key}
+
+    unverified = await make_user()
+    unverified.is_email_verified = False
+    await db.commit()
+    assert (await c.post(f"/api/admin/bootstrap/{unverified.username}", headers=key)).status_code == 400
+
+    banned = await make_user(is_active=False)
+    assert (await c.post(f"/api/admin/bootstrap/{banned.username}", headers=key)).status_code == 400
 
 
 async def test_bootstrap_requires_the_master_key(client_for, make_user):

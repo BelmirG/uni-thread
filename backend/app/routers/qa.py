@@ -6,6 +6,7 @@ from sqlalchemy import and_, case, func, literal, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.notify import notify
+from app.core.rate_limit import rate_limit_by
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.anonymous_post_author import AnonymousPostAuthor
@@ -150,6 +151,7 @@ async def create_question(
     current_user: User = Depends(get_current_user),
 ):
     """Post an anonymous question."""
+    await rate_limit_by(current_user.id, key="post", limit=30, window_seconds=600)
     post = Post(
         author_id=None,        # ← no author in the posts table
         content=body.content,
@@ -269,6 +271,7 @@ async def create_answer(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await rate_limit_by(current_user.id, key="post", limit=30, window_seconds=600)
     parent = (
         await db.execute(
             select(Post).where(Post.id == post_id, Post.is_deleted == False)

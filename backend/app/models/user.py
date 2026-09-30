@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String, func, text
+from sqlalchemy import Boolean, DateTime, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -36,6 +36,11 @@ class User(Base):
 
     muted_notifications: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'"), default=list
+    )
+
+    # Bumped on password reset; tokens carrying an older "ver" stop working.
+    token_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
     )
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

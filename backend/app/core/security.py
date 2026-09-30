@@ -14,20 +14,21 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
-def create_access_token(user_id: str) -> str:
+def create_access_token(user_id: str, token_version: int = 0) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.access_token_expire_minutes
     )
     return jwt.encode(
-        {"sub": user_id, "exp": expire},
+        {"sub": user_id, "exp": expire, "ver": token_version},
         settings.secret_key,
         algorithm="HS256",
     )
 
 
-def decode_access_token(token: str) -> str | None:
+def decode_access_claims(token: str) -> dict | None:
+    """Verified claims, or None. Use app.core.sessions.user_from_token to authenticate —
+    a valid signature alone doesn't mean the session is still alive."""
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
-        return payload.get("sub")
+        return jwt.decode(token, settings.secret_key, algorithms=["HS256"])
     except JWTError:
         return None

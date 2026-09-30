@@ -14,6 +14,7 @@ from sqlalchemy.orm import aliased
 from app.core.blocks import blocked_user_ids, is_blocked_pair, visible_author_clause
 from app.core.notify import notify, push_live
 from app.core.redis import redis
+from app.core.rate_limit import rate_limit_by
 from app.database import AsyncSessionLocal, get_db
 from app.dependencies import get_current_user
 from app.models.club import Club
@@ -300,6 +301,7 @@ async def create_club(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await rate_limit_by(current_user.id, key="club_create", limit=5, window_seconds=86400)
     base_slug = _slugify(body.name)
     slug = await _unique_slug(base_slug, db)
 
@@ -393,6 +395,7 @@ async def join_club(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await rate_limit_by(current_user.id, key="club_join", limit=30, window_seconds=3600)
     club = await _get_club_or_404(slug, db)
 
     if await _get_membership(club.id, current_user.id, db):
@@ -551,6 +554,7 @@ async def create_club_post(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await rate_limit_by(current_user.id, key="post", limit=30, window_seconds=600)
     club = await _get_club_or_404(slug, db)
     membership = await _get_membership(club.id, current_user.id, db)
     if not membership:
@@ -779,6 +783,7 @@ async def invite_member(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await rate_limit_by(current_user.id, key="club_invite", limit=60, window_seconds=3600)
     club = await _get_club_or_404(slug, db)
     requester = await _get_membership(club.id, current_user.id, db)
     if not requester or requester.role not in ("owner", "moderator"):

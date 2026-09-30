@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from PIL import Image, ImageOps
 from starlette.concurrency import run_in_threadpool
 
-from app.core.rate_limit import rate_limit
+from app.core.rate_limit import rate_limit_by
 from app.dependencies import get_current_user
 from app.models.user import User
 
@@ -157,7 +157,7 @@ async def upload_image(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
 ):
-    await rate_limit(request, key="upload", limit=60, window_seconds=3600)
+    await rate_limit_by(current_user.id, key="upload", limit=60, window_seconds=3600)
 
     # ── video branch: store as-is and let the browser stream it ──────────────
     if file.content_type in ALLOWED_VIDEO_TYPES:
@@ -218,7 +218,7 @@ async def upload_file(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
 ):
-    await rate_limit(request, key="upload_file", limit=30, window_seconds=3600)
+    await rate_limit_by(current_user.id, key="upload_file", limit=30, window_seconds=3600)
     ext = Path(file.filename or "").suffix.lower()
 
     if file.content_type in ALLOWED_FILE_TYPES:

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.config import settings
+from app.core.accounts import retire_user_content
 from app.core.rate_limit import rate_limit
 from app.database import get_db
 from app.dependencies import get_current_admin
@@ -83,7 +84,11 @@ def _user_summary(u: User) -> dict:
     }
 
 
-# ── bootstrap ─────────────────────────────────────────────────────────────────
+# ── admin roles (master key only) ─────────────────────────────────────────────
+# Granting and revoking admin is deliberately NOT possible from the panel: an
+# admin session can't mint or remove other admins, so a compromised or careless
+# admin account can't escalate anyone or lock the owner out. Both operations
+# need ADMIN_KEY, which lives only in Railway variables and a password manager.
 
 @router.post("/bootstrap/{username}")
 async def bootstrap_admin(
@@ -91,15 +96,41 @@ async def bootstrap_admin(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(_verify_admin_key),
 ):
-    """Grant is_admin using the master key instead of an existing admin account."""
+    """Grant is_admin — master key only."""
     user = await _get_user(username, db)
     if user.is_admin:
         raise HTTPException(status_code=400, detail="User is already an admin.")
+    if not user.is_email_verified:
+        raise HTTPException(status_code=400, detail="Verify the account's email before granting admin.")
+    if not user.is_active:
+        raise HTTPException(status_code=400, detail="Cannot grant admin to a banned account.")
     user.is_admin = True
     db.add(AdminAction(
         actor_id=None,
         actor_username="(admin key)",
         action="bootstrap_admin",
+        target_type="user",
+        target_label=username,
+    ))
+    await db.commit()
+    return {"ok": True, "username": username}
+
+
+@router.post("/revoke/{username}")
+async def revoke_admin(
+    username: str,
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(_verify_admin_key),
+):
+    """Remove is_admin — master key only."""
+    user = await _get_user(username, db)
+    if not user.is_admin:
+        raise HTTPException(status_code=400, detail="User is not an admin.")
+    user.is_admin = False
+    db.add(AdminAction(
+        actor_id=None,
+        actor_username="(admin key)",
+        action="revoke_admin",
         target_type="user",
         target_label=username,
     ))
@@ -248,10 +279,11 @@ async def delete_user(
             await db.delete(club)
             succession.append({"club": club.name, "action": "deleted (no other members)"})
 
-    await _log_action(
-        db, admin, "delete_user", "user", username,
-        detail=f"clubs affected: {succession}" if succession else None,
-    )
+    hidden = await retire_user_content(db, user.id)
+    details = [f"{hidden} post(s) removed"]
+    if succession:
+        details.append(f"clubs affected: {succession}")
+    await _log_action(db, admin, "delete_user", "user", username, detail="; ".join(details))
     await db.delete(user)
     await db.commit()
     return {"ok": True, "username": username, "clubs": succession}
@@ -312,42 +344,6 @@ async def get_user_info(
         "banned_at": user.banned_at.isoformat() if user.banned_at else None,
         "created_at": user.created_at.isoformat(),
     }
-
-
-# ── admin roles ───────────────────────────────────────────────────────────────
-
-@router.post("/users/{username}/promote")
-async def promote_user(
-    username: str,
-    db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin),
-):
-    """Grant another account admin access."""
-    user = await _get_user(username, db)
-    if user.is_admin:
-        raise HTTPException(status_code=400, detail="User is already an admin.")
-    user.is_admin = True
-    await _log_action(db, admin, "promote_admin", "user", username)
-    await db.commit()
-    return {"ok": True, "username": username}
-
-
-@router.post("/users/{username}/demote")
-async def demote_user(
-    username: str,
-    db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin),
-):
-    """Revoke another admin's access."""
-    if username == admin.username:
-        raise HTTPException(status_code=400, detail="You can't remove your own admin access.")
-    user = await _get_user(username, db)
-    if not user.is_admin:
-        raise HTTPException(status_code=400, detail="User is not an admin.")
-    user.is_admin = False
-    await _log_action(db, admin, "demote_admin", "user", username)
-    await db.commit()
-    return {"ok": True, "username": username}
 
 
 # ── reports ───────────────────────────────────────────────────────────────────

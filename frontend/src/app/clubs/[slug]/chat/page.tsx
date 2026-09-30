@@ -12,7 +12,7 @@ import ThumbImg from "@/components/ThumbImg";
 import {
   ArrowLeft, Send, X, CornerUpLeft, Plus, ImageIcon, FileText,
   Download, ExternalLink, MoreVertical, GalleryHorizontalEnd,
-  ChevronLeft, ChevronRight, Bell,
+  ChevronLeft, ChevronRight, Bell, Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import MiniAvatar from "@/components/MiniAvatar";
@@ -229,7 +229,7 @@ function BubbleAttachments({ attachments, isOwn, onPreview }: {
 // ── Swipeable bubble ──────────────────────────────────────────────────────────
 
 function SwipeableBubble({
-  msg, isOwn, showName, isLast, onSwipe, onScrollToQuote, onPreviewImage, onRetry, msgRef,
+  msg, isOwn, showName, isLast, onSwipe, onScrollToQuote, onPreviewImage, onRetry, canDelete, onDelete, msgRef,
 }: {
   msg: ChatMessage;
   isOwn: boolean;
@@ -239,6 +239,8 @@ function SwipeableBubble({
   onScrollToQuote: (quote: string) => void;
   onPreviewImage: (urls: string[], index: number) => void;
   onRetry: () => void;
+  canDelete: boolean;
+  onDelete: (msg: ChatMessage) => void;
   msgRef: (el: HTMLDivElement | null) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -247,24 +249,44 @@ function SwipeableBubble({
   const tracking = useRef(false);
   const offsetRef = useRef(0);
   const onSwipeRef = useRef(onSwipe);
+  // Long-press (mobile) opens delete; any movement cancels it so swipe-to-reply
+  // and scrolling are unaffected.
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressFired = useRef(false);
+  const deleteRef = useRef<(() => void) | null>(null);
   const [offset, setOffset] = useState(0);
   const [hovered, setHovered] = useState(false);
 
   useEffect(() => { onSwipeRef.current = onSwipe; });
+  useEffect(() => { deleteRef.current = canDelete ? () => onDelete(msg) : null; });
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    const cancelPress = () => {
+      if (pressTimer.current) clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    };
     const ts = (e: TouchEvent) => {
       startX.current = e.touches[0].clientX;
       startY.current = e.touches[0].clientY;
       tracking.current = false;
       offsetRef.current = 0;
       setOffset(0);
+      pressFired.current = false;
+      cancelPress();
+      if (deleteRef.current) {
+        pressTimer.current = setTimeout(() => {
+          pressTimer.current = null;
+          pressFired.current = true;
+          deleteRef.current?.();
+        }, 550);
+      }
     };
     const tm = (e: TouchEvent) => {
       const dx = e.touches[0].clientX - startX.current;
       const dy = e.touches[0].clientY - startY.current;
+      if (Math.abs(dx) >= 4 || Math.abs(dy) >= 4) cancelPress();
       if (!tracking.current) {
         if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
         if (Math.abs(dy) >= Math.abs(dx)) return;
@@ -278,7 +300,8 @@ function SwipeableBubble({
       }
     };
     const te = () => {
-      if (offsetRef.current >= 40) onSwipeRef.current(msg);
+      cancelPress();
+      if (!pressFired.current && offsetRef.current >= 40) onSwipeRef.current(msg);
       offsetRef.current = 0;
       setOffset(0);
     };
@@ -286,6 +309,7 @@ function SwipeableBubble({
     el.addEventListener("touchmove", tm, { passive: false });
     el.addEventListener("touchend", te);
     return () => {
+      cancelPress();
       el.removeEventListener("touchstart", ts);
       el.removeEventListener("touchmove", tm);
       el.removeEventListener("touchend", te);
@@ -370,6 +394,17 @@ function SwipeableBubble({
       >
         <CornerUpLeft className="w-3.5 h-3.5" />
       </button>
+      {canDelete && (
+        <button
+          onClick={() => onDelete(msg)}
+          className="flex-shrink-0 self-center p-1 rounded-full text-on-surface-variant hover:text-error"
+          style={{ opacity: hovered && offset === 0 ? 1 : 0, transition: "opacity 0.15s", pointerEvents: hovered ? "auto" : "none" }}
+          aria-label="Delete message"
+          tabIndex={-1}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
     </div>
   );
 }
@@ -398,6 +433,8 @@ export default function ClubChatPage() {
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
   const [queuedSend, setQueuedSend] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  // Club owner/moderator or app admin: may delete anyone's message here.
+  const [canModerate, setCanModerate] = useState(false);
   const typingTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const lastTypingSentRef = useRef(0);
 
@@ -513,7 +550,12 @@ export default function ClubChatPage() {
   }
 
   function handleIncoming(data: unknown) {
-    const evt = data as { event?: string; username?: string; display_name?: string };
+    const evt = data as { event?: string; username?: string; display_name?: string; ids?: string[] };
+    if (evt.event === "messages_deleted") {
+      const gone = new Set(evt.ids ?? []);
+      setMessages((prev) => prev.filter((m) => !gone.has(m.id)));
+      return;
+    }
     // Ephemeral typing signal — light up that member's name for 3s.
     if (evt.event === "typing") {
       const username = evt.username;
@@ -578,8 +620,8 @@ export default function ClubChatPage() {
       try {
         const [history, me, club] = await Promise.all([
           apiFetch<ChatMessage[]>(`/api/clubs/${slug}/chat`),
-          apiFetch<Author>("/api/auth/me"),
-          apiFetch<{ name: string; chat_muted?: boolean }>(`/api/clubs/${slug}`),
+          apiFetch<Author & { is_admin?: boolean }>("/api/auth/me"),
+          apiFetch<{ name: string; chat_muted?: boolean; role?: string | null }>(`/api/clubs/${slug}`),
         ]);
         if (cancelled) return false;
         meRef.current = { username: me.username, display_name: me.display_name, avatar_url: me.avatar_url ?? null };
@@ -590,6 +632,7 @@ export default function ClubChatPage() {
         setCurrentUsername(me.username);
         setClubName(club.name);
         setIsMuted(club.chat_muted ?? false);
+        setCanModerate(!!me.is_admin || club.role === "owner" || club.role === "moderator");
         return true;
       } catch (err: unknown) {
         if (err instanceof ApiError && err.status === 401) router.replace("/login");
@@ -676,6 +719,21 @@ export default function ClubChatPage() {
         m.client_id === clientId && m.pending ? { ...m, pending: false, failed: true } : m
       ));
     }, 15000));
+  }
+
+  async function deleteMessage(msg: ChatMessage) {
+    const mine = msg.author.username === meRef.current?.username;
+    if (!window.confirm(mine ? "Delete this message?" : `Delete ${msg.author.display_name}'s message for everyone?`)) return;
+    setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+    try {
+      await apiFetch(`/api/clubs/${slug}/chat/${msg.id}`, { method: "DELETE" });
+    } catch (err) {
+      // Put just this message back — messages that arrived meanwhile stay.
+      setMessages((prev) => prev.some((m) => m.id === msg.id)
+        ? prev
+        : [...prev, msg].sort((a, b) => a.created_at.localeCompare(b.created_at)));
+      alert(err instanceof ApiError ? err.message : "Couldn't delete the message.");
+    }
   }
 
   function retrySend(clientId: string) {
@@ -896,6 +954,8 @@ export default function ClubChatPage() {
                   onScrollToQuote={scrollToQuote}
                   onPreviewImage={(urls, idx) => setLightbox({ urls, index: idx })}
                   onRetry={() => { if (msg.client_id) retrySend(msg.client_id); }}
+                  canDelete={!msg.pending && !msg.failed && (isOwn || canModerate)}
+                  onDelete={deleteMessage}
                   msgRef={(el) => { if (el) msgRefs.current.set(msg.id, el); else msgRefs.current.delete(msg.id); }}
                 />
               ))}

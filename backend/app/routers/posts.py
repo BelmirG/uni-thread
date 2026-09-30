@@ -10,6 +10,7 @@ from sqlalchemy.orm import aliased
 from app.core.blocks import blocked_user_ids, is_blocked_pair, visible_author_clause
 from app.core.mentions import extract_mention_usernames, notify_post_mentions
 from app.core.notify import notify
+from app.core.rate_limit import rate_limit_by
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.anonymous_post_author import AnonymousPostAuthor
@@ -343,6 +344,7 @@ async def create_post(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await rate_limit_by(current_user.id, key="post", limit=30, window_seconds=600)
     post = Post(
         author_id=current_user.id,
         content=body.content,
@@ -608,6 +610,7 @@ async def create_reply(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await rate_limit_by(current_user.id, key="post", limit=30, window_seconds=600)
     parent = (
         await db.execute(
             select(Post).where(Post.id == post_id, Post.is_deleted == False)
@@ -1003,6 +1006,7 @@ async def report_post(
     current_user: User = Depends(get_current_user),
 ):
     """File a report against a post for the admin queue."""
+    await rate_limit_by(current_user.id, key="report", limit=10, window_seconds=3600)
     post = (
         await db.execute(
             select(Post).where(Post.id == post_id, Post.is_deleted == False)  # noqa: E712

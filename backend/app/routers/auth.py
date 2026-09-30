@@ -4,17 +4,23 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.core.email import send_reset_email, send_verification_email
-from app.core.rate_limit import rate_limit
+from app.core.rate_limit import rate_limit, rate_limit_by
 from app.core.security import create_access_token, hash_password, verify_password
+from app.core.sessions import revoke_token
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.auth import ForgotPasswordRequest, LoginRequest, RegisterRequest, ResetPasswordRequest, UserResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+# Compared against when the email isn't registered, so a miss costs the same
+# bcrypt time as a wrong password.
+_DUMMY_HASH = hash_password("timing-equaliser-not-a-real-password")
 
 
 def _enforce_university_email(email: str) -> None:
@@ -27,6 +33,25 @@ def _enforce_university_email(email: str) -> None:
         )
 
 
+def _is_stale_signup(user: User) -> bool:
+    """Never verified and the verification link has expired.
+
+    Such a row can't log in and holds no content, so it may be replaced —
+    otherwise anyone could squat a student's email or username forever, and a
+    student whose link expired could never sign up again. A *pending* signup
+    (link still valid) is left alone: replacing it would let someone swap in
+    their own password while the real owner is about to click the link.
+    """
+    if user.is_email_verified:
+        return False
+    expires = user.email_verification_expires_at
+    if expires is None:
+        return True
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    return expires < datetime.now(timezone.utc)
+
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
     body: RegisterRequest,
@@ -34,20 +59,32 @@ async def register(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    await rate_limit(request, key="register", limit=5, window_seconds=3600)
+    # Generous per IP: a lecture hall on campus Wi-Fi shares one address.
+    await rate_limit(request, key="register", limit=30, window_seconds=3600)
     _enforce_university_email(body.email)
 
-    existing_email = await db.execute(
+    existing = (await db.execute(
         select(User).where(User.email == body.email.lower())
-    )
-    if existing_email.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Email already registered.")
+    )).scalar_one_or_none()
+    if existing:
+        if not _is_stale_signup(existing):
+            if existing.is_email_verified:
+                raise HTTPException(status_code=409, detail="Email already registered.")
+            raise HTTPException(
+                status_code=409,
+                detail="This email has a pending sign-up. Use the link we emailed, or try again after it expires (24 hours).",
+            )
+        await db.delete(existing)
+        await db.flush()
 
-    existing_username = await db.execute(
+    taken = (await db.execute(
         select(User).where(User.username == body.username)
-    )
-    if existing_username.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="Username already taken.")
+    )).scalar_one_or_none()
+    if taken:
+        if not _is_stale_signup(taken):
+            raise HTTPException(status_code=409, detail="Username already taken.")
+        await db.delete(taken)
+        await db.flush()
 
     token = secrets.token_urlsafe(32)
     expires = datetime.now(timezone.utc) + timedelta(hours=24)
@@ -56,7 +93,7 @@ async def register(
         email=body.email.lower(),
         username=body.username,
         display_name=body.display_name,
-        password_hash=hash_password(body.password),
+        password_hash=await run_in_threadpool(hash_password, body.password),
         email_verification_token=token,
         email_verification_expires_at=expires,
     )
@@ -85,7 +122,7 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     if expires is None or expires < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=400,
-            detail="Verification token has expired. Please register again or request a new link.",
+            detail="Verification link has expired. Please register again with the same email.",
         )
 
     user.is_email_verified = True
@@ -100,11 +137,20 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
 async def login(
     body: LoginRequest, request: Request, response: Response, db: AsyncSession = Depends(get_db)
 ):
-    await rate_limit(request, key="login", limit=10, window_seconds=300)
+    # Two limits: per IP stops one machine spraying many accounts (loose, for
+    # campus NAT); per account stops guessing one password from many IPs.
+    await rate_limit(request, key="login", limit=30, window_seconds=300)
+    await rate_limit_by(body.email, key="login_account", limit=10, window_seconds=300)
     result = await db.execute(select(User).where(User.email == body.email.lower()))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(body.password, user.password_hash):
+    # bcrypt is deliberately slow (~200 ms): run it off the event loop so one
+    # login doesn't freeze every other request and websocket. Unknown emails
+    # still pay the same cost, so response time doesn't reveal who's registered.
+    password_ok = await run_in_threadpool(
+        verify_password, body.password, user.password_hash if user else _DUMMY_HASH
+    )
+    if not user or not password_ok:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
     if not user.is_email_verified:
@@ -119,7 +165,7 @@ async def login(
             detail = f"Your account has been banned: {user.ban_reason}"
         raise HTTPException(status_code=403, detail=detail)
 
-    token = create_access_token(str(user.id))
+    token = create_access_token(str(user.id), user.token_version)
 
     response.set_cookie(
         key="access_token",
@@ -135,7 +181,12 @@ async def login(
 
 
 @router.post("/logout")
-async def logout(response: Response):
+async def logout(request: Request, response: Response):
+    # Deleting the cookie only forgets the token in this browser; revoking it
+    # means a copied or stolen token stops working too.
+    token = request.cookies.get("access_token")
+    if token:
+        await revoke_token(token)
     response.delete_cookie(
         key="access_token",
         httponly=True,
@@ -158,7 +209,9 @@ async def forgot_password(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
-    await rate_limit(request, key="forgot", limit=5, window_seconds=3600)
+    await rate_limit(request, key="forgot", limit=10, window_seconds=3600)
+    # Per address too, so nobody can flood a student's inbox with reset emails.
+    await rate_limit_by(body.email, key="forgot_account", limit=3, window_seconds=3600)
     user = (await db.execute(
         select(User).where(User.email == body.email.lower())
     )).scalar_one_or_none()
@@ -189,9 +242,12 @@ async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(
     if expires is None or expires < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Reset link has expired. Please request a new one.")
 
-    user.password_hash = hash_password(body.new_password)
+    user.password_hash = await run_in_threadpool(hash_password, body.new_password)
     user.password_reset_token = None
     user.password_reset_expires_at = None
+    # A reset is what someone does after their account was compromised, so
+    # every existing session — including the intruder's — has to end.
+    user.token_version += 1
     await db.commit()
 
     return {"message": "Password updated. You can now log in."}

@@ -13,8 +13,8 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.core.redis import redis
-from app.core.security import decode_access_token
-from app.database import get_db
+from app.core.sessions import user_from_token, watch_session
+from app.database import AsyncSessionLocal, get_db
 from app.dependencies import get_current_user
 from app.models.club import Club
 from app.models.notification import Notification
@@ -172,28 +172,39 @@ async def push_unsubscribe(
 async def notifications_ws(websocket: WebSocket):
     """WebSocket endpoint for real-time push notifications."""
     token = websocket.cookies.get("access_token")
-    if not token:
+    async with AsyncSessionLocal() as db:
+        user = await user_from_token(db, token)
+        user_id = user.id if user else None
+    if user_id is None:
         await websocket.close(code=4001, reason="Not authenticated")
         return
-    user_id_str = decode_access_token(token)
-    if not user_id_str:
-        await websocket.close(code=4001, reason="Invalid token")
-        return
 
-    user_id = uuid.UUID(user_id_str)
     await websocket.accept()
 
     channel = f"notif:{user_id}"
     pubsub = redis.pubsub()
     await pubsub.subscribe(channel)
 
-    try:
+    async def relay():
         async for msg in pubsub.listen():
             if msg["type"] == "message":
                 try:
                     await websocket.send_text(msg["data"])
                 except (WebSocketDisconnect, Exception):
-                    break
+                    return
+
+    relay_task = asyncio.create_task(relay())
+    guard_task = asyncio.create_task(watch_session(websocket, token))
+    try:
+        _, pending = await asyncio.wait(
+            {relay_task, guard_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
     except (WebSocketDisconnect, asyncio.CancelledError, Exception):
         pass
     finally:

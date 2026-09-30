@@ -18,6 +18,7 @@ USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{3,30}$')
 from app.core.blocks import block_state, blocked_user_ids, is_blocked_pair
 from app.core.constants import FACULTIES
 from app.core.notify import push_live
+from app.core.rate_limit import rate_limit_by
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.block import Block
@@ -228,13 +229,16 @@ async def delete_my_account(
     current_user: User = Depends(get_current_user),
 ):
     """Self-serve permanent account deletion."""
+    from starlette.concurrency import run_in_threadpool
+
+    from app.core.accounts import retire_user_content
     from app.core.security import verify_password
 
     if not current_user.is_active:
         raise HTTPException(status_code=403, detail="Banned accounts cannot be self-deleted.")
     if current_user.is_admin:
         raise HTTPException(status_code=400, detail="Admin accounts cannot be deleted from the app.")
-    if not verify_password(body.password, current_user.password_hash):
+    if not await run_in_threadpool(verify_password, body.password, current_user.password_hash):
         raise HTTPException(status_code=403, detail="Incorrect password.")
 
     owned = (await db.execute(
@@ -246,6 +250,7 @@ async def delete_my_account(
             detail=f"You still own {', '.join(owned)}. Transfer or delete your club(s) first.",
         )
 
+    await retire_user_content(db, current_user.id)
     await db.delete(current_user)
     await db.commit()
 
@@ -444,6 +449,7 @@ async def follow_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await rate_limit_by(current_user.id, key="follow", limit=60, window_seconds=3600)
     target = await _get_visible_user(username, current_user, db)
     if target.id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot follow yourself.")
@@ -511,6 +517,7 @@ async def report_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await rate_limit_by(current_user.id, key="report", limit=10, window_seconds=3600)
     target = await _get_active_user(username, db)
     if target.id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot report yourself.")

@@ -6,9 +6,9 @@ import Link from "next/link";
 import {
   ShieldCheck, Search, Trash2, Ban, CheckCircle2, RotateCcw,
   LogOut, AlertTriangle, User as UserIcon, FileText, Flag, X,
-  LayoutGrid, Users2, ScrollText, ShieldPlus, ShieldMinus, Lock,
+  LayoutGrid, Users2, ScrollText, ShieldPlus, Lock,
 } from "lucide-react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/timeAgo";
 
@@ -116,7 +116,7 @@ function AccessDenied() {
       </div>
       <h1 className="text-xl font-bold text-on-surface">Not an admin account</h1>
       <p className="text-sm text-on-surface-variant mt-1 max-w-xs">
-        This account doesn't have admin access. Ask an existing admin to grant it from the Admins tab.
+        This account doesn't have admin access.
       </p>
       <Link href="/feed" className="text-sm text-primary mt-4 no-underline">← Back to app</Link>
     </div>
@@ -191,7 +191,7 @@ function AdminPanel({ me }: { me: Me }) {
       {tab === "reports" && <ReportsTab flash={flash} />}
       {tab === "posts" && <PostsTab flash={flash} />}
       {tab === "clubs" && <ClubsTab flash={flash} />}
-      {tab === "admins" && <AdminsTab me={me} flash={flash} />}
+      {tab === "admins" && <AdminsTab me={me} />}
       {tab === "log" && <LogTab />}
     </main>
   );
@@ -560,73 +560,27 @@ function ClubsTab({ flash }: { flash: (m: string) => void }) {
 
 // ── Admins tab ────────────────────────────────────────────────────────────────
 
-function AdminsTab({ me, flash }: { me: Me; flash: (m: string) => void }) {
+function AdminsTab({ me }: { me: Me }) {
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [promoteName, setPromoteName] = useState("");
-  const [promoting, setPromoting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
+  useEffect(() => {
     apiFetch<AdminUser[]>("/api/admin/users?filter=admins")
       .then(setAdmins)
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { load(); }, [load]);
-
-  async function promote(e: React.FormEvent) {
-    e.preventDefault();
-    const username = promoteName.trim().replace(/^@/, "");
-    if (!username) return;
-    setPromoting(true);
-    setError(null);
-    try {
-      await apiFetch(`/api/admin/users/${username}/promote`, { method: "POST" });
-      flash(`Granted admin access to @${username}`);
-      setPromoteName("");
-      load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to promote user.");
-    } finally {
-      setPromoting(false);
-    }
-  }
-
-  async function demote(u: AdminUser) {
-    if (!window.confirm(`Remove admin access from @${u.username}?`)) return;
-    try {
-      await apiFetch(`/api/admin/users/${u.username}/demote`, { method: "POST" });
-      flash(`Removed admin access from @${u.username}`);
-      load();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed.");
-    }
-  }
-
   return (
     <div>
-      <form onSubmit={promote} className="bg-surface rounded-2xl shadow-sm p-4 mb-3">
-        <label className="text-xs font-semibold text-on-surface-variant">Grant admin access</label>
-        <div className="flex gap-2 mt-1.5">
-          <input
-            value={promoteName}
-            onChange={(e) => setPromoteName(e.target.value)}
-            placeholder="username"
-            className="flex-1 h-10 px-3 text-sm rounded-xl bg-surface-container-low text-on-surface placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/30"
-          />
-          <button
-            type="submit"
-            disabled={promoting || !promoteName.trim()}
-            className="px-4 h-10 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-40 transition-all"
-          >
-            Grant
-          </button>
-        </div>
-        {error && <p className="text-xs text-error mt-1.5">{error}</p>}
-      </form>
+      <div className="bg-surface rounded-2xl shadow-sm p-4 mb-3 flex gap-3">
+        <Lock className="w-4 h-4 text-on-surface-variant flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-on-surface-variant leading-relaxed">
+          Admin access can't be granted or removed from this panel. Both need the server&apos;s
+          master key, so no admin session — including a compromised one — can create
+          new admins or lock anyone out.
+        </p>
+      </div>
 
       {loading ? <Loading /> : admins.length === 0 ? <Empty label="No admins found." /> : (
         <div className="space-y-2">
@@ -639,9 +593,6 @@ function AdminsTab({ me, flash }: { me: Me; flash: (m: string) => void }) {
                 </div>
                 <div className="text-xs text-on-surface-variant truncate">@{u.username} · {u.email}</div>
               </div>
-              {u.username !== me.username && (
-                <ActionBtn onClick={() => demote(u)} icon={ShieldMinus} label="Revoke" tone="danger" />
-              )}
             </div>
           ))}
         </div>
@@ -662,7 +613,9 @@ const ACTION_LABELS: Record<string, string> = {
   dismiss_report: "dismissed report on",
   delete_post: "deleted post",
   delete_club: "deleted club",
-  bootstrap_admin: "bootstrapped admin",
+  delete_chat_message: "deleted a chat message in",
+  bootstrap_admin: "granted admin (master key) to",
+  revoke_admin: "revoked admin (master key) from",
 };
 
 function LogTab() {
