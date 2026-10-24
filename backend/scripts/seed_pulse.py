@@ -104,6 +104,8 @@ CATALOG = {
         "Registracija je haos, pola godine ne može da se upiše na predmete",
         "My advisor approved my courses but the system crashed before I could confirm them",
         "Registration servers down again, they really need to fix this before next semester",
+        "Please stagger registration by year, if everyone logs in at 9am the servers will always crash",
+        "They should open registration for seniors first and then other years, like other universities do",
     ]),
     "dorm_assignment": ("complaint", [
         "Still haven't got my dorm room assignment and classes start in a week. Anyone else?",
@@ -114,6 +116,7 @@ CATALOG = {
         "Dorm assignments are so late this year, international students are stressing",
         "Got an email that my dorm room 'might change'. Can we please get a final answer",
         "No dorm assignment yet and the office phone never picks up",
+        "Room assignments should come at least two weeks before move-in, not two days",
     ]),
     "orientation": ("topic", [
         "Orientation day was actually fun, the campus tour guides were amazing",
@@ -148,6 +151,8 @@ CATALOG = {
         "Please more shuttles between 8 and 10, it's unbearable",
         "Šatl je kasnio 20 minuta i opet pun, ne znam kako da stignem na vrijeme",
         "The shuttle driver said they only have two buses for the morning rush",
+        "Please add an 8:30 shuttle, the 8:00 and 9:15 are both packed and nothing in between",
+        "A shuttle tracking app would help so we know if the next bus is full",
     ]),
     "student_id": ("complaint", [
         "Still no student ID card, can't enter the library or the dorm without it",
@@ -157,6 +162,7 @@ CATALOG = {
         "Anyone got their student ID yet? Mine is 'in printing' since forever",
         "The student ID delay means I can't use the gym or borrow books",
         "Paying full price for transport because my student ID still isn't ready",
+        "Can they at least give us a temporary paper ID until the student cards are printed?",
     ]),
     "timetable": ("topic", [
         "Does anyone have the updated timetable for second-year FENS?",
@@ -181,6 +187,8 @@ CATALOG = {
         "Reported the library wifi to IT twice, nothing changed",
         "Ne mogu raditi u biblioteci jer internet stalno pada",
         "Library wifi is the reason I study at home now",
+        "IT should add more wifi access points on the library 3rd floor, that's where everyone studies",
+        "Even a few ethernet ports at the library desks would solve the wifi problem",
     ]),
     "cafeteria_prices": ("complaint", [
         "Cafeteria prices went up again? Lunch is now 7 KM, that's too much for students",
@@ -192,6 +200,8 @@ CATALOG = {
         "Why is a sandwich at the cafeteria suddenly 5 KM?",
         "The cafeteria price increase hits international students the hardest",
         "Bring back the old cafeteria prices please",
+        "A 4 KM student lunch menu would help so many of us, other universities have one",
+        "Cafeteria should have a cheaper daily meal option for students on a budget",
     ]),
     "erasmus": ("topic", [
         "Anyone applying for Erasmus next semester? Which universities are you choosing?",
@@ -253,6 +263,8 @@ CATALOG = {
         "It's colder inside the dorm than outside, seriously",
         "Who decides when dorm heating starts? We're freezing",
         "Kad će grijanje u domu, ne može se učiti od hladnoće",
+        "Even turning the dorm heating on in the evenings only would help, we can't study in the cold",
+        "Can the dorm at least give us electric heaters until the central heating starts?",
     ]),
     "midterm_clash": ("complaint", [
         "Midterm schedule is out and I have two exams at the same time on {day}",
@@ -262,6 +274,8 @@ CATALOG = {
         "Midterm exam clashes again, the schedule should be checked before publishing",
         "Three midterms in one day, the schedule makes no sense",
         "Anyone else with overlapping midterms? We should email student services together",
+        "Please publish the midterm schedule earlier and check for clashes before posting it",
+        "Students with clashing midterms should get a make-up slot automatically",
     ]),
     "library_hours": ("topic", [
         "Library open until 23:00 during midterms, thank you!",
@@ -278,6 +292,79 @@ CATALOG = {
     "parking_public": ("complaint", [
         "Is there any free parking near the main building?",
         "Parking near campus is a nightmare in the morning",
+    ]),
+    # ── discussions (not complaints) ──
+    "textbooks": ("topic", [
+        "Selling my first-year calculus and physics books, barely used, half price",
+        "Is the 5th edition of the economics textbook fine or do we need the 6th?",
+        "Anyone want to split the cost of the anatomy atlas? It's 90 KM new",
+        "Prodajem knjige za prvu godinu FENS-a, javite se",
+        "Tip: the library has two copies of the statistics book on reserve, you can read it there",
+        "Looking for a used programming textbook, the Java one from first year",
+        "Don't buy the lab manual yet, the professor said a new edition is coming",
+        "Our year made a group to swap textbooks, way cheaper than the bookshop",
+        "Does anyone have the PDF of the reading list for psychology? Want to check prices first",
+        "Bookshop near campus gives 10% with a student card if you ask",
+    ]),
+    "ai_elective": ("topic", [
+        "Took the new AI elective, first lecture was about how ChatGPT actually works, really interesting",
+        "Is the new AI elective worth it for non-FENS students? Thinking of taking it from FBA",
+        "The AI elective project is building a small chatbot, we can pick our own topic",
+        "Novi izborni predmet iz umjetne inteligencije je super, preporuka",
+        "AI elective has weekly coding labs, a bit heavy but you learn a lot",
+        "Anyone in the AI elective want to form a project group? I have an idea about a timetable assistant",
+        "The guest lecture in the AI elective about AI in medicine was amazing",
+        "Is there a waiting list for the AI elective? It filled up in a day",
+        "AI elective is the first course where we discuss ethics and bias, good discussions in class",
+    ]),
+    "internships": ("topic", [
+        "Applied to four summer internships so far, mostly banks and IT companies in Sarajevo",
+        "Tip: tailor your CV for each internship, the career center will review it for free",
+        "Got an interview for a software internship, they asked about my university projects mostly",
+        "Does anyone know if internships in Germany accept second-year students?",
+        "Prakse za ljeto su već otvorene, rokovi su krajem novembra",
+        "LinkedIn workshop at the career center helped me a lot, got two replies from recruiters",
+        "Paid vs unpaid internships — is it worth doing an unpaid one for the experience?",
+        "Our club is collecting a list of companies that take IUS interns, add yours",
+        "Internship interview tip: they love it when you mention group projects and clubs",
+        "Anyone did an internship at a bank? How many hours a week was it?",
+        "Remote internships with foreign companies are a good option, applied to two",
+    ]),
+    "elections": ("topic", [
+        "Student council elections next week, who are you voting for?",
+        "Candidate debate for student council was actually good, they talked about shuttles and the library",
+        "One candidate wants longer library hours and more study rooms, I like that",
+        "Izbori za studentski parlament su u četvrtak, glasajte!",
+        "Is voting for the student council online or in person this year?",
+        "Student council campaign promises: cheaper cafeteria, more buses, more events. Let's see",
+        "The council candidates answered questions in the main hall today, good turnout",
+        "Turnout in student elections is always low, we should all vote this time",
+        "I like that one campaign focuses on international students and housing",
+        "Results of the student council elections are out, congrats to the new members",
+        "Election debate got heated about cafeteria prices, finally someone raised it",
+    ]),
+    "exam_prep": ("topic", [
+        "Forming a study group for the statistics midterm, library 3rd floor on Tuesday evening",
+        "Does anyone have past midterm papers for Calculus 2? Practising with old exams helps",
+        "Tip: the professor's office hours before the midterm are almost empty, go ask questions",
+        "Grupa za učenje za anatomiju, ko se priključuje?",
+        "Which chapters are in the midterm for microeconomics? The slides say 1-5",
+        "Pomodoro + library = finally productive. Midterm week survival mode",
+        "Made a shared doc with summaries for the psychology midterm, add your notes",
+        "The TA is doing a revision session on Friday, really recommend",
+        "How are you all studying for the programming midterm? Just practice problems?",
+        "Study group for physics was super helpful, we explained problems to each other",
+        "Flashcards for the law midterm, anyone want to swap decks?",
+    ]),
+    "halloween": ("topic", [
+        "Halloween party at the student center on the 31st, tickets 5 KM",
+        "What are you dressing up as for the Halloween party?",
+        "The International Students Circle is organizing a Halloween movie night too",
+        "Noć vještica party, ko ide? Treba nam ideja za kostime",
+        "Halloween party tickets almost sold out, get them at the club stand",
+        "Group costume ideas for Halloween? We are five people",
+        "Is the Halloween party only for IUS students or can we bring friends?",
+        "Pumpkin carving workshop before the Halloween party, sounds fun",
     ]),
     "chatter": ("topic", [
         "Best coffee spot near campus? The cafeteria line is too long",
@@ -299,22 +386,32 @@ CATALOG = {
 }
 
 # How many different students raise each subject, per simulated week (oldest first).
+# Real campus talk is mostly NOT complaints, so every week mixes discussions
+# (events, studies, plans) with the problems students want fixed.
 SCHEDULE = [
-    {"registration": 26, "dorm_assignment": 13, "timetable": 11, "erasmus": 6, "printer": 3, "parking_public": 2, "chatter": 25},
-    {"orientation": 21, "clubs_fair": 17, "shuttle": 14, "student_id": 12, "registration": 11, "dorm_assignment": 8,
-     "timetable": 12, "printer": 2, "chatter": 30},
-    {"timetable": 15, "shuttle": 20, "library_wifi": 10, "cafeteria_prices": 11, "clubs_fair": 9, "erasmus": 12,
-     "sports": 10, "parking_public": 3, "printer": 4, "chatter": 30},
-    {"library_wifi": 18, "shuttle": 19, "cafeteria_prices": 15, "grading": 12, "career_fair": 11, "sports": 13,
-     "erasmus": 8, "printer": 3, "chatter": 30},
-    {"career_fair": 30, "library_wifi": 26, "cafeteria_prices": 16, "shuttle": 17, "startup_weekend": 12, "grading": 7,
-     "sports": 11, "parking_public": 3, "chatter": 30},
-    {"dorm_heating": 22, "startup_weekend": 18, "midterm_clash": 13, "library_wifi": 14, "library_hours": 12,
-     "shuttle": 16, "cafeteria_prices": 13, "printer": 4, "chatter": 30},
+    # Sep 7  — before classes: registration chaos, books, Erasmus
+    {"registration": 26, "dorm_assignment": 13, "textbooks": 15, "erasmus": 14, "timetable": 12,
+     "printer": 3, "parking_public": 2, "chatter": 22},
+    # Sep 14 — orientation week
+    {"orientation": 21, "clubs_fair": 17, "textbooks": 12, "timetable": 12, "shuttle": 14, "student_id": 12,
+     "registration": 11, "dorm_assignment": 8, "printer": 2, "chatter": 22},
+    # Sep 21 — classes start
+    {"ai_elective": 16, "sports": 14, "internships": 13, "erasmus": 12, "timetable": 10, "shuttle": 20,
+     "cafeteria_prices": 11, "library_wifi": 10, "parking_public": 3, "printer": 4, "chatter": 22},
+    # Sep 28 — student council campaign
+    {"elections": 19, "internships": 15, "sports": 13, "ai_elective": 11, "career_fair": 10, "shuttle": 19,
+     "library_wifi": 18, "cafeteria_prices": 15, "grading": 12, "printer": 3, "chatter": 22},
+    # Oct 5  — career fair, elections
+    {"career_fair": 30, "elections": 20, "exam_prep": 13, "startup_weekend": 12, "internships": 11,
+     "library_wifi": 26, "shuttle": 17, "cafeteria_prices": 16, "grading": 7, "parking_public": 3, "chatter": 22},
+    # Oct 12 — midterms, first cold days, Halloween plans
+    {"exam_prep": 25, "halloween": 20, "startup_weekend": 18, "library_hours": 12, "internships": 11,
+     "dorm_heating": 22, "shuttle": 16, "library_wifi": 14, "midterm_clash": 13, "cafeteria_prices": 13,
+     "printer": 4, "chatter": 22},
 ]
 
-CLUB_FOR = {"sports": "sports", "career_fair": "careers", "startup_weekend": "careers",
-            "erasmus": "international", "clubs_fair": "international"}
+CLUB_FOR = {"sports": "sports", "career_fair": "careers", "startup_weekend": "careers", "internships": "careers",
+            "erasmus": "international", "clubs_fair": "international", "halloween": "international"}
 
 # Excluded sources — loaded with parking complaints so a leak would be obvious.
 PRIVATE_PARKING = [

@@ -13,17 +13,18 @@ import { cn } from "@/lib/utils";
 interface PulseTopic {
   rank: number; name: string; students: number; posts: number;
   mood: "positive" | "neutral" | "negative" | "mixed";
-  trend: Trend; previous_students: number | null; summary: string;
+  trend: Trend; previous_students: number | null; summary: string; points?: string[];
 }
 interface PulseComplaint {
   rank: number; problem: string; area: string; students: number; posts: number;
-  trend: Trend; previous_students: number | null; summary: string;
+  trend: Trend; previous_students: number | null; summary: string; points?: string[]; request?: string;
 }
 type Trend = "new" | "rising" | "falling" | "steady" | "unknown";
 interface PulseReportData {
   week_start: string; week_end: string; min_students: number;
   topics: PulseTopic[]; complaints: PulseComplaint[];
-  going_well: { name: string; students: number; summary: string }[];
+  going_well: { name: string; students: number; summary: string; points?: string[] }[];
+  complaint_topics?: string[];
   hidden_below_threshold: { topics: number; complaints: number };
 }
 interface PulseStats {
@@ -83,20 +84,44 @@ function TrendChip({ trend, previous }: { trend: Trend; previous: number | null 
 
 function asText(row: PulseRow): string {
   const r = row.report!;
+  const bullets = (points?: string[]) => (points ?? []).map((p) => `     - ${p}`);
   const lines = [
     `Campus Pulse — week of ${fmtDay(r.week_start)} – ${fmtDay(r.week_end)}`,
     "",
-    "TOP TOPICS",
-    ...r.topics.map((t) => `${t.rank}. ${t.name} — ${t.students} students, ${t.mood}${t.trend !== "unknown" ? `, ${t.trend}` : ""}\n   ${t.summary}`),
-    "",
-    "TOP COMPLAINTS",
-    ...r.complaints.map((c) => `${c.rank}. ${c.problem} [${c.area}] — ${c.students} students${c.trend !== "unknown" ? `, ${c.trend}` : ""}\n   ${c.summary}`),
+    "TOP TOPICS — what students are talking about",
+    ...r.topics.flatMap((t) => [
+      `${t.rank}. ${t.name} — ${t.students} students, ${t.mood}${t.trend !== "unknown" ? `, ${t.trend}` : ""}`,
+      `   ${t.summary}`, ...bullets(t.points),
+    ]),
   ];
+  if (r.complaint_topics?.length) lines.push(`   (Also discussed, mainly as complaints: ${r.complaint_topics.join(", ")})`);
+  lines.push("", "TOP COMPLAINTS — problems students want fixed");
+  for (const c of r.complaints) {
+    lines.push(
+      `${c.rank}. ${c.problem} [${c.area}] — ${c.students} students${c.trend !== "unknown" ? `, ${c.trend}` : ""}`,
+      `   ${c.summary}`, ...bullets(c.points),
+    );
+    if (c.request) lines.push(`   Students are asking for: ${c.request}`);
+  }
   if (r.going_well.length) {
     lines.push("", "WHAT'S GOING WELL", ...r.going_well.map((g) => `• ${g.name}: ${g.summary}`));
   }
   lines.push("", `Only topics raised by at least ${r.min_students} different students are shown. No names, quotes or private content.`);
   return lines.join("\n");
+}
+
+function Points({ points }: { points?: string[] }) {
+  if (!points?.length) return null;
+  return (
+    <ul className="mt-1.5 space-y-1">
+      {points.map((p, i) => (
+        <li key={i} className="flex gap-2 text-sm text-on-surface-variant leading-snug">
+          <span className="mt-[7px] w-1 h-1 rounded-full bg-on-surface-variant/60 flex-shrink-0" />
+          <span>{p}</span>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export default function PulseTab() {
@@ -279,7 +304,11 @@ export default function PulseTab() {
             </button>
           </div>
 
-          <Section title="Top 5 topics" empty={report.topics.length === 0}>
+          <Section
+            title="Top 5 topics"
+            subtitle="What students are talking about — conversations of any tone."
+            empty={report.topics.length === 0}
+          >
             {report.topics.map((t) => (
               <Row key={t.rank} rank={t.rank}>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -288,12 +317,22 @@ export default function PulseTab() {
                   <TrendChip trend={t.trend} previous={t.previous_students} />
                 </div>
                 <div className="text-[11px] text-on-surface-variant mt-0.5">{t.students} students · {t.posts} posts</div>
-                {t.summary && <p className="text-sm text-on-surface-variant mt-1">{t.summary}</p>}
+                {t.summary && <p className="text-sm text-on-surface mt-1.5">{t.summary}</p>}
+                <Points points={t.points} />
               </Row>
             ))}
+            {!!report.complaint_topics?.length && (
+              <p className="text-xs text-on-surface-variant pt-1 border-t border-outline-variant/40">
+                Also discussed, mainly as complaints (see below): {report.complaint_topics.join(", ")}
+              </p>
+            )}
           </Section>
 
-          <Section title="Top 5 complaints" empty={report.complaints.length === 0}>
+          <Section
+            title="Top 5 complaints"
+            subtitle="Specific problems students want fixed, and what they're asking for."
+            empty={report.complaints.length === 0}
+          >
             {report.complaints.map((c) => (
               <Row key={c.rank} rank={c.rank}>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -304,7 +343,13 @@ export default function PulseTab() {
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">{c.area}</span>
                   <span className="text-[11px] text-on-surface-variant">{c.students} students · {c.posts} posts</span>
                 </div>
-                {c.summary && <p className="text-sm text-on-surface-variant mt-1">{c.summary}</p>}
+                {c.summary && <p className="text-sm text-on-surface mt-1.5">{c.summary}</p>}
+                <Points points={c.points} />
+                {c.request && (
+                  <p className="text-sm mt-1.5 px-3 py-2 rounded-lg bg-primary/5 text-on-surface">
+                    <span className="font-semibold">Students are asking for: </span>{c.request}
+                  </p>
+                )}
               </Row>
             ))}
           </Section>
@@ -341,10 +386,14 @@ export default function PulseTab() {
   );
 }
 
-function Section({ title, empty, children }: { title: string; empty?: boolean; children: React.ReactNode }) {
+function Section({ title, subtitle, empty, children }: {
+  title: string; subtitle?: string; empty?: boolean; children: React.ReactNode;
+}) {
   return (
     <div className="bg-surface rounded-2xl shadow-sm p-4">
-      <h3 className="text-xs font-bold uppercase tracking-wide text-on-surface-variant mb-3">{title}</h3>
+      <h3 className="text-xs font-bold uppercase tracking-wide text-on-surface-variant">{title}</h3>
+      {subtitle && <p className="text-xs text-on-surface-variant mt-0.5">{subtitle}</p>}
+      <div className="mb-3" />
       {empty ? <p className="text-sm text-on-surface-variant">Nothing raised by enough students this week.</p>
         : <div className="space-y-3">{children}</div>}
     </div>

@@ -29,9 +29,15 @@ class FakeLLM:
     """Keyword rules instead of a model, so tests are fast and exact."""
     name = "fake"
 
-    def __init__(self, summary: str = "Students discussed this topic.", extra_topics: list[str] | None = None):
+    def __init__(self, summary: str = "Students discussed this topic.", extra_topics: list[str] | None = None,
+                 skip_first_describe: bool = False, invented_complaints: list[str] | None = None,
+                 describe_keys_by_name: bool = False, complaint_title: str = ""):
         self.summary = summary
+        self.describe_keys_by_name = describe_keys_by_name   # the real model sometimes does this
+        self.complaint_title = complaint_title
         self.extra_topics = extra_topics or []
+        self.invented_complaints = invented_complaints or []   # simulate copying prompt examples
+        self.skip_first_describe = skip_first_describe   # simulate a model that drops items once
         self.seen_inputs: list[str] = []
 
     async def json_chat(self, system: str, user: str, schema: dict) -> dict:
@@ -41,13 +47,20 @@ class FakeLLM:
             hits = [r for r in RULES if r[0] in text]
             return {"topics": [r[1] for r in hits] + self.extra_topics, "complaints": [r[2] for r in hits if r[2]]}
         if system.startswith("TASK: consolidate"):
-            topics = [l[2:] for l in user.split("CANDIDATE TOPICS:\n", 1)[1].split("\n\n")[0].splitlines() if l.startswith("- ")]
             complaints = [l[2:] for l in user.split("CANDIDATE COMPLAINTS:\n", 1)[1].splitlines() if l.startswith("- ")]
             area = {r[2]: r[4] for r in RULES if r[2]}
-            return {"topics": topics, "complaints": [{"problem": c, "area": area.get(c, "Other")} for c in complaints]}
-        if system.startswith("TASK: summarize"):
-            keys = [l.split(" — ")[0] for l in user.splitlines() if " — " in l and l[:1] in "TCG"]
-            return {"summaries": [{"key": k, "summary": self.summary} for k in keys]}
+            return {"complaints": [{"problem": c, "area": area.get(c, "Other")} for c in complaints]
+                    + [{"problem": p, "area": "Other"} for p in self.invented_complaints]}
+        if system.startswith("TASK: describe"):
+            if self.skip_first_describe:
+                self.skip_first_describe = False
+                return {"items": []}
+            heads = [l.split(" — ", 1) for l in user.splitlines() if " — " in l and l[:1] in "TC"]
+            return {"items": [
+                {"key": name if self.describe_keys_by_name else k, "summary": self.summary,
+                 "points": [f"{self.summary} (detail)"], "request": "Fix it soon", "title": self.complaint_title}
+                for k, name in heads
+            ]}
         raise AssertionError(f"unexpected prompt: {system[:40]}")
 
     async def text_chat(self, system: str, user: str) -> str:
@@ -223,18 +236,121 @@ def test_mood_reflects_a_clear_lean_not_a_strict_majority():
     assert mood(Counter(negative=5, neutral=4, positive=1)) == "negative"
     assert mood(Counter(positive=3, negative=3, neutral=4)) == "mixed"
     assert mood(Counter(neutral=8, positive=1, negative=1)) == "neutral"
+    # Real Career Fair week: most posts labelled neutral, but the opinions are clearly positive.
+    assert mood(Counter(neutral=25, positive=15, negative=3)) == "positive"
+    assert mood(Counter(neutral=20, positive=2, negative=2)) == "neutral"   # elections: few opinions
 
 
 async def test_vague_catch_all_topics_are_never_ranked(make_user, db, monkeypatch):
     monkeypatch.setattr(settings, "pulse_min_students", 3)
     week = _fresh_week()
     for s in await _students(make_user, 4):
-        await _post(db, s, "wifi again", _in_week(week))
+        await _post(db, s, "the festival was great", _in_week(week))
     await runner.run_report(week, FakeLLM(extra_topics=["None", "Student Life", "Other"]))
     row = (await db.execute(select(PulseReport).where(PulseReport.week_start == week))).scalar_one()
     names = {t["name"].casefold() for t in row.report["topics"]}
     assert names.isdisjoint({"none", "student life", "other"})
-    assert "campus wi-fi" in names
+    assert "spring festival" in names
+
+
+async def test_topics_and_complaints_answer_different_questions(make_user, db, monkeypatch):
+    """A subject that is almost all complaints is listed under complaints only."""
+    monkeypatch.setattr(settings, "pulse_min_students", 3)
+    week = _fresh_week()
+    for s in await _students(make_user, 4):
+        await _post(db, s, "library wifi dropped again", _in_week(week))   # 100% complaints
+    for s in await _students(make_user, 4):
+        await _post(db, s, "the festival lineup looks great", _in_week(week))  # a discussion
+    await runner.run_report(week, FakeLLM())
+    r = (await db.execute(select(PulseReport).where(PulseReport.week_start == week))).scalar_one().report
+    assert [t["name"] for t in r["topics"]] == ["Spring Festival"]
+    assert "Campus Wi-Fi" in r["complaint_topics"]
+    assert r["complaints"][0]["problem"] == "Library Wi-Fi keeps disconnecting"
+
+
+async def test_items_come_with_details_and_requests(make_user, db, monkeypatch):
+    monkeypatch.setattr(settings, "pulse_min_students", 3)
+    week = _fresh_week()
+    for s in await _students(make_user, 3):
+        await _post(db, s, "wifi is down", _in_week(week))
+    # The model "forgets" every item on its first describe call; they must be re-requested.
+    await runner.run_report(week, FakeLLM(skip_first_describe=True))
+    r = (await db.execute(select(PulseReport).where(PulseReport.week_start == week))).scalar_one().report
+    c = r["complaints"][0]
+    assert c["summary"] and c["points"] and c["request"] == "Fix it soon"
+
+
+def test_topic_list_is_built_in_code_and_keeps_positive_subjects():
+    from app.core.pulse.pipeline import merge_topics
+    batches = [
+        ["Career Fair", "Shuttles", "WiFi"],
+        ["Career Fair", "Shuttle Buses", "Wi-Fi", "Startup Weekend"],
+        ["Library Wi-Fi", "Elections", "Career Fair", "Student Life"],
+    ]
+    topics = merge_topics(batches, previous=["Shuttle"])
+    assert topics[0] == "Career Fair"                         # raised in all 3 batches
+    assert "Shuttle" in topics and "Shuttles" not in topics   # variants merged, last week's name kept
+    assert "Startup Weekend" in topics and "Elections" in topics
+    assert "Student Life" not in topics                       # vague catch-all
+    assert sum(1 for t in topics if "fi" in t.lower()) == 1   # WiFi / Wi-Fi / Library Wi-Fi -> one subject
+
+
+async def test_invented_complaints_are_dropped(make_user, db, monkeypatch):
+    """A small model copies prompt examples; a problem nobody raised must never reach the report."""
+    monkeypatch.setattr(settings, "pulse_min_students", 1)
+    week = _fresh_week()
+    for s in await _students(make_user, 2):
+        await _post(db, s, "wifi is broken", _in_week(week))
+    llm = FakeLLM(invented_complaints=["Vending machines keep taking money", "Dorm heating has not been turned on"])
+    await runner.run_report(week, llm)
+    r = (await db.execute(select(PulseReport).where(PulseReport.week_start == week))).scalar_one().report
+    problems = " ".join(c["problem"] for c in r["complaints_all"]).lower()
+    assert "wi-fi" in problems
+    assert "vending" not in problems and "heating" not in problems
+
+
+async def test_descriptions_keyed_by_name_are_still_used(make_user, db, monkeypatch):
+    """The real model sometimes answers with the topic's name instead of its id."""
+    monkeypatch.setattr(settings, "pulse_min_students", 3)
+    week = _fresh_week()
+    for s in await _students(make_user, 3):
+        await _post(db, s, "the festival was great", _in_week(week))
+    await runner.run_report(week, FakeLLM(describe_keys_by_name=True))
+    r = (await db.execute(select(PulseReport).where(PulseReport.week_start == week))).scalar_one().report
+    assert r["topics"][0]["summary"] and r["topics"][0]["points"]
+
+
+async def test_complaint_shows_neutral_title_but_trends_use_internal_name(make_user, db, monkeypatch):
+    monkeypatch.setattr(settings, "pulse_min_students", 3)
+    week = _fresh_week()
+    for s in await _students(make_user, 3):
+        await _post(db, s, "wifi is down", _in_week(week))
+    await runner.run_report(week, FakeLLM(complaint_title="Unreliable Wi-Fi in the library"))
+    r = (await db.execute(select(PulseReport).where(PulseReport.week_start == week))).scalar_one().report
+    assert r["complaints"][0]["problem"] == "Unreliable Wi-Fi in the library"
+    assert r["complaints_all"][0]["problem"] == "Library Wi-Fi keeps disconnecting"
+
+
+def test_long_problem_statements_are_cut_at_a_natural_break():
+    from app.core.pulse.pipeline import concise
+    assert concise("Shuttle overcrowding is getting dangerous, people pressed against the doors") == \
+        "Shuttle overcrowding is getting dangerous"
+    assert concise("Library Wi-Fi keeps disconnecting") == "Library Wi-Fi keeps disconnecting"
+
+
+def test_same_meaning_names_are_matched_to_last_week():
+    from app.core.pulse.pipeline import match_previous
+    prev = ["Cafeteria prices increased, portions smaller", "Shuttle Buses", "Library Wi-Fi keeps disconnecting",
+            "Dorm assignments delayed"]
+    m = match_previous(
+        ["Cafeteria prices have increased, portions smaller", "Shuttles", "Library hours are too short",
+         "Dorm heating has not been turned on"],
+        prev,
+    )
+    assert m == {
+        "Cafeteria prices have increased, portions smaller": "Cafeteria prices increased, portions smaller",
+        "Shuttles": "Shuttle Buses",
+    }  # different problems in the same place are NOT merged
 
 
 async def test_trend_compares_with_previous_week(make_user, db, monkeypatch):
