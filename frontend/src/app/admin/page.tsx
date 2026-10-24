@@ -6,11 +6,12 @@ import Link from "next/link";
 import {
   ShieldCheck, Search, Trash2, Ban, CheckCircle2, RotateCcw,
   LogOut, AlertTriangle, User as UserIcon, FileText, Flag, X,
-  LayoutGrid, Users2, ScrollText, ShieldPlus, Lock, Eye,
+  LayoutGrid, Users2, ScrollText, ShieldPlus, Lock, Eye, Activity,
 } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/timeAgo";
+import PulseTab from "@/components/admin/PulseTab";
 
 interface Me {
   username: string;
@@ -87,7 +88,7 @@ interface Stats {
   pending_reports: number;
 }
 
-type Tab = "overview" | "users" | "reports" | "posts" | "clubs" | "admins" | "log";
+type Tab = "overview" | "pulse" | "users" | "reports" | "posts" | "clubs" | "admins" | "log";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -142,6 +143,7 @@ function AdminPanel({ me }: { me: Me }) {
 
   const tabs: [Tab, string, React.ComponentType<{ className?: string }>][] = [
     ["overview", "Overview", LayoutGrid],
+    ["pulse", "Pulse", Activity],
     ["users", "Users", UserIcon],
     ["reports", "Reports", Flag],
     ["posts", "Posts", FileText],
@@ -188,6 +190,7 @@ function AdminPanel({ me }: { me: Me }) {
       </div>
 
       {tab === "overview" && <OverviewTab />}
+      {tab === "pulse" && <PulseTab />}
       {tab === "users" && <UsersTab flash={flash} />}
       {tab === "reports" && <ReportsTab flash={flash} />}
       {tab === "posts" && <PostsTab flash={flash} />}
@@ -717,6 +720,7 @@ const ACTION_LABELS: Record<string, string> = {
   delete_club: "deleted club",
   delete_chat_message: "deleted a chat message in",
   reveal_anonymous_author: "revealed the author of reported anonymous post",
+  generate_pulse_report: "generated the Campus Pulse report for the week of",
   bootstrap_admin: "granted admin (master key) to",
   revoke_admin: "revoked admin (master key) from",
 };

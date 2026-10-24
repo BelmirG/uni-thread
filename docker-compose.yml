@@ -43,6 +43,12 @@ services:
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
       RELOAD: "1"   # hot-reload for local dev only; production leaves this unset
+      # Campus Pulse (campus-pulse branch only): local Ollama on the host machine.
+      PULSE_ENABLED: ${PULSE_ENABLED:-false}
+      PULSE_LLM_URL: ${PULSE_LLM_URL:-http://host.docker.internal:11434}
+      PULSE_LLM_MODEL: ${PULSE_LLM_MODEL:-qwen2.5:7b}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./backend:/app
       - ./uploads:/app/uploads

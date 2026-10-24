@@ -5,7 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.routers import admin, auth, chat, clubs, files, health, messages, notifications, posts, qa, upload, users
+from app.core.pulse.runner import start_scheduler as start_pulse_scheduler
+from app.routers import admin, auth, chat, clubs, files, health, messages, notifications, posts, pulse, qa, upload, users
 
 app = FastAPI(title="UniThread API", version="0.1.0")
 
@@ -37,6 +38,13 @@ app.include_router(chat.router)
 app.include_router(messages.router)
 app.include_router(notifications.router)
 app.include_router(users.router)
+app.include_router(pulse.router)
+
+
+@app.on_event("startup")
+async def _start_campus_pulse() -> None:
+    # No-op unless PULSE_ENABLED=true (campus-pulse branch, local/demo only).
+    start_pulse_scheduler()
 
 class _ImmutableStaticFiles(StaticFiles):
     """Uploaded files get a random UUID name and are never rewritten, so their."""

@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     smtp_from: str = "UniThread <no-reply@unithread.app>"
     smtp_starttls: bool = True
 
+    # Campus Pulse — weekly LLM report (graduation-project feature, campus-pulse branch
+    # only). Off unless explicitly enabled, so it can never run on production by default.
+    pulse_enabled: bool = False
+    pulse_llm_url: str = "http://host.docker.internal:11434"   # Ollama on the host
+    pulse_llm_model: str = "qwen2.5:7b"
+    pulse_min_students: int = 10       # a topic/complaint needs this many distinct students
+    pulse_chunk_size: int = 25         # posts per "assign" call
+
     model_config = {"env_file": ".env"}
 
     @property
